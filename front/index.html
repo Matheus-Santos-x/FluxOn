@@ -1053,7 +1053,7 @@
 </div>
   </div>
 
-  <!-- MODAL DE CRIAÇÃO DE PEDIDO -->
+<!-- MODAL DE CRIAÇÃO DE PEDIDO -->
   <div class="modal-backdrop" id="create-modal">
   <div class="modal">
     <div class="modal-header">
@@ -1064,7 +1064,6 @@
         <label>Cliente
           <input id="new-customer" required />
         </label>
-
         <label>Telefone (opcional)
           <input
             id="new-phone"
@@ -1072,7 +1071,6 @@
             placeholder="(11) 99999-9999 ou 5511999999999"
           />
         </label>
-
    <label>Itens
   <div style="
     position:relative;
@@ -1094,25 +1092,6 @@
   </div>
 </label>
 
-        
-        <!-- 🔥 CAMPO VALOR TOTAL -->
-        <label style="margin-top: 12px;">
-          💰 Valor Total do Pedido
-          <div style="display: flex; align-items: center; gap: 8px; background: rgba(46, 8, 8, 0.45); border: 1px solid rgba(91, 28, 28, 0.85); border-radius: 12px; padding: 0 14px;">
-            <span style="color: rgba(252, 228, 228, 0.7); font-weight: 700; font-size: 14px;">R$</span>
-            <input 
-              type="text" 
-              id="new-total-price" 
-              placeholder="0,00" 
-              inputmode="decimal"
-              style="flex: 1; border: none; background: transparent; padding: 12px 0; color: rgba(252, 228, 228, 1); outline: none; font-size: 16px; font-weight: 700;"
-            />
-          </div>
-          <small style="color: var(--muted); font-size: 11px; margin-top: 6px; display: block;">
-                
-          </small>
-        </label>
-        
        <div style="
   background:rgba(30,5,5,0.4);
   border:1px solid rgba(91,28,28,0.6);
@@ -1122,14 +1101,8 @@
   flex-direction:column;
   gap:10px;
 ">
-  <!-- CHECKBOX DELIVERY -->
-  <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-    <input id="new-delivery" type="checkbox" style="width:16px; height:16px; accent-color:#f97373; cursor:pointer;" />
-    <span style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px;">Delivery</span>
-  </label>
-
-  <!-- CAMPOS QUE EXPANDEM -->
-  <div id="delivery-address-wrap" class="hidden" style="display:flex; flex-direction:column; gap:8px;">
+<!-- CAMPOS SEMPRE VISÍVEIS — KANBAN É DELIVERY-ONLY -->
+  <div id="delivery-address-wrap" style="display:flex; flex-direction:column; gap:8px;">
     
     <!-- ENDEREÇO -->
     <div style="display:flex; flex-direction:column; gap:6px;">
@@ -1161,7 +1134,17 @@
           <textarea id="new-notes" placeholder="Sem cebola, bebida sem gelo" style="min-height: 120px;"></textarea>
         </label>
 
-        <div class="modal-actions">
+        <div class="modal-actions" style="align-items:center; gap:12px; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:8px; background:rgba(46,8,8,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:12px; padding:0 14px; flex:1; min-width:140px;">
+            <span style="color:rgba(252,228,228,0.7); font-weight:700; font-size:14px;">R$</span>
+            <input 
+              type="text" 
+              id="new-total-price" 
+              placeholder="0,00" 
+              inputmode="decimal"
+              style="flex:1; border:none; background:transparent; padding:12px 0; color:rgba(252,228,228,1); outline:none; font-size:16px; font-weight:700;"
+            />
+          </div>
           <button class="ghost-button" id="cancel-create">Cancelar</button>
           <button class="primary-button" id="save-create">Salvar</button>
         </div>
