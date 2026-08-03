@@ -1594,6 +1594,7 @@ function getOriginLabel(origin) {
     aiqfome: "Aiqfome",
     autoatendimento: "Autoatendimento",
     balcao: "Balcão",
+    delivery: "Manual",
   };
   return map[String(origin).toLowerCase()] || origin;
 }
@@ -2829,7 +2830,7 @@ const body = {
   address: isDelivery ? address : null,
   payment_method: isDelivery ? payment_method : null,
   total_price,
-  origin: orderAtual?.origin || "balcao",
+  origin: orderAtual?.origin || "delivery",
   table_number: orderAtual?.table_number || saveCreateBtn.dataset.mesa || null,
   ...(editOrderId ? { 
     order_id: editOrderId,
