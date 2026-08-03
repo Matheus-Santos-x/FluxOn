@@ -2680,9 +2680,9 @@ function getWaitColor(frontStatus, createdAt) {
 
 // ===== CREATE ORDER =====
 function updateCreateDeliveryVisibility() {
-  const isDelivery = !!newDelivery?.checked;
-  deliveryAddressWrap?.classList.toggle("hidden", !isDelivery);
-  paymentWrap?.classList.toggle("hidden", !isDelivery);
+  // Kanban é delivery-only — endereço e pagamento sempre visíveis
+  deliveryAddressWrap?.classList.remove("hidden");
+  paymentWrap?.classList.remove("hidden");
 }
 
 function openCreateModal(e, mesa) {
