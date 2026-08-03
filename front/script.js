@@ -2799,7 +2799,7 @@ async function saveNewOrder() {
   const rid = getRestaurantId();
   const client = String(newCustomer?.value || "").trim();
   const itens = parseItems(newItems?.value);
-  const isDelivery = !!newDelivery?.checked;
+  const isDelivery = true; // kanban é delivery-only
   const service_type = isDelivery ? "delivery" : "local";
   const address = String(newAddress?.value || "").trim();
   const payment_method = String(newPayment?.value || "").trim();
