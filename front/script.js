@@ -2862,7 +2862,12 @@ const body = {
     };
   }
 } else {
-  orders.push({ ...data.order, _frontStatus: toFrontStatus(data.order.status) });
+  const idxExistente = orders.findIndex(o => o.id === data.order.id);
+  if (idxExistente !== -1) {
+    orders[idxExistente] = { ...orders[idxExistente], ...data.order, _frontStatus: toFrontStatus(data.order.status) };
+  } else {
+    orders.push({ ...data.order, _frontStatus: toFrontStatus(data.order.status) });
+  }
 }
 editingOrderId = null;
 
