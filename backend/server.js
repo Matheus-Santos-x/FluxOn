@@ -16,22 +16,24 @@ import ws from "ws";
 
 dotenv.config();
 
-// ===== REDIS (DESATIVADO — 1 réplica só, não precisa) =====
-// const redisOpts = {
-//   tls: { rejectUnauthorized: false },
-//   lazyConnect: true,
-//   connectTimeout: 10000,
-//   retryStrategy: (times) => Math.min(times * 500, 5000)
-// };
-// const redisConnection = new Redis(process.env.REDIS_URL, {
-//   ...redisOpts,
-//   maxRetriesPerRequest: null
-// });
-// const pubClient = new Redis(process.env.REDIS_URL, redisOpts);
-// const subClient = new Redis(process.env.REDIS_URL, redisOpts);
+// ===== REDIS =====
+const redisOpts = {
+  tls: { rejectUnauthorized: false },
+  lazyConnect: true,
+  connectTimeout: 10000,
+  retryStrategy: (times) => Math.min(times * 500, 5000)
+};
 
-// ===== FILA DE IMPRESSÃO (DESATIVADA) =====
-// const printQueue = new Queue("impressao", { connection: redisConnection });
+const redisConnection = new Redis(process.env.REDIS_URL, {
+  ...redisOpts,
+  maxRetriesPerRequest: null
+});
+
+const pubClient = new Redis(process.env.REDIS_URL, redisOpts);
+const subClient = new Redis(process.env.REDIS_URL, redisOpts);
+
+// ===== FILA DE IMPRESSÃO =====
+const printQueue = new Queue("impressao", { connection: redisConnection });
 
 // ===== CACHE IMPRESSORA =====
 const _impressoraCache = {};
@@ -60,20 +62,19 @@ const io = new Server(httpServer, {
   cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-// ===== SOCKET.IO REDIS ADAPTER (DESATIVADO — 1 réplica só, não precisa) =====
-// async function setupRedisAdapter() {
-//   try {
-//     await Promise.all([pubClient.connect(), subClient.connect()]);
-//     io.adapter(createAdapter(pubClient, subClient, {
-//       heartbeatInterval: 30000,
-//       heartbeatTimeout: 60000
-//     }));
-//     console.log("✅ Socket.io Redis adapter conectado!");
-//   } catch (err) {
-//     console.error("❌ Redis adapter falhou:", err.message);
-//   }
-// }
-// setupRedisAdapter();
+async function setupRedisAdapter() {
+  try {
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    io.adapter(createAdapter(pubClient, subClient, {
+  heartbeatInterval: 30000,
+  heartbeatTimeout: 60000
+}));
+    console.log("✅ Socket.io Redis adapter conectado!");
+  } catch (err) {
+    console.error("❌ Redis adapter falhou:", err.message);
+  }
+}
+setupRedisAdapter();
 
 const PORT = process.env.PORT || 3001;
 const HOST = '0.0.0.0';
@@ -846,9 +847,15 @@ app.patch("/api/v1/pedidos/:id/adicionar-itens", async (req, res) => {
         if (impressorasSemCaixa.length > 0) {
           // Monta objeto do pedido com APENAS os itens novos para impressão
           const pedidoParaImprimir = { ...pedidoAtualizado, itens: itens_novos };
-          printByCategory(pedidoParaImprimir, config.api_key, impressorasSemCaixa)
-            .then(() => console.log(`🖨️ Impresso direto — Pedido #${pedidoAtualizado.order_number}`))
-            .catch(err => console.error(`❌ Erro ao imprimir Pedido #${pedidoAtualizado.order_number}:`, err.message));
+          await printQueue.add("imprimir", {
+  order: { ...pedidoParaImprimir },
+  apiKey: config.api_key,
+  impressoras: impressorasSemCaixa
+}, {
+  attempts: 3,
+  backoff: { type: "exponential", delay: 2000 }
+});
+console.log(`🖨️ Job de impressão adicionado — Pedido #${pedidoAtualizado.order_number}`);
         }
       }
     } catch (printErr) {
@@ -2978,22 +2985,24 @@ const is_caixa = toBool(impressora.is_caixa) || toBool(impressora.caixa);
   }
 }
 
-// ===== WORKER DE IMPRESSÃO (DESATIVADO — impressão agora é direta, sem fila) =====
-// const printWorker = new Worker("impressao", async (job) => {
-//   const { order, apiKey, impressoras } = job.data;
-//   await printByCategory(order, apiKey, impressoras);
-// }, { 
-//   connection: redisConnection,
-//   concurrency: 3,
-//   stalledInterval: 21600000,
-//   lockDuration: 300000
-// });
-// printWorker.on("completed", (job) => {
-//   console.log(`✅ Impressão concluída — Pedido #${job.data.order.order_number}`);
-// });
-// printWorker.on("failed", (job, err) => {
-//   console.error(`❌ Impressão falhou — Pedido #${job.data.order.order_number}:`, err.message);
-// });
+// ===== WORKER DE IMPRESSÃO =====
+const printWorker = new Worker("impressao", async (job) => {
+  const { order, apiKey, impressoras } = job.data;
+  await printByCategory(order, apiKey, impressoras);
+}, { 
+  connection: redisConnection,
+  concurrency: 3,
+  stalledInterval: 21600000,
+  lockDuration: 300000
+});
+
+printWorker.on("completed", (job) => {
+  console.log(`✅ Impressão concluída — Pedido #${job.data.order.order_number}`);
+});
+
+printWorker.on("failed", (job, err) => {
+  console.error(`❌ Impressão falhou — Pedido #${job.data.order.order_number}:`, err.message);
+});
 
 // POST - Testa impressão
 app.post("/api/v1/restaurante/:restaurant_id/impressora/teste", async (req, res) => {
