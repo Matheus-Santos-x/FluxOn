@@ -110,6 +110,7 @@ const newPhone = document.getElementById("new-phone");
 const newItems = document.getElementById("new-items");
 const newDelivery = document.getElementById("new-delivery");
 const deliveryAddressWrap = document.getElementById("delivery-address-wrap");
+const deliveryOuterWrap = document.getElementById("delivery-outer-wrap");
 const newAddress = document.getElementById("new-address");
 const paymentWrap = document.getElementById("payment-wrap");
 const newPayment = document.getElementById("new-payment");
@@ -2683,6 +2684,7 @@ function getWaitColor(frontStatus, createdAt) {
 function updateCreateDeliveryVisibility() {
   const tipo = saveCreateBtn?.dataset.tipo || "delivery";
   const isMesa = tipo === "mesa";
+  deliveryOuterWrap?.classList.toggle("hidden", isMesa);
   deliveryAddressWrap?.classList.toggle("hidden", isMesa);
   paymentWrap?.classList.toggle("hidden", isMesa);
 }
