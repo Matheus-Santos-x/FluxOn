@@ -1064,7 +1064,7 @@ async function abrirCriarPedidoMesa(key) {
       abrirDrawerMesa(key);
       return;
     }
-    openCreateModal(null, isBalcao ? null : key);
+    openCreateModal(null, isBalcao ? null : key, "mesa");
     // Esconde o campo de delivery pois é pedido de mesa
     setTimeout(() => {
       const deliveryWrap = document.getElementById("delivery-address-wrap");
@@ -2681,17 +2681,19 @@ function getWaitColor(frontStatus, createdAt) {
 
 // ===== CREATE ORDER =====
 function updateCreateDeliveryVisibility() {
-  // Kanban é delivery-only — endereço e pagamento sempre visíveis
-  deliveryAddressWrap?.classList.remove("hidden");
-  paymentWrap?.classList.remove("hidden");
+  const tipo = saveCreateBtn?.dataset.tipo || "delivery";
+  const isMesa = tipo === "mesa";
+  deliveryAddressWrap?.classList.toggle("hidden", isMesa);
+  paymentWrap?.classList.toggle("hidden", isMesa);
 }
 
-function openCreateModal(e, mesa) {
+function openCreateModal(e, mesa, tipo) {
   if (e) { e.stopPropagation(); e.preventDefault(); }
   closeDrawer();
   editingOrderId = null;
   saveCreateBtn.dataset.editOrderId = "";
   saveCreateBtn.dataset.mesa = mesa || "";
+  saveCreateBtn.dataset.tipo = tipo || (mesa !== undefined ? "mesa" : "delivery");
   openBackdrop(createModal);
   updateCreateDeliveryVisibility();
 }
@@ -2799,7 +2801,8 @@ async function saveNewOrder() {
   const rid = getRestaurantId();
   const client = String(newCustomer?.value || "").trim();
   const itens = parseItems(newItems?.value);
-  const isDelivery = true; // kanban é delivery-only
+  const tipoPedido = saveCreateBtn?.dataset.tipo || "delivery";
+  const isDelivery = tipoPedido !== "mesa";
   const service_type = isDelivery ? "delivery" : "local";
   const address = String(newAddress?.value || "").trim();
   const payment_method = String(newPayment?.value || "").trim();
