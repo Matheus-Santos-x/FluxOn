@@ -19,6 +19,7 @@
     "multer": "^1.4.5-lts.1",
     "google-auth-library": "^9.0.0",
     "ioredis": "^5.0.0",
+    "openai": "^4.68.0",
     "jsonwebtoken": "^9.0.0",
     "express-rate-limit": "^7.0.0",
     "file-type": "^19.0.0",
