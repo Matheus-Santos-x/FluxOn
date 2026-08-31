@@ -12,7 +12,8 @@ import { Server } from "socket.io";
 import { Queue, Worker } from "bullmq";
 import { createAdapter } from "@socket.io/redis-adapter";
 import Redis from "ioredis";
-import ws from "ws"; 
+import ws from "ws";
+import OpenAI from "openai";
 
 dotenv.config();
 
@@ -103,6 +104,8 @@ const supabase = createClient(
     console.error("❌ Erro Supabase:", err.message);
   }
 })();
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ===== WEBSOCKET =====
 io.on("connection", (socket) => {
@@ -201,9 +204,20 @@ const limiterStrict = rateLimit({
   legacyHeaders: false,
 });
 
+const limiterIA = rateLimit({
+  windowMs: 60 * 1000,
+  max: 15, // 15 mensagens por minuto por IP — dá pra ajustar depois
+  message: { error: "Muitas mensagens pra IA. Aguarde um minuto." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+
 app.use("/api/", limiter);
 app.use("/auth/", limiterStrict);
 app.use("/orders/", limiter);
+app.use("/api/v1/ia/", limiterIA);
+
 
 const ALLOWED_STATUS = ["draft", "pending", "preparing", "mounting", "delivering", "finished", "cancelled", "canceled"];
 
@@ -4122,6 +4136,75 @@ app.get("/api/v1/cardapio/:restaurant_id/item/:id", async (req, res) => {
   if (error || !data) return sendError(res, 404, "Item não encontrado");
   return res.json(data);
 });
+
+
+/* ========================================
+   🤖 IA — SUGESTÃO DE ITENS DO CARDÁPIO
+======================================== */
+app.post("/api/v1/ia/sugestao", async (req, res) => {
+  try {
+    const { restaurant_id, mensagem, historico } = req.body || {};
+    if (!restaurant_id || !mensagem) {
+      return sendError(res, 400, "restaurant_id e mensagem são obrigatórios");
+    }
+
+    const exists = await restaurantExists(restaurant_id);
+    if (!exists) return sendError(res, 404, "Restaurante não encontrado");
+
+    // Busca o cardápio ativo real — a IA só pode sugerir o que existe aqui
+    const { data: cardapio, error } = await supabase
+      .from("cardapio")
+      .select("id, nome, descricao, preco, categoria")
+      .eq("restaurant_id", restaurant_id)
+      .eq("ativo", true);
+
+    if (error) return sendError(res, 500, "Erro ao buscar cardápio");
+
+    const cardapioTexto = (cardapio || [])
+      .map(i => `- ${i.nome} (${i.categoria || "Geral"}): R$ ${parseFloat(i.preco || 0).toFixed(2)}${i.descricao ? " — " + i.descricao : ""}`)
+      .join("\n");
+
+    const systemPrompt = `Você é o assistente de pedidos de um restaurante. Sugira SOMENTE itens que estão na lista abaixo — nunca invente pratos que não existem nela. Seja breve (no máximo 2-3 frases). Se pedirem algo fora do cardápio, diga educadamente que não tem e sugira o mais parecido.
+
+Cardápio disponível:
+${cardapioTexto}
+
+Responda SOMENTE em JSON válido, neste formato exato, sem nada antes ou depois:
+{"resposta": "texto curto pra mostrar pro cliente", "itens_sugeridos": ["Nome exato do item 1", "Nome exato do item 2"]}`;
+
+    const mensagens = [
+      { role: "system", content: systemPrompt },
+      ...(Array.isArray(historico) ? historico.slice(-6) : []),
+      { role: "user", content: mensagem }
+    ];
+
+    const response = await openai.responses.create({
+      model: "gpt-5.6-luna",
+      input: mensagens,
+      max_output_tokens: 300
+    });
+
+    let parsed;
+    try {
+      parsed = JSON.parse(response.output_text || "{}");
+    } catch {
+      parsed = { resposta: response.output_text || "Não consegui pensar em nada agora, dá uma olhada no cardápio 🙂", itens_sugeridos: [] };
+    }
+
+    // casa os nomes sugeridos pelos itens reais (id + preço), pra já poder
+    // adicionar direto ao carrinho no front
+    const itensCompletos = (parsed.itens_sugeridos || [])
+      .map(nome => (cardapio || []).find(i => i.nome.toLowerCase() === String(nome).toLowerCase()))
+      .filter(Boolean);
+
+    return res.json({ resposta: parsed.resposta || "", itens: itensCompletos });
+
+  } catch (err) {
+    console.error("❌ Erro em /api/v1/ia/sugestao:", err);
+    return sendError(res, 500, "Erro ao consultar a IA");
+  }
+});
+
 
 // ===== HEALTH CHECK =====
 app.get("/health", (req, res) => {
