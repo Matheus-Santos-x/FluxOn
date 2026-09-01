@@ -4143,7 +4143,7 @@ app.get("/api/v1/cardapio/:restaurant_id/item/:id", async (req, res) => {
 ======================================== */
 app.post("/api/v1/ia/sugestao", async (req, res) => {
   try {
-    const { restaurant_id, mensagem, historico } = req.body || {};
+    const { restaurant_id, mensagem, historico, carrinho } = req.body || {};
     if (!restaurant_id || !mensagem) {
       return sendError(res, 400, "restaurant_id e mensagem são obrigatórios");
     }
@@ -4164,18 +4164,33 @@ app.post("/api/v1/ia/sugestao", async (req, res) => {
       .map(i => `- ${i.nome} (${i.categoria || "Geral"}): R$ ${parseFloat(i.preco || 0).toFixed(2)}${i.descricao ? " — " + i.descricao : ""}`)
       .join("\n");
 
-    const systemPrompt = `Você é o assistente de pedidos de um restaurante. Sugira SOMENTE itens que estão na lista abaixo — nunca invente pratos que não existem nela. Seja breve (no máximo 2-3 frases). Se pedirem algo fora do cardápio, diga educadamente que não tem e sugira o mais parecido.
+    // 🆕 Contexto do carrinho — é isso que permite sugerir complementos
+    const carrinhoTexto = Array.isArray(carrinho) && carrinho.length > 0
+      ? carrinho.map(c => `- ${c.qty}x ${c.nome}`).join("\n")
+      : null;
 
+    const contextoCarrinho = carrinhoTexto
+      ? `\nO cliente JÁ TEM isso no carrinho:\n${carrinhoTexto}\n\nSempre que fizer sentido, sugira itens complementares ao que já está no carrinho — pense no que as pessoas normalmente pedem junto (ex: bebida pra acompanhar um lanche, sobremesa depois do prato principal, adicional). NÃO sugira de novo algo que já está no carrinho.\n`
+      : "";
+
+    const systemPrompt = `Você é o assistente de pedidos de um restaurante. Sugira SOMENTE itens que estão na lista abaixo — nunca invente pratos que não existem nela. Seja breve (no máximo 2-3 frases). Se pedirem algo fora do cardápio, diga educadamente que não tem e sugira o mais parecido.
+${contextoCarrinho}
 Cardápio disponível:
 ${cardapioTexto}
 
 Responda SOMENTE em JSON válido, neste formato exato, sem nada antes ou depois:
 {"resposta": "texto curto pra mostrar pro cliente", "itens_sugeridos": ["Nome exato do item 1", "Nome exato do item 2"]}`;
 
+    // 🆕 Se for a chamada automática (disparada ao abrir o chat com
+    // carrinho não vazio), troca a "pergunta" por uma que faz sentido
+    const mensagemFinal = mensagem === "__sugestao_automatica__"
+      ? "Com base no que já está no meu carrinho, o que você sugere pra completar o pedido?"
+      : mensagem;
+
     const mensagens = [
       { role: "system", content: systemPrompt },
       ...(Array.isArray(historico) ? historico.slice(-6) : []),
-      { role: "user", content: mensagem }
+      { role: "user", content: mensagemFinal }
     ];
 
     const response = await openai.responses.create({
@@ -4191,8 +4206,6 @@ Responda SOMENTE em JSON válido, neste formato exato, sem nada antes ou depois:
       parsed = { resposta: response.output_text || "Não consegui pensar em nada agora, dá uma olhada no cardápio 🙂", itens_sugeridos: [] };
     }
 
-    // casa os nomes sugeridos pelos itens reais (id + preço), pra já poder
-    // adicionar direto ao carrinho no front
     const itensCompletos = (parsed.itens_sugeridos || [])
       .map(nome => (cardapio || []).find(i => i.nome.toLowerCase() === String(nome).toLowerCase()))
       .filter(Boolean);
@@ -4204,7 +4217,6 @@ Responda SOMENTE em JSON válido, neste formato exato, sem nada antes ou depois:
     return sendError(res, 500, "Erro ao consultar a IA");
   }
 });
-
 
 // ===== HEALTH CHECK =====
 app.get("/health", (req, res) => {
