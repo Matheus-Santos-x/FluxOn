@@ -2446,7 +2446,7 @@ app.get("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
       .eq("restaurant_id", restaurant_id)
       .single();
 
-    return res.json({
+        return res.json({
       nome_exibicao: config?.nome_exibicao || "",
       logo_url: config?.logo_url || null,
       cor_primaria: config?.cor_primaria || "#f97373",
@@ -2461,7 +2461,13 @@ app.get("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
       tempo_recebido: config?.tempo_recebido ?? 1.5,
       tempo_preparo: config?.tempo_preparo ?? 20,
       tempo_pronto: config?.tempo_pronto ?? 10,
-      categorias_ordem: config?.categorias_ordem || []
+      categorias_ordem: config?.categorias_ordem || [],
+      tempo_entrega_min: config?.tempo_entrega_min ?? null,
+      tempo_entrega_max: config?.tempo_entrega_max ?? null,
+      pedido_minimo: config?.pedido_minimo ?? 0,
+      endereco: config?.endereco || "",
+      pagamento_online: config?.pagamento_online || [],
+      pagamento_entrega: config?.pagamento_entrega || []
     });
   } catch (err) {
     return sendError(res, 500, "Erro ao buscar configuração");
@@ -2479,6 +2485,76 @@ app.patch("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
       .upsert({ restaurant_id, ...fields }, { onConflict: "restaurant_id" });
 
     if (error) return sendError(res, 500, "Erro ao salvar config");
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+/* ========================================
+   🕐 HORÁRIOS DE FUNCIONAMENTO
+======================================== */
+
+// GET - Lista os horários e já calcula se está aberto AGORA
+app.get("/api/v1/restaurante/:restaurant_id/horarios", async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const { data, error } = await supabase
+      .from("restaurante_horarios")
+      .select("id, dia_semana, abertura, fechamento, ativo")
+      .eq("restaurant_id", restaurant_id)
+      .eq("ativo", true)
+      .order("dia_semana")
+      .order("abertura");
+
+    if (error) return sendError(res, 500, "Erro ao buscar horários");
+
+    // calcula "aberto agora" no fuso de São Paulo (mesmo padrão que
+    // você já usa no printOrder)
+    const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+    const diaAtual = agora.getDay(); // 0=domingo ... 6=sábado
+    const horaAtual = agora.toTimeString().slice(0, 5); // "HH:MM"
+
+    const periodoAtivo = (data || []).find(h =>
+      h.dia_semana === diaAtual &&
+      horaAtual >= h.abertura.slice(0, 5) &&
+      horaAtual <= h.fechamento.slice(0, 5)
+    );
+
+    return res.json({
+      horarios: data || [],
+      status: {
+        aberto: !!periodoAtivo,
+        fechamento_atual: periodoAtivo ? periodoAtivo.fechamento.slice(0, 5) : null
+      }
+    });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// PATCH - Substitui a semana inteira de uma vez (o admin manda a lista completa)
+app.patch("/api/v1/restaurante/:restaurant_id/horarios", async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const { horarios } = req.body; // [{ dia_semana, abertura, fechamento }, ...]
+    if (!Array.isArray(horarios)) return sendError(res, 400, "horarios deve ser um array");
+
+    // substituição completa: apaga os antigos, insere os novos
+    await supabase.from("restaurante_horarios").delete().eq("restaurant_id", restaurant_id);
+
+    if (horarios.length > 0) {
+      const rows = horarios.map(h => ({
+        restaurant_id,
+        dia_semana: h.dia_semana,
+        abertura: h.abertura,
+        fechamento: h.fechamento,
+        ativo: true
+      }));
+      const { error } = await supabase.from("restaurante_horarios").insert(rows);
+      if (error) return sendError(res, 500, "Erro ao salvar horários");
+    }
+
     return res.json({ success: true });
   } catch (err) {
     return sendError(res, 500, "Erro interno");
