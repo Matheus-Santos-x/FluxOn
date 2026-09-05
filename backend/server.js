@@ -766,24 +766,6 @@ app.get("/crm/:restaurant_id", async (req, res) => {
 ======================================== */
 
 app.get("/orders/:restaurant_id", async (req, res) => {
-  try {
-    const { restaurant_id } = req.params;
-    const cutoff = new Date();
-    cutoff.setHours(cutoff.getHours() - 12);
-
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("restaurant_id", restaurant_id)
-      .or(`status.in.(pending,preparing,mounting,delivering),created_at.gte.${cutoff.toISOString()}`)
-      .order("created_at", { ascending: true });
-
-    if (error) return sendError(res, 500, "Erro ao listar pedidos");
-    return res.json(data || []);
-  } catch (err) {
-    return sendError(res, 500, "Erro ao listar pedidos");
-  }
-});
 
 // ✅ NOVA ROTA — Busca pedido aberto de uma mesa
 app.get("/api/v1/pedidos-mesa", async (req, res) => {
