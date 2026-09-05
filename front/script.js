@@ -2824,7 +2824,7 @@ if (isDelivery && !payment_method) { alert("Forma de pagamento é obrigatória p
 
   try {
    const orderAtual = editOrderId ? orders.find(o => o.id === editOrderId) : null;
-
+  
 const body = {
   restaurant_id: rid,
   client_name: client,
@@ -2835,7 +2835,7 @@ const body = {
   address: isDelivery ? address : null,
   payment_method: isDelivery ? payment_method : null,
   total_price,
-  origin: orderAtual?.origin || "delivery",
+  origin: orderAtual?.origin || (tipoPedido === "mesa" ? "balcao" : "delivery"),
   table_number: orderAtual?.table_number || saveCreateBtn.dataset.mesa || null,
   ...(editOrderId ? { 
     order_id: editOrderId,
