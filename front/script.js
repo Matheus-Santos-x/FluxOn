@@ -536,9 +536,9 @@ for (let i = 1; i <= numMesas; i++) mesas.push({ tipo: "mesa", numero: i });
       ${mesas.map(m => {
         const label = m.tipo === "balcao" ? "Balcão" : `Mesa ${m.numero}`;
         const key = m.tipo === "balcao" ? "balcao" : String(m.numero);
-        const pedidosAtivos = orders.filter(o =>
+       const pedidosAtivos = orders.filter(o =>
           ["recebido", "preparo", "pronto"].includes(o._frontStatus) &&
-          ["autoatendimento", "balcao"].includes(String(o.origin || "").toLowerCase()) &&
+          o.destino === "mesas" &&
           (m.tipo === "balcao"
             ? (!o.table_number && o.service_type !== "delivery")
             : String(o.table_number) === String(m.numero))
@@ -586,9 +586,9 @@ for (let i = 1; i <= numMesas; i++) mesas.push({ tipo: "mesa", numero: i });
   // Inicia timers nos cards de mesa usando a mesma lógica do kanban
   mesas.forEach(m => {
     const key = m.tipo === "balcao" ? "balcao" : String(m.numero);
-    const pedidosRecebido = orders.filter(o =>
+      const pedidosRecebido = orders.filter(o =>
       o._frontStatus === "recebido" &&
-      ["autoatendimento", "balcao"].includes(String(o.origin || "").toLowerCase()) &&
+      o.destino === "mesas" &&
       (m.tipo === "balcao"
         ? (!o.table_number && o.service_type !== "delivery")
         : String(o.table_number) === String(m.numero))
@@ -640,7 +640,7 @@ function abrirDrawerMesa(key) {
 
   const pedidosAtivos = orders.filter(o =>
     ["recebido", "preparo", "pronto"].includes(o._frontStatus) &&
-    ["autoatendimento", "balcao"].includes(String(o.origin || "").toLowerCase()) &&
+    o.destino === "mesas" &&
     (isBalcao
       ? (!o.table_number && o.service_type !== "delivery")
       : String(o.table_number) === String(key))
@@ -752,7 +752,7 @@ function cancelarPedidosMesa(key) {
   const isBalcao = key === "balcao";
   const pedidosAtivos = orders.filter(o =>
   ["recebido", "preparo", "pronto"].includes(o._frontStatus) &&
-  ["autoatendimento", "balcao"].includes(String(o.origin || "").toLowerCase()) &&
+  o.destino === "mesas" &&
   (isBalcao
     ? (!o.table_number && o.service_type !== "delivery")
     : String(o.table_number) === String(key))
@@ -770,7 +770,7 @@ function editarPedidoMesa(key) {
 
   const pedido = orders.find(o =>
     ["recebido", "preparo", "pronto"].includes(o._frontStatus) &&
-    ["autoatendimento", "balcao"].includes(String(o.origin || "").toLowerCase()) &&
+    o.destino === "mesas" &&
     (isBalcao
       ? (!o.table_number && o.service_type !== "delivery")
       : String(o.table_number) === String(key))
@@ -1031,7 +1031,7 @@ function finalizarMesa(key) {
   const isBalcao = key === "balcao";
   const pedidosAtivos = orders.filter(o =>
     ["recebido", "preparo", "pronto"].includes(o._frontStatus) &&
-    ["autoatendimento", "balcao"].includes(String(o.origin || "").toLowerCase()) &&
+    o.destino === "mesas" &&
     (isBalcao
       ? (!o.table_number && o.service_type !== "delivery")
       : String(o.table_number) === String(key))
@@ -1048,9 +1048,9 @@ async function abrirCriarPedidoMesa(key) {
   const isBalcao = key === "balcao";
   const label = isBalcao ? "Balcão" : `Mesa ${key}`;
 
-  const pedidosAtivos = orders.filter(o =>
+   const pedidosAtivos = orders.filter(o =>
     ["recebido", "preparo", "pronto"].includes(o._frontStatus) &&
-    ["autoatendimento", "balcao"].includes(String(o.origin || "").toLowerCase()) &&
+    o.destino === "mesas" &&
     (isBalcao
       ? (!o.table_number && o.service_type !== "delivery")
       : String(o.table_number) === String(key))
@@ -1549,9 +1549,9 @@ function renderBoard() {
   });
 
   const filtered = orders.filter((o) => {
+  const filtered = orders.filter((o) => {
     if (!visibleStatuses.includes(o._frontStatus)) return false;
-    const origem = String(o.origin || "").toLowerCase();
-   if ((origem === "autoatendimento" || origem === "balcao") && o.table_number) return false;
+    if (o.destino === "mesas") return false;
     if (!searchTerm) return true;
     const num = String(o.order_number || "").toLowerCase();
     const name = String(o.client_name || "").toLowerCase();
@@ -2835,7 +2835,7 @@ const body = {
   address: isDelivery ? address : null,
   payment_method: isDelivery ? payment_method : null,
   total_price,
-  origin: orderAtual?.origin || (tipoPedido === "mesa" ? "balcao" : "delivery"),
+origin: orderAtual?.origin || (tipoPedido === "mesa" ? "balcao" : "balcao_delivery"),
   table_number: orderAtual?.table_number || saveCreateBtn.dataset.mesa || null,
   ...(editOrderId ? { 
     order_id: editOrderId,
