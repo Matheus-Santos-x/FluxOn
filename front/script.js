@@ -505,6 +505,23 @@ function showSettings() {
   loadSettingsData();
 }
 
+function showHome() {
+  board?.classList.add("hidden");
+  crmView?.classList.add("hidden");
+  resultsView?.classList.add("hidden");
+  document.getElementById("autoatendimento-view")?.classList.add("hidden");
+  document.getElementById("mesas-view")?.classList.add("hidden");
+  document.getElementById("settings-view")?.classList.add("hidden");
+  document.getElementById("fidelidade-view")?.classList.add("hidden");
+  document.getElementById("cardapio-view")?.classList.add("hidden");
+  document.getElementById("home-view")?.classList.remove("hidden");
+  hideTabsBar();
+  closeDrawer();
+  document.getElementById("open-create")?.classList.add("hidden");
+  document.getElementById("home-restaurant-name").textContent =
+    localStorage.getItem("restaurant_name") || "Restaurante";
+}
+
 function showMesas() {
   board?.classList.add("hidden");
   crmView?.classList.add("hidden");
@@ -4074,7 +4091,7 @@ setInterval(() => {
   });
 }, 60000);
 
-showMesas();
+showHome();
 fetchOrders();
 
 // Polling de segurança — fallback se WebSocket cair
