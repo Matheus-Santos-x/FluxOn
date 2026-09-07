@@ -2804,12 +2804,7 @@ async function saveNewOrder() {
   const rid = getRestaurantId();
   const client = String(newCustomer?.value || "").trim();
   const itens = parseItems(newItems?.value);
-const tipoPedido = String(saveCreateBtn?.dataset?.tipo || "delivery");
-console.log("🔍 DEBUG:", {
-  tipoPedido,
-  mesa: saveCreateBtn?.dataset?.mesa,
-  datasetCompleto: JSON.stringify(saveCreateBtn?.dataset)
-});
+const tipoPedido = saveCreateBtn?.dataset.tipo || "delivery";
   const isDelivery = tipoPedido !== "mesa";
   const service_type = isDelivery ? "delivery" : "local";
   const address = String(newAddress?.value || "").trim();
@@ -3472,13 +3467,6 @@ if (openCreateBtn) openCreateBtn.addEventListener("click", openCreateModal);
 if (closeCreateBtn) closeCreateBtn.addEventListener("click", closeCreateModal);
 if (cancelCreateBtn) cancelCreateBtn.addEventListener("click", closeCreateModal);
 if (saveCreateBtn) saveCreateBtn.addEventListener("click", () => {
-  console.log("🔍 CLIQUE SALVAR:", {
-    tipo: saveCreateBtn.dataset.tipo,
-    mesa: saveCreateBtn.dataset.mesa,
-    dataset: JSON.stringify(saveCreateBtn.dataset)
-  });
-  saveNewOrder();
-});
 if (newDelivery) newDelivery.addEventListener("change", updateCreateDeliveryVisibility);
 
 // Máscara de dinheiro
