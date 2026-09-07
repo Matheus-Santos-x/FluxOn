@@ -2836,7 +2836,7 @@ const body = {
   address: isDelivery ? address : null,
   payment_method: isDelivery ? payment_method : null,
   total_price,
-origin: orderAtual?.origin || (tipoPedido === "mesa" ? "balcao" : "balcao_delivery"),
+origin: orderAtual?.origin || (tipoPedido === "mesa" || !!saveCreateBtn.dataset.mesa ? "balcao" : "balcao_delivery"),
   table_number: orderAtual?.table_number || saveCreateBtn.dataset.mesa || null,
   ...(editOrderId ? { 
     order_id: editOrderId,
