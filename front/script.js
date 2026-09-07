@@ -2804,7 +2804,12 @@ async function saveNewOrder() {
   const rid = getRestaurantId();
   const client = String(newCustomer?.value || "").trim();
   const itens = parseItems(newItems?.value);
-  const tipoPedido = saveCreateBtn?.dataset.tipo || "delivery";
+const tipoPedido = saveCreateBtn?.dataset.tipo || "delivery";
+console.log("🔍 DEBUG:", {
+  tipoPedido,
+  mesa: saveCreateBtn?.dataset.mesa,
+  editOrderId: editingOrderId
+});
   const isDelivery = tipoPedido !== "mesa";
   const service_type = isDelivery ? "delivery" : "local";
   const address = String(newAddress?.value || "").trim();
