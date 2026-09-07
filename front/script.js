@@ -478,12 +478,13 @@ function showAutoatendimento() {
     return;
   }
   board?.classList.add("hidden");
-  crmView?.classList.add("hidden");
-  resultsView?.classList.add("hidden");
-  document.getElementById("settings-view")?.classList.add("hidden");
-  document.getElementById("fidelidade-view")?.classList.add("hidden");
-  document.getElementById("cardapio-view")?.classList.add("hidden");
-  document.getElementById("autoatendimento-view")?.classList.remove("hidden");
+crmView?.classList.add("hidden");
+resultsView?.classList.add("hidden");
+document.getElementById("settings-view")?.classList.add("hidden");
+document.getElementById("fidelidade-view")?.classList.add("hidden");
+document.getElementById("cardapio-view")?.classList.add("hidden");
+document.getElementById("mesas-view")?.classList.add("hidden"); // ← ADICIONAR
+document.getElementById("autoatendimento-view")?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
   initAutoatendimento();
