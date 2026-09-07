@@ -374,7 +374,7 @@ app.get("/api/v1/metrics/:restaurant_id", async (req, res) => {
 orders_by_origin: {
   ia_whatsapp: 0,
   pdv: 0,
-  balcao: 0,
+  pedido_manual: 0,
   autoatendimento: 0,
   outros: 0
 },
@@ -424,9 +424,11 @@ orders_by_origin: {
         if (phone) uniquePhones.add(phone);
       }
 
-      // Origem
+     // Origem
       const origin = (order.origin || "outros").toLowerCase();
-      if (metrics.orders_by_origin[origin] !== undefined) {
+      if (origin === "balcao" || origin === "balcao_delivery") {
+        metrics.orders_by_origin.pedido_manual++;
+      } else if (metrics.orders_by_origin[origin] !== undefined) {
         metrics.orders_by_origin[origin]++;
         
         // Performance IA
@@ -1061,6 +1063,11 @@ if (status === "finished") {
   }
 });
 
+function calcularDestino(origin) {
+  const origensDeMesa = ["autoatendimento", "balcao"];
+  return origensDeMesa.includes(String(origin || "").toLowerCase()) ? "mesas" : "kanban";
+}
+
 app.post("/api/v1/pedidos", async (req, res) => {
   try {
     const {
@@ -1144,6 +1151,7 @@ const nextNumber = numData || 1;
       payment_method: payment_method || null,
       total_price: total_price || 0,
       origin: finalOrigin,
+      destino: calcularDestino(finalOrigin),
         table_number: table_number || null,
         created_at: now,
         update_at: now
