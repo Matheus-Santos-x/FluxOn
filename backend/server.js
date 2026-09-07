@@ -1064,7 +1064,7 @@ if (status === "finished") {
 });
 
 function calcularDestino(origin) {
-  const origensDeMesa = ["autoatendimento", "balcao"];
+  const origensDeMesa = ["autoatendimento", "balcao", "mesa"];
   return origensDeMesa.includes(String(origin || "").toLowerCase()) ? "mesas" : "kanban";
 }
 
