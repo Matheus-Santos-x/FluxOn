@@ -1595,6 +1595,7 @@ function getOriginLabel(origin) {
     aiqfome: "Aiqfome",
     autoatendimento: "Autoatendimento",
     balcao: "Balcão",
+    balcao_delivery: "Pedido Manual",
     delivery: "Manual",
   };
   return map[String(origin).toLowerCase()] || origin;
@@ -4032,7 +4033,7 @@ socket.on("order_updated", (order) => {
     _renderDebounce = setTimeout(() => renderBoard(), 500);
   }
 // Atualiza tela de mesas em tempo real só se o pedido for de mesa
-const ehPedidoMesa = order.origin === "autoatendimento" || order.origin === "balcao";
+const ehPedidoMesa = order.destino === "mesas";
 if (ehPedidoMesa && !document.getElementById("mesas-view")?.classList.contains("hidden")) {
   clearTimeout(window._renderMesasDebounce);
   window._renderMesasDebounce = setTimeout(() => renderMesas(), 300);
@@ -4366,7 +4367,7 @@ function renderOriginChart(data) {
 
   // ✅ APENAS IA E BALCÃO
   const iaOrders = data.orders_by_origin?.ia_whatsapp || 0;
-const balcaoOrders = data.orders_by_origin?.balcao || 0;
+const pedidoManualOrders = data.orders_by_origin?.pedido_manual || 0;
 const ifoodOrders = data.orders_by_origin?.ifood || 0;
 const aiqfomeOrders = data.orders_by_origin?.aiqfome || 0;
 const autoatendimentoOrders = data.orders_by_origin?.autoatendimento || 0;
@@ -4378,9 +4379,9 @@ const autoatendimentoOrders = data.orders_by_origin?.autoatendimento || 0;
   originChartInstance = new Chart(canvas, {
     type: 'doughnut',
     data: {
-    labels: [' IA WhatsApp', ' iFood', ' Aiqfome', ' Autoatendimento', ' Balcão'],
+ labels: [' IA WhatsApp', ' iFood', ' Aiqfome', ' Autoatendimento', ' Pedido Manual'],
 datasets: [{
-  data: [iaOrders, ifoodOrders, aiqfomeOrders, autoatendimentoOrders, balcaoOrders],
+  data: [iaOrders, ifoodOrders, aiqfomeOrders, autoatendimentoOrders, pedidoManualOrders],
   backgroundColor: [
     'rgba(34, 197, 94, 0.9)',    // Verde - IA WhatsApp
     'rgba(239, 68, 68, 0.9)',    // Vermelho - iFood
