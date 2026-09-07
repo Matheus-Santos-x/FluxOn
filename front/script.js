@@ -3805,7 +3805,6 @@ async function abrirModalVariacaoAdmin(item, opcoes) {
 
   window._adminSelecionarOpcao = function(idx) {
     selectedIdx = idx;
-    modal.querySelector(".modal.confirm-modal").innerHTML = buildModalHtml().match(/<div class="modal-header"[\s\S]*/)[0];
     modal.innerHTML = buildModalHtml();
     modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
   };
