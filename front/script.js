@@ -3471,7 +3471,14 @@ if (modalCancelBtn) modalCancelBtn.addEventListener("click", () => {
 if (openCreateBtn) openCreateBtn.addEventListener("click", openCreateModal);
 if (closeCreateBtn) closeCreateBtn.addEventListener("click", closeCreateModal);
 if (cancelCreateBtn) cancelCreateBtn.addEventListener("click", closeCreateModal);
-if (saveCreateBtn) saveCreateBtn.addEventListener("click", saveNewOrder);
+if (saveCreateBtn) saveCreateBtn.addEventListener("click", () => {
+  console.log("🔍 CLIQUE SALVAR:", {
+    tipo: saveCreateBtn.dataset.tipo,
+    mesa: saveCreateBtn.dataset.mesa,
+    dataset: JSON.stringify(saveCreateBtn.dataset)
+  });
+  saveNewOrder();
+});
 if (newDelivery) newDelivery.addEventListener("change", updateCreateDeliveryVisibility);
 
 // Máscara de dinheiro
