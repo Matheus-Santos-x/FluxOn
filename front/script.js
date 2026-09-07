@@ -3465,7 +3465,7 @@ if (modalCancelBtn) modalCancelBtn.addEventListener("click", () => {
 if (openCreateBtn) openCreateBtn.addEventListener("click", openCreateModal);
 if (closeCreateBtn) closeCreateBtn.addEventListener("click", closeCreateModal);
 if (cancelCreateBtn) cancelCreateBtn.addEventListener("click", closeCreateModal);
-if (saveCreateBtn) saveCreateBtn.addEventListener("click", () => {
+if (saveCreateBtn) saveCreateBtn.addEventListener("click", saveNewOrder);
 if (newDelivery) newDelivery.addEventListener("change", updateCreateDeliveryVisibility);
 
 // Máscara de dinheiro
@@ -4083,6 +4083,7 @@ setInterval(() => {
 }, 30000);
 
 renderBoard();
+}
 }
 // ========================================
 // 🎨 DASHBOARD COMPLETO - 4 GRÁFICOS
