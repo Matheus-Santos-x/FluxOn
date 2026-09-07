@@ -1548,8 +1548,7 @@ function renderBoard() {
     }
   });
 
-  const filtered = orders.filter((o) => {
-  const filtered = orders.filter((o) => {
+const filtered = orders.filter((o) => {
     if (!visibleStatuses.includes(o._frontStatus)) return false;
     if (o.destino === "mesas") return false;
     if (!searchTerm) return true;
