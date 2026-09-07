@@ -138,7 +138,9 @@ let features = {
 
 let crmClients = [];
 let insightsChartInstance = null; // 🔥 NOVO
+let metricsData = null;
 const insightsState = { activeMetric: 'revenue', timelineData: null }; // 🔥 NOVO
+
 
 const resultsState = {
   period: "30d",
@@ -6666,7 +6668,10 @@ async function _confirmarFechamento() {
 async function exportarFechamentoPDF() {
   const rid = getRestaurantId();
   if (!rid) return;
-
+  
+  // ✅ ADICIONAR ESTA LINHA:
+  const obs = document.getElementById("cx-obs")?.value?.trim() || "";
+  
   let d;
   try {
     const resp = await fetch(`${API_BASE}/api/v1/metrics/${rid}/resumo-dia`);
