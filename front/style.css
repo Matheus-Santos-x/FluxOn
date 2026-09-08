@@ -800,9 +800,9 @@ body {
 
 .crm-content,
 .results-content {
-  background: #080808;
-  border: 1px solid rgba(180, 30, 30, 0.2);
-  box-shadow: 0 0 30px rgba(180, 30, 30, 0.07);
+  background: transparent;
+  border: none;
+  box-shadow: none;
   border-radius: 20px;
   padding: 20px;
 }
