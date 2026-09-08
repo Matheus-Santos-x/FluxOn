@@ -46,20 +46,21 @@
   }
   
   /* 🔥 FIX DRAWER - FORÇADO */
-  #drawer {
-    position: fixed !important;
-    left: 0 !important;
-    top: 0 !important;
-    height: 100vh !important;
-    width: 320px !important;
-    background: rgba(42, 11, 11, 0.98) !important;
-    border-right: 1px solid rgba(91, 28, 28, 0.85) !important;
-    z-index: 99999 !important;
-    transform: translateX(-100%) !important;
-    transition: transform 0.3s ease !important;
-    display: flex !important;
-    flex-direction: column !important;
-  }
+#drawer {
+  position: fixed !important;
+  left: 0 !important;
+  top: 0 !important;
+  height: 100vh !important;
+  width: 320px !important;
+  background: #0a0a0a !important;
+  border-right: 1px solid rgba(180, 30, 30, 0.25) !important;
+  box-shadow: 4px 0 24px rgba(180, 30, 30, 0.08) !important;
+  z-index: 99999 !important;
+  transform: translateX(-100%) !important;
+  transition: transform 0.3s ease !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
 
   #drawer.open {
     transform: translateX(0) !important;
