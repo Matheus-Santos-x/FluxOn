@@ -1508,7 +1508,7 @@ async function fetchOrders() {
   } else {
     if (!window._jaNavegou) {
       window._jaNavegou = true;
-      showMesas();
+      showHome();
     }
   }
 }
