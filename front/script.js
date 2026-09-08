@@ -530,6 +530,7 @@ function showMesas() {
   document.getElementById("settings-view")?.classList.add("hidden");
   document.getElementById("cardapio-view")?.classList.add("hidden");
   document.getElementById("fidelidade-view")?.classList.add("hidden");
+  document.getElementById("home-view")?.classList.add("hidden"); // ← ADICIONAR
   document.getElementById("mesas-view")?.classList.remove("hidden");
   document.getElementById("tabs-bar")?.classList.add("hidden");
   document.getElementById("open-create")?.classList.add("hidden");
@@ -3339,7 +3340,9 @@ if (fidelidadeBtn) fidelidadeBtn.addEventListener("click", showFidelidade);
 
 const autoatendimentoBtn = document.getElementById("drawer-autoatendimento");
 if (autoatendimentoBtn) autoatendimentoBtn.addEventListener("click", showAutoatendimento);
-
+const homeBtn = document.getElementById("drawer-home");
+if (homeBtn) homeBtn.addEventListener("click", showHome);
+  
   console.log("✅ Drawer totalmente configurado!");
 }
 
