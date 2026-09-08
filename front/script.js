@@ -391,6 +391,7 @@ function showBoard() {
   document.getElementById("cardapio-view")?.classList.add("hidden");
   document.getElementById("fidelidade-view")?.classList.add("hidden");
   document.getElementById("mesas-view")?.classList.add("hidden");
+  document.getElementById("home-view")?.classList.add("hidden");
   board?.classList.remove("hidden");
   showTabsBar();
   document.getElementById("tabs-bar")?.classList.remove("hidden");
@@ -410,6 +411,8 @@ function showCRM() {
   document.getElementById("settings-view")?.classList.add("hidden");
   document.getElementById("cardapio-view")?.classList.add("hidden");
   document.getElementById("fidelidade-view")?.classList.add("hidden");
+  document.getElementById("mesas-view")?.classList.add("hidden");
+  document.getElementById("home-view")?.classList.add("hidden");
   crmView?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
@@ -428,6 +431,7 @@ function showResults() {
   document.getElementById("cardapio-view")?.classList.add("hidden");
   document.getElementById("fidelidade-view")?.classList.add("hidden");
   document.getElementById("mesas-view")?.classList.add("hidden");
+  document.getElementById("home-view")?.classList.add("hidden"); // ← ADICIONADO
   resultsView?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
@@ -447,6 +451,7 @@ function showCardapio() {
   document.getElementById("autoatendimento-view")?.classList.add("hidden");
   document.getElementById("mesas-view")?.classList.add("hidden");
   document.getElementById("fidelidade-view")?.classList.add("hidden");
+  document.getElementById("home-view")?.classList.add("hidden");
   document.getElementById("cardapio-view")?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
@@ -465,6 +470,8 @@ function showFidelidade() {
   document.getElementById("settings-view")?.classList.add("hidden");
   document.getElementById("autoatendimento-view")?.classList.add("hidden");
   document.getElementById("cardapio-view")?.classList.add("hidden");
+  document.getElementById("mesas-view")?.classList.add("hidden");
+  document.getElementById("home-view")?.classList.add("hidden");
   document.getElementById("fidelidade-view")?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
@@ -478,13 +485,14 @@ function showAutoatendimento() {
     return;
   }
   board?.classList.add("hidden");
-crmView?.classList.add("hidden");
-resultsView?.classList.add("hidden");
-document.getElementById("settings-view")?.classList.add("hidden");
-document.getElementById("fidelidade-view")?.classList.add("hidden");
-document.getElementById("cardapio-view")?.classList.add("hidden");
-document.getElementById("mesas-view")?.classList.add("hidden"); // ← ADICIONAR
-document.getElementById("autoatendimento-view")?.classList.remove("hidden");
+  crmView?.classList.add("hidden");
+  resultsView?.classList.add("hidden");
+  document.getElementById("settings-view")?.classList.add("hidden");
+  document.getElementById("fidelidade-view")?.classList.add("hidden");
+  document.getElementById("cardapio-view")?.classList.add("hidden");
+  document.getElementById("mesas-view")?.classList.add("hidden");
+  document.getElementById("home-view")?.classList.add("hidden");
+  document.getElementById("autoatendimento-view")?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
   initAutoatendimento();
@@ -496,9 +504,10 @@ function showSettings() {
   resultsView?.classList.add("hidden");
   document.getElementById("autoatendimento-view")?.classList.add("hidden");
   document.getElementById("mesas-view")?.classList.add("hidden");
-  document.getElementById("settings-view")?.classList.remove("hidden");
   document.getElementById("fidelidade-view")?.classList.add("hidden");
   document.getElementById("cardapio-view")?.classList.add("hidden");
+  document.getElementById("home-view")?.classList.add("hidden");
+  document.getElementById("settings-view")?.classList.remove("hidden");
   document.getElementById("tabs-bar")?.classList.add("hidden");
   hideTabsBar();
   closeDrawer();
@@ -570,8 +579,8 @@ for (let i = 1; i <= numMesas; i++) mesas.push({ tipo: "mesa", numero: i });
 
         return `
           <div onclick="abrirDrawerMesa('${key}')" style="
-            background:${ocupada ? 'rgba(249,115,115,0.15)' : 'rgba(46,8,8,0.45)'};
-            border:1.5px solid ${ocupada ? 'rgba(249,115,115,0.6)' : 'rgba(91,28,28,0.85)'};
+           background:${ocupada ? 'rgba(180,30,30,0.12)' : '#0d0d0d'};
+border:1.5px solid ${ocupada ? 'rgba(180,30,30,0.6)' : 'rgba(180,30,30,0.2)'};
             border-radius:14px; padding:20px 20px;
             cursor:pointer; transition:all 0.2s;
             display:flex; flex-direction:column;
