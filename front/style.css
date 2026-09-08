@@ -158,10 +158,11 @@ body {
   box-shadow: var(--shadow);
 }
 
-.column-header {
-  padding: 14px 16px;
-  background: rgba(42, 11, 11, 0.75);
-  border-bottom: 1px solid rgba(91, 28, 28, 0.85);
+.tab.active {
+  color: var(--text);
+  border-color: rgba(180, 30, 30, 0.6);
+  box-shadow: 0 0 12px rgba(180, 30, 30, 0.2);
+  background: #0d0d0d;
 }
 
 .column-header h2 {
@@ -298,12 +299,13 @@ body {
 }
 
 .primary-button {
-  background: var(--gradient-primary);
-  color: #000;
+  background: transparent;
+  color: rgba(249, 115, 115, 1);
+  border: 1px solid rgba(180, 30, 30, 0.5);
+  box-shadow: 0 0 12px rgba(180, 30, 30, 0.2);
   border-radius: 14px;
   padding: 10px 14px;
   font-weight: 800;
-  box-shadow: 0 4px 12px rgba(249, 115, 115, 0.35);
 }
 
 .primary-button:hover {
