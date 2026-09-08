@@ -2079,7 +2079,7 @@ function showPaymentModal(orderId) {
           <h3>💳 Forma de Pagamento</h3>
         </div>
         <div class="modal-body" style="flex:1; overflow-y:auto; padding-bottom:8px;">
-          <div style="background:rgba(46,8,8,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:12px; padding:12px 14px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
+          <div style="background:#0d0d0d; border:1px solid rgba(180,30,30,0.25); border-radius:12px; padding:12px 14px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
             <span style="color:rgba(252,228,228,0.7); font-weight:700;">Valor Total</span>
             <span style="color:rgba(252,228,228,1); font-size:18px; font-weight:900;">${formatCurrency(totalPedido)}</span>
           </div>
