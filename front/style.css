@@ -740,12 +740,13 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: #0d0d0d;
-  border: 1px solid rgba(180, 30, 30, 0.25);
+  padding: 10px 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
   color: var(--text);
   font-weight: 600;
+  width: 100%;
 }
 
 .user-chip img {
