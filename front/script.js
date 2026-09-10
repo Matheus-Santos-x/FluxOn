@@ -507,6 +507,7 @@ function showSettings() {
   document.getElementById("fidelidade-view")?.classList.add("hidden");
   document.getElementById("cardapio-view")?.classList.add("hidden");
   document.getElementById("home-view")?.classList.add("hidden");
+  document.getElementById("open-create")?.classList.add("hidden");
   document.getElementById("settings-view")?.classList.remove("hidden");
   document.getElementById("tabs-bar")?.classList.add("hidden");
   hideTabsBar();
