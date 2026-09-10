@@ -728,8 +728,8 @@ body {
 }
 
 .drawer-footer {
-  padding: 14px;
-  border-top: 1px solid rgba(180, 30, 30, 0.2);
+  padding: 8px 14px;
+  border-top: 1px solid rgba(180, 30, 30, 0.15);
 }
 
 .drawer-backdrop.open {
@@ -737,21 +737,21 @@ body {
 }
 
 .user-chip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 0;
-  border-radius: 0;
+  padding: 6px 0;
   background: transparent;
   border: none;
   color: var(--text);
   font-weight: 600;
   width: 100%;
+  font-size: 13px;
 }
 
 .user-chip img {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
   object-fit: cover;
 }
@@ -762,6 +762,24 @@ body {
   border-radius: 999px;
   background: rgba(34, 197, 94, 1);
 }
+
+.ghost-button.small {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.5);
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.ghost-button.small:hover {
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.9);
+}
+
 /* ===== 💎 CRM VIEW PREMIUM ===== */
 .crm-view,
 .results-view {
