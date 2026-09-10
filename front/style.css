@@ -778,14 +778,13 @@ body {
   margin: 10px 0 20px;
 }
 
-.crm-title,
-.results-title {
+.crm-title {
   font-weight: 900;
   letter-spacing: 0.6px;
   font-size: 24px;
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: rgba(255,255,255,0.92);
+  -webkit-text-fill-color: rgba(255,255,255,0.92);
+  background: none;
   font-family: 'Space Grotesk', sans-serif;
 }
 
