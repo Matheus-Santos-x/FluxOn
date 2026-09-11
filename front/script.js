@@ -281,8 +281,7 @@ function findTabsContainer() {
   while (el && el !== document.body) {
     const hasAll =
       (!tabFinalizados || el.contains(tabFinalizados)) &&
-      (!tabCancelados || el.contains(tabCancelados)) &&
-      (!tabEntregas || el.contains(tabEntregas));
+      (!tabCancelados || el.contains(tabCancelados));
     if (hasAll) return el;
     el = el.parentElement;
   }
