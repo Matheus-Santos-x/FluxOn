@@ -108,7 +108,7 @@ body {
 
 /* ===== TABS ===== */
 .tabs {
-  max-width: 1280px;
+  max-width: 1400px;
   margin: 14px auto 0;
   padding: 0 18px;
   display: flex;
@@ -298,24 +298,29 @@ body {
   margin-top: 10px;
 }
 
+.order-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
 .order-tags-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  margin-top: 4px;
+  flex: 1;
+  min-width: 0;
 }
 
-.order-timer-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 4px;
-}
-
-.order-timer-row .order-timer {
+.order-timer {
   font-size: 10px;
   font-weight: 800;
   font-family: 'Space Grotesk', sans-serif;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* ===== BUTTONS ===== */
