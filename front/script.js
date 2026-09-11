@@ -1161,8 +1161,8 @@ async function abrirCriarPedidoMesa(key) {
     if (!lista) return;
     lista.innerHTML = itensSelecionados.map((it, i) => `
       <div style="display:flex; align-items:center; justify-content:space-between;
-        padding:10px 14px; background:rgba(46,8,8,0.75);
-        border:1px solid rgba(91,28,28,0.85); border-radius:10px;">
+        padding:10px 14px; background:#0d0d0d;
+border:1px solid rgba(180,30,30,0.2); border-radius:10px;">
         <span style="font-size:14px; font-weight:700; color:rgba(252,228,228,0.95); flex:1;">${escapeHtml(it.name)}</span>
         <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
           <button onclick="window._addQty(${i}, -1)" style="background:none; border:none; color:rgba(252,228,228,0.5); font-size:18px; cursor:pointer; padding:0 4px;">−</button>
@@ -1883,7 +1883,8 @@ if (modalItems) {
       const qty = it?.qty || it?.quantidade || 1;
       const price = it?.price || it?.preco || 0;
       const li = document.createElement("li");
-      li.style.cssText = "list-style:none; display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:rgba(46,8,8,0.75); border:1px solid rgba(91,28,28,0.85); border-radius:10px; gap:12px;";
+      li.style.cssText = "list-style:none; display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#0d0d0d;
+border:1px solid rgba(180,30,30,0.2); border-radius:10px; gap:12px;";
       li.innerHTML = `
        <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
           <span style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</span>
@@ -3541,8 +3542,8 @@ function renderItensSelecionados() {
     <div style="
       display:flex; align-items:center; justify-content:space-between;
       padding:10px 14px;
-      background:rgba(46,8,8,0.75);
-      border:1px solid rgba(91,28,28,0.85);
+      background:#0d0d0d;
+border:1px solid rgba(180,30,30,0.2);
       border-radius:10px;
       width:100%;
       gap:12px;
