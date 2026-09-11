@@ -1684,15 +1684,17 @@ function buildOrderCard(order) {
       <div class="order-time">${formatTime(order.created_at)}</div>
       <div class="order-items">${itemsCount} item(ns)</div>
     </div>
-   ${isDelivery ? `<div class="order-delivery-tag">Delivery</div>` : ""}
-${paymentText ? `<div class="order-payment-tag">${escapeHtml(paymentText)}</div>` : ""}
-${order.origin === "fidelidade" 
-  ? `<div class="order-fidelidade-tag">🎁 Fidelidade</div>` 
-  : order.origin ? `<div class="order-origin-tag">${getOriginLabel(order.origin)}</div>` : ""}
-  <div class="card-checkbox-wrap" onclick="event.stopPropagation()">
-    <input type="checkbox" class="card-checkbox" data-id="${order.id}"
-      onchange="selectedOrderIds[this.checked ? 'add' : 'delete']('${order.id}'); updateSelectionBar();" />
-  </div>
+    <div class="order-tags-row">
+      ${isDelivery ? `<div class="order-delivery-tag">Delivery</div>` : ""}
+      ${paymentText ? `<div class="order-payment-tag">${escapeHtml(paymentText)}</div>` : ""}
+      ${order.origin === "fidelidade" 
+        ? `<div class="order-fidelidade-tag">🎁 Fidelidade</div>` 
+        : order.origin ? `<div class="order-origin-tag">${getOriginLabel(order.origin)}</div>` : ""}
+    </div>
+    <div class="card-checkbox-wrap" onclick="event.stopPropagation()">
+      <input type="checkbox" class="card-checkbox" data-id="${order.id}"
+        onchange="selectedOrderIds[this.checked ? 'add' : 'delete']('${order.id}'); updateSelectionBar();" />
+    </div>
   `;
 
   card.addEventListener("click", () => openOrderModal(order.id));
@@ -1701,19 +1703,14 @@ ${order.origin === "fidelidade"
   const waitColor = getWaitColor(order._frontStatus, order.created_at);
   if (waitColor) {
     card.style.borderLeft = `4px solid ${waitColor}`;
-    card.style.borderRadius = "0 14px 14px 0";
+    card.style.borderRadius = "0 12px 12px 0";
   }
 
   if (["recebido", "preparo", "pronto"].includes(order._frontStatus)) {
-    const timerEl = document.createElement("div");
-    timerEl.id = `timer-${order.id}`;
-    timerEl.style.cssText = `
-      font-size:12px; font-weight:800; font-family:'Space Grotesk',sans-serif;
-      position:absolute; bottom:10px; right:32px;
-    `;
-    timerEl.textContent = "⏱ ...";
-    card.style.position = "relative";
-    card.appendChild(timerEl);
+    const timerRow = document.createElement("div");
+    timerRow.className = "order-timer-row";
+    timerRow.innerHTML = `<span id="timer-${order.id}" class="order-timer">⏱ ...</span>`;
+    card.appendChild(timerRow);
     setTimeout(() => startAutoTimer(order.id, order.created_at), 50);
   }
 
