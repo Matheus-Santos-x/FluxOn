@@ -1670,7 +1670,6 @@ function buildOrderCard(order) {
   card.className = "order-card";
   card.dataset.id = order.id;
 
-  const itemsCount = Array.isArray(order.itens) ? order.itens.length : 0;
   const mesaLabel = order.table_number ? `· Mesa ${order.table_number}` : "";
   const isDelivery = String(order.service_type || "").toLowerCase() === "delivery";
   const paymentText = isDelivery && order.payment_method ? order.payment_method : "";
@@ -1680,20 +1679,17 @@ function buildOrderCard(order) {
       <div class="order-number">#${order.order_number || ""} ${mesaLabel}</div>
       <div class="order-client">${escapeHtml(order.client_name || "Cliente")}</div>
     </div>
-    <div class="order-meta">
-      <div class="order-time">${formatTime(order.created_at)}</div>
-      <div class="order-items">${itemsCount} item(ns)</div>
-    </div>
-    <div class="order-tags-row">
-      ${isDelivery ? `<div class="order-delivery-tag">Delivery</div>` : ""}
-      ${paymentText ? `<div class="order-payment-tag">${escapeHtml(paymentText)}</div>` : ""}
-      ${order.origin === "fidelidade" 
-        ? `<div class="order-fidelidade-tag">🎁 Fidelidade</div>` 
-        : order.origin ? `<div class="order-origin-tag">${getOriginLabel(order.origin)}</div>` : ""}
-    </div>
-    <div class="card-checkbox-wrap" onclick="event.stopPropagation()">
-      <input type="checkbox" class="card-checkbox" data-id="${order.id}"
-        onchange="selectedOrderIds[this.checked ? 'add' : 'delete']('${order.id}'); updateSelectionBar();" />
+    <div class="order-card-footer">
+      <div class="order-tags-row">
+        ${isDelivery ? `<div class="order-delivery-tag">Delivery</div>` : ""}
+        ${paymentText ? `<div class="order-payment-tag">${escapeHtml(paymentText)}</div>` : ""}
+        ${order.origin === "fidelidade" 
+          ? `<div class="order-fidelidade-tag">🎁 Fidelidade</div>` 
+          : order.origin ? `<div class="order-origin-tag">${getOriginLabel(order.origin)}</div>` : ""}
+      </div>
+      ${["recebido", "preparo", "pronto"].includes(order._frontStatus) 
+        ? `<span id="timer-${order.id}" class="order-timer">⏱ ...</span>` 
+        : ""}
     </div>
   `;
 
@@ -1707,10 +1703,6 @@ function buildOrderCard(order) {
   }
 
   if (["recebido", "preparo", "pronto"].includes(order._frontStatus)) {
-    const timerRow = document.createElement("div");
-    timerRow.className = "order-timer-row";
-    timerRow.innerHTML = `<span id="timer-${order.id}" class="order-timer">⏱ ...</span>`;
-    card.appendChild(timerRow);
     setTimeout(() => startAutoTimer(order.id, order.created_at), 50);
   }
 
