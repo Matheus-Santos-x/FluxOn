@@ -306,6 +306,14 @@ body {
   margin-top: 6px;
 }
 
+.order-time-row {
+  font-size: 11px;
+  color: rgba(229, 194, 194, 0.65);
+  font-weight: 600;
+  margin-top: 4px;
+  margin-bottom: 6px;
+}
+
 .order-tags-row {
   display: flex;
   flex-wrap: wrap;
