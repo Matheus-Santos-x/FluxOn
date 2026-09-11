@@ -530,6 +530,7 @@ function showHome() {
   document.getElementById("open-create")?.classList.add("hidden");
   document.getElementById("home-restaurant-name").textContent =
     localStorage.getItem("restaurant_name") || "Restaurante";
+    renderHomeStats();
 }
 
 function showMesas() {
@@ -547,6 +548,63 @@ function showMesas() {
   hideTabsBar();
   closeDrawer();
   renderMesas();
+}
+
+function renderHomeStats() {
+  const hojeStr = new Date().toDateString();
+
+  // Pedidos hoje (exclui cancelados)
+  const pedidosHoje = orders.filter(o => {
+    if (o._frontStatus === "cancelado") return false;
+    const d = new Date(o.created_at);
+    return d.toDateString() === hojeStr;
+  }).length;
+
+  // Mesas ocupadas
+  const numMesas = parseInt(localStorage.getItem("fluxon_num_mesas") || "10");
+  const mesasOcupadasSet = new Set();
+  orders.forEach(o => {
+    if (["recebido", "preparo", "pronto"].includes(o._frontStatus) && o.destino === "mesas" && o.table_number) {
+      mesasOcupadasSet.add(String(o.table_number));
+    }
+  });
+
+  const pedidosEl = document.getElementById("home-stat-pedidos");
+  const mesasEl = document.getElementById("home-stat-mesas");
+  if (pedidosEl) pedidosEl.textContent = pedidosHoje;
+  if (mesasEl) mesasEl.textContent = `${mesasOcupadasSet.size}/${numMesas}`;
+
+  // Teaser de faturamento
+  const teaserEl = document.getElementById("home-faturamento-teaser");
+  if (!teaserEl) return;
+
+  if (features.results) {
+    const faturamentoHoje = orders
+      .filter(o => o._frontStatus === "finalizado" && new Date(o.created_at).toDateString() === hojeStr)
+      .reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
+
+    teaserEl.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div>
+          <div style="font-size:11px; color:rgba(252,228,228,0.5); text-transform:uppercase; letter-spacing:1px; font-weight:700;">Faturamento hoje</div>
+          <div style="font-size:22px; font-weight:900; color:rgba(251,191,36,1); margin-top:4px;">${formatCurrency(faturamentoHoje)}</div>
+        </div>
+        <span style="color:rgba(255,255,255,0.35); font-size:18px;">→</span>
+      </div>
+    `;
+    teaserEl.onclick = () => showResults();
+  } else {
+    teaserEl.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <div>
+          <div style="font-size:13px; font-weight:700; color:rgba(252,228,228,0.85);">Quer saber seu faturamento hoje?</div>
+          <div style="font-size:12px; color:rgba(252,228,228,0.5); margin-top:2px;">Desbloqueie relatórios completos →</div>
+        </div>
+        <span style="font-size:20px; flex-shrink:0;">🔒</span>
+      </div>
+    `;
+    teaserEl.onclick = () => showUpgradeModal("executive", "Dashboard de Resultados");
+  }
 }
 
 function renderMesas() {
@@ -1506,7 +1564,7 @@ async function fetchOrders() {
       // Não renderiza
     }
 
-  } catch (e) {
+ } catch (e) {
     if (e.name !== "AbortError") console.error("Polling Error:", e);
   } finally {
   if (!window._editandoPedido && !modalBackdrop?.classList.contains("open") && !createModal?.classList.contains("open")) {
@@ -1515,8 +1573,12 @@ async function fetchOrders() {
     renderMesas();
   } else if (!board?.classList.contains("hidden")) {
     renderBoard();
+
   } else {
-    if (!window._jaNavegou) {
+    const homeView = document.getElementById("home-view");
+    if (homeView && !homeView.classList.contains("hidden")) {
+      renderHomeStats();
+    } else if (!window._jaNavegou) {
       window._jaNavegou = true;
       showHome();
     }
