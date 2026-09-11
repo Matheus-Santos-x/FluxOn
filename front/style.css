@@ -132,13 +132,6 @@ body {
   border-color: rgba(249, 115, 115, 0.6);
 }
 
-.tab.active {
-  color: var(--text);
-  border-color: rgba(249, 115, 115, 0.9);
-  box-shadow: 0 12px 24px rgba(249, 115, 115, 0.15);
-  background: rgba(91, 28, 28, 0.75);
-}
-
 /* ===== BOARD ===== */
 .board {
   max-width: 1400px;
