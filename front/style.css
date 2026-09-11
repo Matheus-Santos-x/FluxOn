@@ -2,12 +2,14 @@
 
 :root {
   --bg: #050505;
-  --surface: rgba(59, 16, 16, 0.4);
-  --surface-2: rgba(42, 11, 11, 0.6);
-  --muted: #b08d8d;
-  --border: rgba(91, 28, 28, 0.4);
+  --surface: rgba(28, 28, 30, 0.5);       /* era rgba(59, 16, 16, 0.4) */
+  --surface-2: rgba(22, 22, 24, 0.65);    /* era rgba(42, 11, 11, 0.6) */
+  --muted: #9a9a9e;                        /* era #b08d8d */
+  --border: rgba(255, 255, 255, 0.1);     /* era rgba(91, 28, 28, 0.4) */
   --glass-border: rgba(255, 255, 255, 0.08);
-  --premium-wine: #5b1c1c;
+  --premium-wine: #2a2a2e;                 /* era #5b1c1c */
+  /* resto continua igual */
+}
   
   --accent-recebido: #3b82f6;
   --accent-preparo: #f59e0b;
