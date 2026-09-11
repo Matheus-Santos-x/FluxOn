@@ -2507,10 +2507,10 @@ input[type="number"] {
 /* ===== SELEÇÃO MÚLTIPLA DE CARDS ===== */
 .order-card {
   background: #0d0d0d;
-  border: 1px solid rgba(180, 30, 30, 0.3);
-  box-shadow: 0 0 12px rgba(180, 30, 30, 0.08);
-  border-radius: 14px;
-  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  padding: 10px 12px;
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
@@ -2518,8 +2518,8 @@ input[type="number"] {
 
 .card-checkbox-wrap {
   position: absolute;
-  bottom: 10px;
-  right: 10px;
+  bottom: 8px;
+  right: 8px;
   z-index: 2;
 }
 
@@ -2528,7 +2528,7 @@ input[type="number"] {
   -webkit-appearance: none;
   width: 16px;
   height: 16px;
-  background: rgba(46,8,8,0.8);
+  background: rgba(28, 28, 30, 0.8);
   border: 2px solid rgba(249,115,115,0.6);
   border-radius: 4px;
   cursor: pointer;
@@ -2552,11 +2552,11 @@ input[type="number"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(30, 10, 10, 0.95);
+  background: rgba(22, 22, 24, 0.95);
   border: 1px solid rgba(249, 115, 115, 0.45);
   border-radius: 14px;
   padding: 10px 18px;
-  max-width: 1280px;
+  max-width: 1400px;
   margin: 0 18px 12px;
 }
 
@@ -2590,7 +2590,6 @@ input[type="number"] {
   cursor: pointer;
   font-family: inherit;
 }
-
 /* QR Checkbox personalizado */
 .qr-checkbox:checked {
   background: rgba(249,115,115,0.9);
