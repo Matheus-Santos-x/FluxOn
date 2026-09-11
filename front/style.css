@@ -141,33 +141,52 @@ body {
 
 /* ===== BOARD ===== */
 .board {
-  max-width: 1280px;
+  max-width: 1400px;
   margin: 18px auto 40px;
   padding: 0 18px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  display: flex;
   gap: 18px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scrollbar-width: thin;
+}
+
+.board::-webkit-scrollbar {
+  height: 8px;
+}
+
+.board::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
 }
 
 .column {
-  background: rgba(59, 16, 16, 0.55);
-  border: 1px solid rgba(91, 28, 28, 0.85);
+  background: rgba(30, 30, 32, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 16px;
-  overflow: visible;
-  min-height: 72vh;
+  flex: 0 0 280px;
+  width: 280px;
+  max-height: calc(100vh - 220px);
+  display: flex;
+  flex-direction: column;
   box-shadow: var(--shadow);
 }
 
 .tab.active {
   color: var(--text);
-  border-color: rgba(180, 30, 30, 0.6);
-  box-shadow: 0 0 12px rgba(180, 30, 30, 0.2);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.08);
   background: #0d0d0d;
+}
+
+.column-header {
+  padding: 14px 14px 10px;
+  flex-shrink: 0;
 }
 
 .column-header h2 {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   color: rgba(252, 228, 228, 0.75);
@@ -175,20 +194,22 @@ body {
 }
 
 .column-body {
-  padding: 14px;
+  padding: 0 14px 14px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+  scrollbar-width: thin;
 }
 
-/* ===== ORDER CARDS ===== */
-.column {
-  background: #080808;
-  border: 1px solid rgba(180, 30, 30, 0.2);
-  box-shadow: 0 0 20px rgba(180, 30, 30, 0.06);
-  border-radius: 16px;
-  overflow: visible;
-  min-height: 72vh;
+.column-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.column-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
 }
 
 .order-card:hover {
@@ -236,8 +257,8 @@ body {
   align-items: center;
   padding: 6px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(91, 28, 28, 0.85);
-  background: rgba(46, 8, 8, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(28, 28, 30, 0.55);
   color: rgba(252, 228, 228, 0.9);
   font-weight: 700;
   font-size: 11px;
