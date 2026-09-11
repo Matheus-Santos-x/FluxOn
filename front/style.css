@@ -166,6 +166,7 @@ body {
   border-radius: 16px;
   flex: 0 0 280px;
   width: 280px;
+  min-height: 72vh;
   max-height: calc(100vh - 220px);
   display: flex;
   flex-direction: column;
