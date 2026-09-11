@@ -573,38 +573,6 @@ function renderHomeStats() {
   const mesasEl = document.getElementById("home-stat-mesas");
   if (pedidosEl) pedidosEl.textContent = pedidosHoje;
   if (mesasEl) mesasEl.textContent = `${mesasOcupadasSet.size}/${numMesas}`;
-
-  // Teaser de faturamento
-  const teaserEl = document.getElementById("home-faturamento-teaser");
-  if (!teaserEl) return;
-
-  if (features.results) {
-    const faturamentoHoje = orders
-      .filter(o => o._frontStatus === "finalizado" && new Date(o.created_at).toDateString() === hojeStr)
-      .reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
-
-    teaserEl.innerHTML = `
-      <div style="display:flex; align-items:center; justify-content:space-between;">
-        <div>
-          <div style="font-size:11px; color:rgba(252,228,228,0.5); text-transform:uppercase; letter-spacing:1px; font-weight:700;">Faturamento hoje</div>
-          <div style="font-size:22px; font-weight:900; color:rgba(251,191,36,1); margin-top:4px;">${formatCurrency(faturamentoHoje)}</div>
-        </div>
-        <span style="color:rgba(255,255,255,0.35); font-size:18px;">→</span>
-      </div>
-    `;
-    teaserEl.onclick = () => showResults();
-  } else {
-    teaserEl.innerHTML = `
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-        <div>
-          <div style="font-size:13px; font-weight:700; color:rgba(252,228,228,0.85);">Quer saber seu faturamento hoje?</div>
-          <div style="font-size:12px; color:rgba(252,228,228,0.5); margin-top:2px;">Desbloqueie relatórios completos →</div>
-        </div>
-        <span style="font-size:20px; flex-shrink:0;">🔒</span>
-      </div>
-    `;
-    teaserEl.onclick = () => showUpgradeModal("executive", "Dashboard de Resultados");
-  }
 }
 
 function renderMesas() {
