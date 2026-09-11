@@ -530,6 +530,12 @@ function showHome() {
   document.getElementById("open-create")?.classList.add("hidden");
   document.getElementById("home-restaurant-name").textContent =
     localStorage.getItem("restaurant_name") || "Restaurante";
+
+    const hora = new Date().getHours();
+  const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
+  const greetingEl = document.getElementById("home-greeting-label");
+  if (greetingEl) greetingEl.textContent = saudacao;
+  
     renderHomeStats();
 }
 
