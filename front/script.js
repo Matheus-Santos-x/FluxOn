@@ -1883,7 +1883,7 @@ if (modalItems) {
       const qty = it?.qty || it?.quantidade || 1;
       const price = it?.price || it?.preco || 0;
       const li = document.createElement("li");
-      li.style.cssText = "list-style:none; display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:rgba(46,8,8,0.75); border:1px solid rgba(91,28,28,0.85); border-radius:10px; gap:12px;";
+      li.style.cssText = "list-style:none; display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#0d0d0d; border:1px solid rgba(180,30,30,0.2); border-radius:10px; gap:12px;";
       li.innerHTML = `
        <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
           <span style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</span>
