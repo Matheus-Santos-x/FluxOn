@@ -31,10 +31,9 @@ const STATUS_FROM_BACKEND = {
 };
 
 const views = {
-  ativos: ["recebido", "preparo", "pronto"],
+  ativos: ["recebido", "preparo", "pronto", "caminho"],
   finalizados: ["finalizado"],
   cancelados: ["cancelado"],
-  entregas: ["caminho"],
 };
 
 // ===== ELEMENTS =====
@@ -60,7 +59,7 @@ const crmContent = crmView?.querySelector(".crm-content") || null;
 const tabAtivos = document.getElementById("tab-ativos");
 const tabFinalizados = document.getElementById("tab-finalizados");
 const tabCancelados = document.getElementById("tab-cancelados");
-const tabEntregas = document.getElementById("tab-entregas");
+// const tabEntregas = document.getElementById("tab-entregas");
 
 const columns = {
   recebido: document.getElementById("col-recebido"),
@@ -378,7 +377,7 @@ function changeView(v) {
   tabAtivos?.classList.toggle("active", v === "ativos");
   tabFinalizados?.classList.toggle("active", v === "finalizados");
   tabCancelados?.classList.toggle("active", v === "cancelados");
-  tabEntregas?.classList.toggle("active", v === "entregas");
+  //tabEntregas?.classList.toggle("active", v === "entregas");
   renderBoard();
 }
 
@@ -3946,7 +3945,7 @@ async function abrirModalVariacaoAdmin(item, opcoes) {
 if (tabAtivos) tabAtivos.addEventListener("click", () => changeView("ativos"));
 if (tabFinalizados) tabFinalizados.addEventListener("click", () => changeView("finalizados"));
 if (tabCancelados) tabCancelados.addEventListener("click", () => changeView("cancelados"));
-if (tabEntregas) tabEntregas.addEventListener("click", () => changeView("entregas"));
+//if (tabEntregas) tabEntregas.addEventListener("click", () => changeView("entregas"));
 
 // Event listeners dos botões de voltar
 if (crmBackBtn) crmBackBtn.addEventListener("click", showBoard);
