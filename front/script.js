@@ -1679,6 +1679,7 @@ function buildOrderCard(order) {
       <div class="order-number">#${order.order_number || ""} ${mesaLabel}</div>
       <div class="order-client">${escapeHtml(order.client_name || "Cliente")}</div>
     </div>
+    <div class="order-time-row">${formatTime(order.created_at)}</div>
     <div class="order-card-footer">
       <div class="order-tags-row">
         ${isDelivery ? `<div class="order-delivery-tag">Delivery</div>` : ""}
