@@ -611,7 +611,7 @@ for (let i = 1; i <= numMesas; i++) mesas.push({ tipo: "mesa", numero: i });
         return `
           <div onclick="abrirDrawerMesa('${key}')" style="
            background:${ocupada ? 'rgba(180,30,30,0.12)' : '#0d0d0d'};
-border:1.5px solid ${ocupada ? 'rgba(180,30,30,0.6)' : 'rgba(180,30,30,0.2)'};
+border:1.5px solid ${ocupada ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)'};
             border-radius:14px; padding:20px 20px;
             cursor:pointer; transition:all 0.2s;
             display:flex; flex-direction:column;
@@ -1192,7 +1192,7 @@ async function abrirCriarPedidoMesa(key) {
     lista.innerHTML = itensSelecionados.map((it, i) => `
       <div style="display:flex; align-items:center; justify-content:space-between;
         padding:10px 14px; background:#0d0d0d;
-border:1px solid rgba(180,30,30,0.2); border-radius:10px;">
+border:1px solid rgba(255,255,255,0.08); border-radius:10px;">
         <span style="font-size:14px; font-weight:700; color:rgba(252,228,228,0.95); flex:1;">${escapeHtml(it.name)}</span>
         <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
           <button onclick="window._addQty(${i}, -1)" style="background:none; border:none; color:rgba(252,228,228,0.5); font-size:18px; cursor:pointer; padding:0 4px;">−</button>
@@ -1907,7 +1907,7 @@ if (modalItems) {
       const qty = it?.qty || it?.quantidade || 1;
       const price = it?.price || it?.preco || 0;
       const li = document.createElement("li");
-      li.style.cssText = "list-style:none; display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#0d0d0d; border:1px solid rgba(180,30,30,0.2); border-radius:10px; gap:12px;";
+      li.style.cssText = "list-style:none; display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#0d0d0d; border:1px solid rgba(255, 255, 255, 0.08); border-radius:10px; gap:12px;";
       li.innerHTML = `
        <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
           <span style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</span>
@@ -3566,7 +3566,7 @@ function renderItensSelecionados() {
       display:flex; align-items:center; justify-content:space-between;
       padding:10px 14px;
       background:#0d0d0d;
-border:1px solid rgba(180,30,30,0.2);
+border:1px solid rgba(255, 255, 255, 0.08);
       border-radius:10px;
       width:100%;
       gap:12px;
