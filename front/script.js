@@ -619,7 +619,7 @@ border:1.5px solid ${ocupada ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08
             position:relative;
           "
           onmouseover="this.style.borderColor='rgba(252,228,228,0.4)'"
-          onmouseout="this.style.borderColor='${ocupada ? 'rgba(249,115,115,0.6)' : 'rgba(91,28,28,0.85)'}'">
+          onmouseout="this.style.borderColor='${ocupada ? 'rgba(249,115,115,0.6)' : 'rgba(255,255,255,0.14)'}'">
             <div style="display:flex; align-items:center; gap:8px;">
               ${ocupada ? `<div style="width:8px;height:8px;border-radius:50%;background:rgba(249,115,115,1);flex-shrink:0;animation:pulse 1.5s infinite;"></div>` : ''}
               <div style="font-size:20px; font-weight:900; color:rgba(252,228,228,1); letter-spacing:-0.02em;">${label}</div>
@@ -732,7 +732,7 @@ function abrirDrawerMesa(key) {
   modal.innerHTML = `
     <div class="modal confirm-modal" style="max-width:420px; padding:0; overflow:hidden;">
 
-      <div style="padding:22px 24px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(91,28,28,0.4);">
+      <div style="padding:22px 24px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.07);">
         <div style="flex:1; display:flex; align-items:center;">
  ${ocupada ? `<button class="icon-button" style="font-size:13px; padding:6px 10px; border-radius:8px; width:auto;"
     onclick="editarPedidoMesa('${key}')">✏️</button>` : `<div style="width:30px;"></div>`}
@@ -753,13 +753,13 @@ function abrirDrawerMesa(key) {
           ` : ''}
         </div>
 
-        <div style="height:1px; background:rgba(91,28,28,0.4); margin:0 24px;"></div>
+        <div style="height:1px; background:rgba(255,255,255,0.07); margin:0 24px;"></div>
 
         <div style="padding:20px 24px 0;">
           <div style="font-size:10px; font-weight:700; color:rgba(252,228,228,0.3); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:16px;">Itens da mesa</div>
           <div style="display:flex; flex-direction:column;">
             ${todosItens.map((it, i) => `
-              <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid rgba(91,28,28,0.3);">
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
                 <div style="display:flex; align-items:center; gap:12px;">
                   <span style="font-size:12px; font-weight:800; color:rgba(252,228,228,0.25); min-width:24px;">×${it.qty}</span>
                   <span style="font-size:14px; font-weight:600; color:rgba(252,228,228,0.9);">${escapeHtml(it.nome)}</span>
@@ -774,7 +774,7 @@ function abrirDrawerMesa(key) {
           </div>
         </div>
 
-        <div style="height:1px; background:rgba(91,28,28,0.4); margin:0 24px;"></div>
+        <div style="height:1px; background:rgba(255,255,255,0.07); margin:0 24px;"></div>
 
         <div style="padding:20px 24px 24px; display:flex; gap:10px;">
           <button class="ghost-button" style="flex:1; font-size:12px; border-color:rgba(239,68,68,0.4); color:rgba(239,68,68,0.7);"
@@ -862,7 +862,7 @@ function editarPedidoMesa(key) {
       <div class="modal confirm-modal" style="max-width:460px; padding:0; overflow:hidden; border-radius:14px;">
 
         <!-- HEADER -->
-        <div style="padding:18px 20px 14px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(91,28,28,0.4);">
+        <div style="padding:18px 20px 14px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.07);">
           <div style="display:flex; align-items:center; gap:10px;">
             <div style="width:30px; height:30px; background:rgba(180,60,40,0.35); border-radius:8px; display:flex; align-items:center; justify-content:center;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(224,112,96,1)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -900,7 +900,7 @@ function editarPedidoMesa(key) {
               <input id="ep-busca" type="text" autocomplete="off" placeholder="Buscar item no cardápio..."
                 style="width:100%; background:rgba(255,255,255,0.06); border:0.5px solid rgba(255,255,255,0.12); border-radius:8px; padding:9px 12px; color:rgba(252,228,228,0.95); font-size:13px; box-sizing:border-box; outline:none; font-family:inherit; margin-bottom:8px;" />
               <div id="ep-dropdown" style="display:none; position:absolute; left:0; right:0; top:42px; z-index:9999;
-                background:rgba(30,6,6,0.98); border:1px solid rgba(91,28,28,0.85); border-radius:10px;
+                background	rgba(20,20,22,0.98); border:1px solid rgba(91,28,28,0.85); border-radius:10px;
                 max-height:200px; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,0.6);"></div>
             </div>
 
@@ -923,7 +923,7 @@ function editarPedidoMesa(key) {
         </div>
 
         <!-- FOOTER -->
-        <div style="padding:14px 20px; display:flex; gap:10px; border-top:1px solid rgba(91,28,28,0.4);">
+        <div style="padding:14px 20px; display:flex; gap:10px; border-top:1px solid rgba(255,255,255,0.07);">
           <button onclick="document.getElementById('editar-pedido-modal').remove()" style="flex:1; padding:10px; background:transparent; border:0.5px solid rgba(255,255,255,0.18); border-radius:9px; color:rgba(255,255,255,0.6); font-size:14px; cursor:pointer; font-family:inherit;">Cancelar</button>
           <button id="ep-salvar" style="flex:2; padding:10px; background:rgba(185,48,48,0.9); border:none; border-radius:9px; color:#fff; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit;">Salvar alterações</button>
         </div>
@@ -989,8 +989,8 @@ function editarPedidoMesa(key) {
           if (!resultado.length) { dropdown.style.display = "none"; return; }
           dropdown.innerHTML = resultado.map(it => `
             <div onclick="window._epAddItem(${JSON.stringify(it).replace(/"/g, "&quot;")})"
-              style="padding:10px 14px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; border-bottom:0.5px solid rgba(91,28,28,0.4);"
-              onmouseover="this.style.background='rgba(91,28,28,0.5)'"
+              style="padding:10px 14px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; border-bottom:0.5px solid rgba(255,255,255,0.07);"
+              onmouseover="this.style.background='rgba(255,255,255,0.09)'"
               onmouseout="this.style.background='transparent'">
               <span style="color:rgba(252,228,228,0.95); font-size:13px; font-weight:600;">${escapeHtml(it.nome)}</span>
               <span style="color:rgba(251,191,36,0.9); font-size:12px; font-weight:700;">${formatCurrency(it.preco)}</span>
@@ -1160,9 +1160,9 @@ async function abrirCriarPedidoMesa(key) {
         <div style="position:relative;">
           <input id="add-itens-search" autocomplete="off" placeholder="Buscar item no cardápio..."
             style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85);
-            background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+            background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
           <div id="add-itens-dropdown" style="display:none; position:absolute; left:0; right:0; top:48px; z-index:9999;
-            background:rgba(30,6,6,0.98); border:1px solid rgba(91,28,28,0.85); border-radius:12px;
+            background:	rgba(20,20,22,0.98); border:1px solid rgba(91,28,28,0.85); border-radius:12px;
             max-height:220px; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,0.6); scrollbar-width:none;"></div>
         </div>
 
@@ -1171,7 +1171,7 @@ async function abrirCriarPedidoMesa(key) {
         <label style="color:rgba(252,228,228,0.7); font-size:13px; font-weight:700;">Observações
           <input id="add-itens-obs" placeholder="Ex: sem cebola, bem passado..."
             style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px;
-            border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45);
+            border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45);
             color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
         </label>
 
@@ -1228,9 +1228,9 @@ border:1px solid rgba(255,255,255,0.08); border-radius:10px;">
         if (!itens.length) { dropdown.style.display = 'none'; return; }
         dropdown.innerHTML = itens.map(it => `
           <div onclick="window._addItem(${JSON.stringify(it).replace(/"/g, '&quot;')})"
-            style="padding:12px 16px; cursor:pointer; border-bottom:1px solid rgba(91,28,28,0.4);
+            style="padding:12px 16px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.07);
             display:flex; justify-content:space-between; align-items:center;"
-            onmouseover="this.style.background='rgba(91,28,28,0.5)'"
+            onmouseover="this.style.background='rgba(255,255,255,0.09)'"
             onmouseout="this.style.background='transparent'">
             <span style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px;">${it.nome}</span>
             <span style="color:rgba(251,191,36,0.9); font-weight:800; font-size:13px;">${formatCurrency(it.preco)}</span>
@@ -1999,7 +1999,7 @@ if (order.table_number) {
     mesaNav.id = "modal-mesa-nav";
     mesaNav.style.cssText = `
       display:flex; align-items:center; gap:8px; flex-wrap:wrap;
-      padding:10px 14px; background:rgba(46,8,8,0.45);
+      padding:10px 14px; background:rgba(28,28,30,0.45);
       border:1px solid rgba(91,28,28,0.85); border-radius:10px;
       margin-bottom:8px;
     `;
@@ -2104,7 +2104,7 @@ function showPaymentModal(orderId) {
           <h3>💳 Forma de Pagamento</h3>
         </div>
         <div class="modal-body" style="flex:1; overflow-y:auto; padding-bottom:8px;">
-          <div style="background:#0d0d0d; border:1px solid rgba(180,30,30,0.25); border-radius:12px; padding:12px 14px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
+          <div style="background:#0d0d0d; border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:12px 14px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
             <span style="color:rgba(252,228,228,0.7); font-weight:700;">Valor Total</span>
             <span style="color:rgba(252,228,228,1); font-size:18px; font-weight:900;">${formatCurrency(totalPedido)}</span>
           </div>
@@ -2114,13 +2114,13 @@ function showPaymentModal(orderId) {
               const isUltimo = idx === pagamentos.length - 1;
               const valorRestante = totalPedido - pagamentos.slice(0, idx).reduce((s, x) => s + (parseFloat(x.valor) || 0), 0);
               return `
-               <div style="margin-bottom:10px; padding:10px 0; ${idx > 0 ? 'border-top:1px solid rgba(91,28,28,0.4);' : ''}">
+               <div style="margin-bottom:10px; padding:10px 0; ${idx > 0 ? 'border-top:1px solid rgba(255,255,255,0.07);' : ''}">
                   <div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.4); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">
                     Pagamento ${idx + 1}
                     ${isUltimo && pagamentos.length > 1 ? `<span style="color:rgba(249,115,115,0.8); margin-left:6px;">Restante: ${formatCurrency(valorRestante)}</span>` : ''}
                   </div>
                   <div style="display:flex; gap:8px; align-items:center;">
-                    <select id="metodo-${idx}" style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;">
+                    <select id="metodo-${idx}" style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;">
                       <option value="">Selecione...</option>
                       <option value="pix" ${p.metodo === 'pix' ? 'selected' : ''}>PIX</option>
                       <option value="credito" ${p.metodo === 'credito' ? 'selected' : ''}>Cartão de crédito</option>
@@ -2128,7 +2128,7 @@ function showPaymentModal(orderId) {
                       <option value="dinheiro" ${p.metodo === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
                     </select>
                     <input type="number" id="valor-${idx}" value="${parseFloat(p.valor).toFixed(2)}" min="0.01" max="${valorRestante}" step="0.01"
-  style="width:110px; padding:10px 12px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;"
+  style="width:110px; padding:10px 12px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;"
   onblur="onValorInput(${idx}, this.value)"
 />
                     ${pagamentos.length > 1
@@ -2450,14 +2450,14 @@ async function imprimirResumosSelecionados() {
           
           <div style="margin-bottom:12px;">
             ${pedidos.map(o => `
-              <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(91,28,28,0.3);">
+              <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
                 <span style="color:rgba(252,228,228,0.7); font-size:13px;">Pedido #${o.order_number} — ${escapeHtml(o.client_name || "")}</span>
                 <span style="color:rgba(251,191,36,1); font-size:13px; font-weight:700;">${formatCurrency(o.total_price)}</span>
               </div>
             `).join("")}
           </div>
 
-          <div style="background:rgba(46,8,8,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:12px; padding:12px 14px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
+          <div style="background:rgba(28,28,30,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:12px; padding:12px 14px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
             <span style="color:rgba(252,228,228,0.7); font-weight:700;">Total Geral</span>
             <span style="color:rgba(252,228,228,1); font-size:18px; font-weight:900;">${formatCurrency(totalGeral)}</span>
           </div>
@@ -2467,13 +2467,13 @@ async function imprimirResumosSelecionados() {
               const isUltimo = idx === pagamentos.length - 1;
               const valorRestante = totalGeral - pagamentos.slice(0, idx).reduce((s, x) => s + (parseFloat(x.valor) || 0), 0);
               return `
-                <div style="margin-bottom:10px; padding:10px 0; ${idx > 0 ? 'border-top:1px solid rgba(91,28,28,0.4);' : ''}">
+                <div style="margin-bottom:10px; padding:10px 0; ${idx > 0 ? 'border-top:1px solidrgba(255,255,255,0.07);' : ''}">
                   <div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.4); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">
                     Pagamento ${idx + 1}
                     ${isUltimo && pagamentos.length > 1 ? `<span style="color:rgba(249,115,115,0.8); margin-left:6px;">Restante: ${formatCurrency(valorRestante)}</span>` : ''}
                   </div>
                   <div style="display:flex; gap:8px; align-items:center;">
-                    <select id="metodo-${idx}" style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;">
+                    <select id="metodo-${idx}" style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;">
                       <option value="">Selecione...</option>
                       <option value="pix" ${p.metodo === 'pix' ? 'selected' : ''}>PIX</option>
                       <option value="credito" ${p.metodo === 'credito' ? 'selected' : ''}>Cartão de crédito</option>
@@ -2481,7 +2481,7 @@ async function imprimirResumosSelecionados() {
                       <option value="dinheiro" ${p.metodo === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
                     </select>
                     <input type="number" id="valor-${idx}" value="${parseFloat(p.valor).toFixed(2)}" min="0.01" max="${valorRestante}" step="0.01"
-                      style="width:110px; padding:10px 12px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;"
+                      style="width:110px; padding:10px 12px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;"
                       onblur="onValorInputJuntos(${idx}, this.value)"
                     />
                     ${pagamentos.length > 1 ? `
@@ -3601,8 +3601,8 @@ border:1px solid rgba(255, 255, 255, 0.08);
           onchange="setQtd(${i}, this.value)"
           style="
             width:46px; text-align:center;
-            background:rgba(20,3,3,0.4);
-            border:1px solid rgba(91,28,28,0.7);
+            background:rgba(28,28,30,0.4);
+            border:1px solid rgba(255,255,255,0.12);
             border-radius:8px;
             color:rgba(252,228,228,1);
             font-weight:800; font-size:14px;
@@ -3688,7 +3688,7 @@ window.alterarQtd = function(index, delta) {
             <span style="position:absolute; left:14px; top:50%; transform:translateY(-50%); color:rgba(252,228,228,0.4); font-size:13px;">R$</span>
             <input id="modal-valor-livre" type="number" min="0" step="0.01" placeholder="0,00"
               style="width:100%; padding:12px 14px 12px 36px; border-radius:10px;
-              border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45);
+              border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45);
               color:rgba(252,228,228,1); font-size:16px; outline:none; font-family:inherit;" />
           </div>
         </div>
@@ -3759,10 +3759,10 @@ const resp = await fetch(`${API_BASE}/api/v1/cardapio/${rid}/busca?q=${encodeURI
 
         dropdown.innerHTML = itens.map(it => `
           <div onclick="window._selecionarItem(${JSON.stringify(it).replace(/"/g, '&quot;')})"
-            style="padding:12px 16px; cursor:pointer; border-bottom:1px solid rgba(91,28,28,0.4);
+            style="padding:12px 16px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.07);
               display:flex; justify-content:space-between; align-items:center;
               transition:background 0.15s;"
-            onmouseover="this.style.background='rgba(91,28,28,0.5)'"
+            onmouseover="this.style.background='rgba(255,255,255,0.09)'"
             onmouseout="this.style.background='transparent'">
             <span style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px;">${it.nome}</span>
             <span style="color:rgba(251,191,36,0.9); font-weight:800; font-size:13px;">R$${parseFloat(it.preco).toFixed(2)}</span>
@@ -3833,7 +3833,7 @@ async function abrirModalVariacaoAdmin(item, opcoes) {
               }).map(s => `
                 <label style="display:flex; align-items:center; gap:10px; padding:10px 14px;
                   border:1.5px solid rgba(91,28,28,0.85); border-radius:10px; cursor:pointer;
-                  background:rgba(46,8,8,0.45);">
+                  background:rgba(28,28,30,0.45);">
                   <input type="checkbox" value="${escapeHtml(s.nome)}"
                     onchange="window._adminOnSaborChange()"
                     style="width:18px; height:18px; accent-color:#f97373; cursor:pointer;" />
@@ -5026,7 +5026,7 @@ async function renderCardapio() {
             <div onclick="toggleCategoria('${escapeHtml(cat)}')" style="
               display:flex; align-items:center; justify-content:space-between;
               cursor:pointer; padding:8px 4px; user-select:none;
-              border-bottom:1px solid rgba(91,28,28,0.4); margin-bottom:12px;
+              border-bottom:1px solid rgba(255,255,255,0.07); margin-bottom:12px;
             ">
               <div style="display:flex; align-items:center; gap:10px;">
                 <span class="cat-drag-handle" style="cursor:grab; font-size:18px; color:rgba(252,228,228,0.2);">⠿</span>
@@ -5039,7 +5039,7 @@ async function renderCardapio() {
               ${itens.map(item => `
                 <div class="sortable-item" data-id="${item.id}" draggable="true"
                   onclick="openItemDetailModal(${JSON.stringify(item).replace(/"/g, '&quot;')})"
-                  style="display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:rgba(46,8,8,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:12px; margin-bottom:8px; cursor:pointer;">
+                  style="display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:rgba(28,28,30,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:12px; margin-bottom:8px; cursor:pointer;">
                   <div style="display:flex; align-items:center; gap:12px;">
                     <span class="drag-handle" style="cursor:grab; font-size:16px; color:rgba(252,228,228,0.3); padding:0 4px;">⠿</span>
                     <div style="width:10px; height:10px; border-radius:50%; background:${item.ativo ? 'rgba(34,197,94,1)' : 'rgba(107,114,128,1)'}"></div>
@@ -5215,19 +5215,19 @@ async function openItemModal(item = null) {
       <div class="modal-body" style="display:flex; flex-direction:column; gap:12px; max-height:75vh; overflow-y:auto; padding-right:4px;">
         <label style="color:rgba(252,228,228,0.8); font-size:13px;">Nome *
           <input id="item-nome" value="${item ? escapeHtml(item.nome) : ""}" placeholder="Ex: X-Burguer"
-            style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
+            style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
         </label>
         <label style="color:rgba(252,228,228,0.8); font-size:13px;">Descrição
           <input id="item-descricao" value="${item ? escapeHtml(item.descricao || "") : ""}" placeholder="Ex: Pão, carne, queijo..."
-            style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
+            style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
         </label>
         <label style="color:rgba(252,228,228,0.8); font-size:13px;">Preço *
           <input id="item-preco" value="${item ? item.preco : ""}" placeholder="0,00" inputmode="decimal"
-            style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
+            style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
         </label>
        <label style="color:rgba(252,228,228,0.8); font-size:13px;">Categoria
   <select id="item-categoria"
-    style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none; appearance:none;">
+    style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none; appearance:none;">
     <option value="">Selecione uma categoria...</option>
     ${categoriasDb.map(cat =>
       `<option value="${escapeHtml(cat.nome)}" ${item?.categoria === cat.nome ? 'selected' : ''}>${escapeHtml(cat.nome)}</option>`
@@ -5244,7 +5244,7 @@ async function openItemModal(item = null) {
                 <div id="dropzone-${i}" style="
                   border:2px dashed rgba(249,115,115,0.5);
                   border-radius:12px; padding:12px; text-align:center;
-                  cursor:pointer; background:rgba(46,8,8,0.3); position:relative;
+                  cursor:pointer; background:rgba(24,24,26,0.3); position:relative;
                   min-height:90px; display:flex; flex-direction:column;
                   align-items:center; justify-content:center; gap:6px;
                 ">
@@ -5309,11 +5309,11 @@ function adicionarVariacao(nome = "", preco = "", textoLivre = false, filtro = "
   row.innerHTML = `
     <input placeholder="Ex: Grande, Com leite..." value="${escapeHtml(String(nome))}"
       style="flex:2; min-width:120px; padding:8px 12px; border-radius:8px; border:1px solid rgba(91,28,28,0.85);
-      background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:13px; outline:none;"
+      background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:13px; outline:none;"
       class="variacao-nome" />
     <input placeholder="0,00" value="${preco}" inputmode="decimal"
       style="flex:1; min-width:70px; padding:8px 12px; border-radius:8px; border:1px solid rgba(91,28,28,0.85);
-      background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:13px; outline:none;"
+      background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:13px; outline:none;"
       class="variacao-preco" />
     <label style="display:flex; align-items:center; gap:4px; color:rgba(252,228,228,0.6); font-size:11px; white-space:nowrap; cursor:pointer;">
       <input type="checkbox" class="variacao-texto-livre" ${textoLivre ? 'checked' : ''}
@@ -5322,7 +5322,7 @@ function adicionarVariacao(nome = "", preco = "", textoLivre = false, filtro = "
     </label>
     <input placeholder="Filtrar (ex: grande)" value="${escapeHtml(String(filtro))}"
       style="flex:1; min-width:90px; padding:8px 12px; border-radius:8px; border:1px solid rgba(91,28,28,0.85);
-      background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:11px; outline:none;"
+      background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:11px; outline:none;"
       class="variacao-filtro" />
     <button type="button" onclick="this.parentElement.remove()" style="
       width:28px; height:28px; border-radius:50%; border:none;
@@ -5465,7 +5465,7 @@ function openItemDetailModal(item) {
         <!-- INFORMAÇÕES -->
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <span style="color:rgba(252,228,228,0.7); font-size:13px; font-weight:700; 
-            background:rgba(91,28,28,0.5); padding:4px 12px; border-radius:999px;">
+            background:rgba(255,255,255,0.09); padding:4px 12px; border-radius:999px;">
             ${escapeHtml(item.categoria || "Geral")}
           </span>
           <span style="color:rgba(251,191,36,1); font-size:26px; font-weight:900; 
@@ -5476,7 +5476,7 @@ function openItemDetailModal(item) {
 
         ${item.descricao ? `
         <p style="color:rgba(252,228,228,0.75); font-size:14px; line-height:1.6; margin:0;
-          padding:12px; background:rgba(46,8,8,0.35); border-radius:10px; border:1px solid rgba(91,28,28,0.55);">
+          padding:12px; background:rgba(26,26,28,0.35); border-radius:10px; border:1px solid rgba(255,255,255,0.09);">
           ${escapeHtml(item.descricao)}
         </p>
         ` : ''}
@@ -5763,7 +5763,7 @@ async function openCategoriasModal() {
 
         <div style="display:flex; gap:8px;">
           <input id="input-nova-categoria" placeholder="Nome da nova categoria..."
-            style="flex:1; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;"
+            style="flex:1; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;"
             onkeydown="if(event.key==='Enter') criarCategoria()" />
           <button class="primary-button" onclick="criarCategoria()" style="white-space:nowrap;">+ Criar</button>
         </div>
@@ -5772,12 +5772,12 @@ async function openCategoriasModal() {
           ${categoriasDb.length === 0
             ? `<p style="color:rgba(252,228,228,0.4); text-align:center; padding:20px 0; font-size:13px;">Nenhuma categoria ainda.</p>`
             : categoriasDb.map(cat => `
-             <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:rgba(46,8,8,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:10px; gap:12px;">
+             <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:rgba(28,28,30,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:10px; gap:12px;">
                 <div style="display:flex; align-items:center; gap:10px; flex:1;">
                 <label style="position:relative; width:40px; height:40px; border-radius:50%; cursor:pointer; flex-shrink:0; display:block;">
                     ${cat.foto_url
                       ? `<img src="${cat.foto_url}" style="width:40px; height:40px; border-radius:50%; object-fit:cover; display:block;" />`
-                      : `<div style="width:40px; height:40px; border-radius:50%; background:rgba(91,28,28,0.5); display:flex; align-items:center; justify-content:center; font-size:18px;">📷</div>`}
+                      : `<div style="width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.09); display:flex; align-items:center; justify-content:center; font-size:18px;">📷</div>`}
                     <input type="file" accept="image/*" style="position:absolute; inset:0; opacity:0; cursor:pointer; border-radius:50%;" onchange="uploadFotoCategoria('${cat.id}', this)" />
                   </label>
                   <span style="color:rgba(252,228,228,0.9); font-weight:700; font-size:14px;">${escapeHtml(cat.nome)}</span>
@@ -5968,7 +5968,7 @@ function renderImpressoras() {
       ? imp.categorias.split(",").map(c => c.trim()).filter(Boolean)
       : [];
     return `
-      <div style="background:rgba(46,8,8,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:12px; padding:16px; margin-bottom:12px;">
+      <div style="background:rgba(28,28,30,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:12px; padding:16px; margin-bottom:12px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
           <span style="color:rgba(252,228,228,0.8); font-weight:700; font-size:13px;">Impressora ${i + 1}</span>
           <button onclick="removerImpressora(${i})" style="background:none; border:none; color:rgba(239,68,68,0.8); font-size:18px; cursor:pointer;">×</button>
@@ -5976,7 +5976,7 @@ function renderImpressoras() {
         <div style="display:flex; flex-direction:column; gap:8px;">
           <input placeholder="Printer ID" value="${imp.printer_id || ""}"
             oninput="impressorasConfig[${i}].printer_id = this.value"
-            style="padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(20,3,3,0.4); color:rgba(252,228,228,1); font-size:13px; outline:none; width:100%;" />
+            style="padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.4); color:rgba(252,228,228,1); font-size:13px; outline:none; width:100%;" />
 
           <!-- CAMPO DE TAGS — oculto se for caixa -->
           <div style="display:${imp.caixa ? 'none' : 'flex'}; flex-direction:column; gap:8px;">
@@ -5984,7 +5984,7 @@ function renderImpressoras() {
               display:flex; flex-wrap:wrap; align-items:center; gap:6px;
               padding:8px 12px; border-radius:10px;
               border:1px solid rgba(91,28,28,0.85);
-              background:rgba(20,3,3,0.4);
+              background:rgba(28,28,30,0.4);
               cursor:text; min-height:44px; position:relative;
             " onclick="document.getElementById('cat-input-${i}').focus()">
               ${tags.map(tag => `
@@ -6015,7 +6015,7 @@ function renderImpressoras() {
             </div>
             <div id="cat-dropdown-${i}" style="
               display:none; position:relative; z-index:999;
-              background:rgba(30,6,6,0.98); border:1px solid rgba(91,28,28,0.85);
+              background:	rgba(20,20,22,0.98); border:1px solid rgba(91,28,28,0.85);
               border-radius:12px; max-height:180px; overflow-y:auto;
               box-shadow:0 8px 32px rgba(0,0,0,0.6); margin-top:-4px;
             "></div>
@@ -6067,10 +6067,10 @@ async function onCatInput(index, value) {
   dropdown.innerHTML = opcoes.map(cat => `
     <div onclick="adicionarTag(${index}, '${cat}')" style="
       padding:10px 16px; cursor:pointer; font-size:13px; font-weight:700;
-      color:rgba(252,228,228,0.9); border-bottom:1px solid rgba(91,28,28,0.3);
+      color:rgba(252,228,228,0.9); border-bottom:1px solid rgba(255,255,255,0.05);
       transition:background 0.15s;
     "
-    onmouseover="this.style.background='rgba(91,28,28,0.5)'"
+    onmouseover="this.style.background='rgba(255,255,255,0.09)'"
     onmouseout="this.style.background='transparent'">
       ${cat}
     </div>
@@ -6319,7 +6319,7 @@ function _labelStyle(r, g, b) {
 }
 
 function _sectionStyle() {
-  return `background:rgba(46,8,8,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:14px; padding:16px; margin-bottom:0;`;
+  return `background:rgba(28,28,30,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:14px; padding:16px; margin-bottom:0;`;
 }
 
 function _sectionTitle(icon, label) {
@@ -6531,7 +6531,7 @@ async function showCaixa() {
           ${Object.keys(d.por_pagamento).length === 0
             ? `<p style="color:var(--muted); font-size:13px;">Nenhum pedido finalizado ainda.</p>`
             : Object.entries(d.por_pagamento).map(([metodo, info]) => `
-              <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(91,28,28,0.4);">
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.07);">
                 <div>
                   <span style="font-weight:700; font-size:14px; color:rgba(252,228,228,0.95); text-transform:capitalize;">${metodo}</span>
                   <span style="color:var(--muted); font-size:12px; margin-left:8px;">${info.qtd} pedido(s)</span>
@@ -6551,7 +6551,7 @@ async function showCaixa() {
         <div style="${_sectionStyle()}">
           ${_sectionTitle("🏆", "Itens Mais Vendidos")}
           ${d.top_itens.map(({ nome, qty }, i) => `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid rgba(91,28,28,0.3);">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
               <div style="display:flex; align-items:center; gap:10px;">
                 <span style="font-size:11px; font-weight:900; color:rgba(252,228,228,0.3); width:16px;">${i + 1}</span>
                 <span style="font-weight:700; font-size:14px; color:rgba(252,228,228,0.9);">${nome}</span>
@@ -6625,15 +6625,15 @@ async function _showFechamentoCaixa() {
         <!-- CONFERÊNCIA DE CAIXA -->
         <div style="${_sectionStyle()}">
           ${_sectionTitle("🔍", "Conferência de Caixa")}
-          <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(91,28,28,0.4);">
+          <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.07);">
             <span style="font-size:13px; color:rgba(252,228,228,0.6);">Fundo inicial</span>
             <span style="font-size:13px; font-weight:700; color:rgba(252,228,228,0.9);">${_fmtCurrency(_caixaAberto.fundo_inicial || 0)}</span>
           </div>
-          <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(91,28,28,0.4);">
+          <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.07);">
             <span style="font-size:13px; color:rgba(252,228,228,0.6);">Entradas em dinheiro</span>
             <span style="font-size:13px; font-weight:700; color:rgba(252,228,228,0.9);">${_fmtCurrency(dinheiroEntradas)}</span>
           </div>
-          <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(91,28,28,0.4);">
+          <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.07);">
             <span style="font-size:13px; color:rgba(252,228,228,0.6);">Esperado na gaveta</span>
             <span style="font-size:14px; font-weight:900; color:rgba(251,191,36,1);">${_fmtCurrency(dinheiroEsperado)}</span>
           </div>
@@ -6936,7 +6936,7 @@ function gerarQrCodes() {
     div.dataset.url = url;
     div.style.cssText = `
       display:flex; flex-direction:column; align-items:center; gap:8px;
-      padding:16px; background:rgba(46,8,8,0.45);
+      padding:16px; background:rgba(28,28,30,0.45);
       border:1px solid rgba(91,28,28,0.85); border-radius:12px;
       position:relative; cursor:pointer; transition:border-color 0.2s;
     `;
@@ -7191,7 +7191,7 @@ async function fetchFidelidadePremios() {
         ${data.length === 0 
           ? `<p style="color:var(--muted); text-align:center; padding:40px 0;">Nenhum prêmio cadastrado ainda.</p>`
           : data.map(p => `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:rgba(46,8,8,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:12px; margin-bottom:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:rgba(28,28,30,0.45); border:1px solid rgba(91,28,28,0.85); border-radius:12px; margin-bottom:8px;">
               <div>
                 <div style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px;">${escapeHtml(p.nome)}</div>
                 ${p.descricao ? `<div style="color:var(--muted); font-size:12px;">${escapeHtml(p.descricao)}</div>` : ""}
@@ -7279,17 +7279,17 @@ function openPremioModal(premio = null) {
       <div class="modal-body" style="display:flex; flex-direction:column; gap:12px;">
         <label style="color:rgba(252,228,228,0.8); font-size:13px;">Nome *
           <input id="premio-nome" value="${premio ? escapeHtml(premio.nome) : ""}" placeholder="Ex: Hambúrguer grátis"
-            style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
+            style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
         </label>
         <label style="color:rgba(252,228,228,0.8); font-size:13px;">Descrição
           <input id="premio-descricao" value="${premio ? escapeHtml(premio.descricao || "") : ""}" placeholder="Ex: Um hambúrguer clássico à sua escolha"
-            style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
+            style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
         </label>
        <label style="color:rgba(252,228,228,0.8); font-size:13px;">Foto do Prêmio
           <div style="margin-top:8px; position:relative;">
             <div id="premio-dropzone" style="
               border:2px dashed rgba(249,115,115,0.5); border-radius:12px; padding:12px;
-              text-align:center; cursor:pointer; background:rgba(46,8,8,0.3); position:relative;
+              text-align:center; cursor:pointer; background:rgba(24,24,26,0.3); position:relative;
               min-height:90px; display:flex; flex-direction:column;
               align-items:center; justify-content:center; gap:6px;
             ">
@@ -7311,7 +7311,7 @@ function openPremioModal(premio = null) {
         </label>
         <label style="color:rgba(252,228,228,0.8); font-size:13px;">Pontos necessários *
           <input id="premio-pontos" type="number" value="${premio ? premio.pontos_necessarios : ""}" placeholder="Ex: 500"
-            style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
+            style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.85); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
         </label>
       </div>
       <div class="modal-actions">
