@@ -611,7 +611,7 @@ for (let i = 1; i <= numMesas; i++) mesas.push({ tipo: "mesa", numero: i });
         return `
           <div onclick="abrirDrawerMesa('${key}')" style="
            background:${ocupada ? 'rgba(255,255,255,0.04)' : '#0d0d0d'};
-border:1.5px solid ${ocupada ? 'rgba(249,115,115,0.7)' : 'rgba(249,115,115,0.15)'};
+border:1.5px solid rgba(249,115,115,0.3);
             border-radius:14px; padding:20px 20px;
             cursor:pointer; transition:all 0.2s;
             display:flex; flex-direction:column;
@@ -619,7 +619,7 @@ border:1.5px solid ${ocupada ? 'rgba(249,115,115,0.7)' : 'rgba(249,115,115,0.15)
             position:relative;
           "
           onmouseover="this.style.borderColor='rgba(252,228,228,0.4)'"
-          onmouseout="this.style.borderColor='${ocupada ? 'rgba(249,115,115,0.6)' : 'rgba(255,255,255,0.14)'}'">
+          onmouseout="this.style.borderColor='rgba(249,115,115,0.3)'">
             <div style="display:flex; align-items:center; gap:8px;">
               ${ocupada ? `<div style="width:8px;height:8px;border-radius:50%;background:rgba(249,115,115,1);flex-shrink:0;animation:pulse 1.5s infinite;"></div>` : ''}
               <div style="font-size:20px; font-weight:900; color:rgba(252,228,228,1); letter-spacing:-0.02em;">${label}</div>
