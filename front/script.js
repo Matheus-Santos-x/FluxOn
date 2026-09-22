@@ -611,7 +611,7 @@ for (let i = 1; i <= numMesas; i++) mesas.push({ tipo: "mesa", numero: i });
         return `
           <div onclick="abrirDrawerMesa('${key}')" style="
            background:${ocupada ? 'rgba(255,255,255,0.04)' : '#0d0d0d'};
-border:1.5px solid ${ocupada ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)'};
+border:1.5px solid ${ocupada ? 'rgba(249,115,115,0.7)' : 'rgba(249,115,115,0.15)'};
             border-radius:14px; padding:20px 20px;
             cursor:pointer; transition:all 0.2s;
             display:flex; flex-direction:column;
