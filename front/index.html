@@ -216,7 +216,7 @@
       id="search-order" 
       type="text" 
       placeholder="🔍 Buscar por número ou cliente..." 
-      style="width:260px; padding:10px 16px; border-radius:12px; border:1px solid rgba(180,30,30,0.25); background:#0d0d0d; color:rgba(252,228,228,1); outline:none; font-size:14px; font-family:inherit;"
+      style="width:260px; padding:10px 16px; border-radius:12px; border:1px solid rgba(255,255,255,0.10); background:#0d0d0d; color:rgba(252,228,228,1); outline:none; font-size:14px; font-family:inherit;"
     />
   </div>
 </nav>
@@ -485,7 +485,7 @@
   <h3>🤖 Performance da IA</h3>
   <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
     
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:rgba(46,8,8,0.5); border:1px solid rgba(91,28,28,0.6); border-radius:12px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:rgba(28,28,30,0.5); border:1px solid rgba(255,255,255,0.12); border-radius:12px;">
       <span style="color:rgba(252,228,228,0.6); font-size:13px; font-weight:700;">Pedidos via IA</span>
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="color:rgba(252,228,228,1); font-size:18px; font-weight:900;" id="ia-orders">0</span>
@@ -493,7 +493,7 @@
       </div>
     </div>
 
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:rgba(46,8,8,0.5); border:1px solid rgba(91,28,28,0.6); border-radius:12px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:rgba(28,28,30,0.5); border:1px solid rgba(255,255,255,0.12); border-radius:12px;">
       <span style="color:rgba(252,228,228,0.6); font-size:13px; font-weight:700;">Receita via IA</span>
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="color:rgba(252,228,228,1); font-size:18px; font-weight:900;" id="ia-revenue">R$ 0,00</span>
@@ -566,16 +566,16 @@
   <div style="display:flex; gap:10px; align-items:center; position:relative;">
     <button id="btn-config-fidelidade" onclick="toggleFidelidadeConfig()" style="
       width:36px; height:36px; border-radius:8px;
-      border:1px solid rgba(91,28,28,0.85);
-      background:rgba(46,8,8,0.45);
+      border:1px solid rgba(255,255,255,0.14);
+      background:rgba(28,28,30,0.45);
       color:rgba(252,228,228,0.7);
       font-size:18px; cursor:pointer;
       display:flex; align-items:center; justify-content:center;
     " title="Configurações">⋯</button>
     <div id="fidelidade-popover" style="
       display:none; position:absolute; right:0; top:44px;
-      width:320px; background:rgba(30,6,6,0.98);
-      border:1px solid rgba(91,28,28,0.85); border-radius:12px;
+      width:320px; background:rgba(20,20,22,0.98);
+      border:1px solid rgba(255,255,255,0.14); border-radius:12px;
       padding:16px; box-shadow:0 12px 40px rgba(0,0,0,0.6); z-index:999;
     ">
       <div style="font-size:12px; font-weight:700; color:rgba(252,228,228,0.5); letter-spacing:2px; text-transform:uppercase; margin-bottom:10px;">
@@ -586,7 +586,7 @@
       </label>
       <input type="text" id="input-fidelidade-url"
         placeholder="fidelidade.seunegocio.com.br"
-        style="width:100%; padding:9px 12px; border-radius:8px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.6); color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+        style="width:100%; padding:9px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:rgba(28,28,30,0.6); color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
       <small style="color:rgba(252,228,228,0.35); font-size:11px; margin-top:6px; display:block; line-height:1.5;">
         O cliente acessa:<br/>https://[domínio]?token=xxx
       </small>
@@ -640,7 +640,7 @@
     <div style="display:flex; gap:12px; align-items:center;">
       <label style="color:rgba(252,228,228,0.8); font-size:14px;">Quantidade de mesas:</label>
       <input type="number" id="input-mesas" min="1" max="100" value="10"
-        style="width:80px; padding:8px 12px; border-radius:8px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
+        style="width:80px; padding:8px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
       <button class="primary-button" id="btn-gerar-qr">Gerar QR Codes</button>
     </div>
 
@@ -648,8 +648,8 @@
     <div style="position:relative;">
       <button id="btn-config-dominio" onclick="toggleDominioConfig()" style="
         width:36px; height:36px; border-radius:8px;
-        border:1px solid rgba(91,28,28,0.85);
-        background:rgba(46,8,8,0.45);
+        border:1px solid rgba(255,255,255,0.14);
+        background:rgba(28,28,30,0.45);
         color:rgba(252,228,228,0.7);
         font-size:18px; cursor:pointer;
         display:flex; align-items:center; justify-content:center;
@@ -661,8 +661,8 @@
         display:none;
         position:absolute; right:0; top:44px;
         width:320px;
-        background:rgba(30,6,6,0.98);
-        border:1px solid rgba(91,28,28,0.85);
+        background:rgba(20,20,22,0.98);
+        border:1px solid rgba(255,255,255,0.14);
         border-radius:12px;
         padding:16px;
         box-shadow:0 12px 40px rgba(0,0,0,0.6);
@@ -676,7 +676,7 @@
         </label>
         <input type="text" id="input-dominio-cardapio"
           placeholder="cardapio.seunegocio.com.br"
-          style="width:100%; padding:9px 12px; border-radius:8px; border:1px solid rgba(91,28,28,0.85); background:rgba(46,8,8,0.6); color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;"
+          style="width:100%; padding:9px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:rgba(28,28,30,0.6); color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;"
         />
         <small style="color:rgba(252,228,228,0.35); font-size:11px; margin-top:6px; display:block; line-height:1.5;">
           QR vai apontar para:<br/>https://[domínio]?mesa=1
@@ -701,7 +701,7 @@
 <main class="crm-view hidden" id="settings-view">
   <div class="crm-header">
     <div class="crm-title">⚙️ Configurações</div>
- <button class="ghost-button" type="button" id="settings-back-btn" style="border:1px solid rgba(180,30,30,0.3); color:rgba(252,228,228,0.7);"> </button>
+ <button class="ghost-button" type="button" id="settings-back-btn" style="border:1px solid rgba(255,255,255,0.12); color:rgba(252,228,228,0.7);"> </button>
   </div>
   <div class="crm-content">
     <div style="max-width:640px; display:flex; flex-direction:column; gap:12px;">
@@ -721,7 +721,7 @@
           <label style="display:flex; flex-direction:column; gap:6px;">
             <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">API Key (única para todas)</span>
             <input type="text" id="settings-printnode-key" placeholder="Sua API Key do PrintNode"
-              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
           </label>
 
           <div id="impressoras-container" style="display:flex; flex-direction:column; gap:8px; margin-top:4px;"></div>
@@ -757,7 +757,7 @@
           <label style="display:flex; flex-direction:column; gap:6px;">
             <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">URL Base</span>
             <input type="text" id="settings-tracking-url" placeholder="https://rastreio.seudominio.com.br"
-              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
           </label>
           <button class="primary-button" id="btn-salvar-rastreio" style="margin-top:4px; width:100%;">Salvar URL</button>
           <p id="settings-tracking-status" style="margin-top:4px; font-size:13px; min-height:18px;"></p>
@@ -778,21 +778,21 @@
           <label style="display:flex; flex-direction:column; gap:6px;">
             <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Token Focus NF-e</span>
             <input type="text" id="settings-focusnfe-token" placeholder="Seu token da API Focus NF-e"
-              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
           </label>
           <label style="display:flex; flex-direction:column; gap:6px;">
             <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">CNPJ</span>
             <input type="text" id="settings-cnpj" placeholder="00.000.000/0001-00"
-              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
           </label>
           <label style="display:flex; flex-direction:column; gap:6px;">
             <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Inscrição Estadual</span>
             <input type="text" id="settings-ie" placeholder="Inscrição Estadual"
-              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
           </label>
           <label style="display:flex; flex-direction:column; gap:6px;">
             <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Regime Tributário</span>
-            <select id="settings-regime" style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit; cursor:pointer;">
+            <select id="settings-regime" style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit; cursor:pointer;">
               <option value="1">Simples Nacional</option>
               <option value="2">Simples Nacional - Excesso</option>
               <option value="3">Regime Normal</option>
@@ -817,7 +817,7 @@
           <label style="display:flex; flex-direction:column; gap:6px;">
             <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">iFood — API Key</span>
             <input type="text" id="settings-ifood-key" placeholder="Cole aqui a chave do iFood"
-              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
           </label>
           <button class="primary-button" id="btn-salvar-ifood" style="margin-top:4px; width:100%;">Salvar iFood</button>
 <p id="settings-ifood-status" style="margin-top:4px; font-size:13px; min-height:18px;"></p>
@@ -825,7 +825,7 @@
         <label style="display:flex; flex-direction:column; gap:6px;">
   <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">AiqFome — API Key</span>
   <input type="text" id="settings-aiqfome-key" placeholder="Cole aqui a chave do AiqFome"
-  style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+  style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
 </label>
 
 <button class="primary-button" id="btn-salvar-aiqfome" style="margin-top:4px; width:100%;">Salvar AiqFome</button>
@@ -850,7 +850,7 @@
     <label style="display:flex; flex-direction:column; gap:6px;">
       <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Maquininha</span>
       <select id="settings-maquininha-tipo" onchange="onMaquininhaChange(this.value)"
-        style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit; cursor:pointer;">
+        style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit; cursor:pointer;">
         <option value="">Selecione...</option>
         <option value="mercadopago">Mercado Pago Point</option>
         <option value="cielo">Cielo LIO</option>
@@ -865,12 +865,12 @@
       <label style="display:flex; flex-direction:column; gap:6px;">
         <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Access Token</span>
         <input type="password" id="settings-mp-token" placeholder="APP_USR-..."
-          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
       </label>
       <label style="display:flex; flex-direction:column; gap:6px;">
         <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Device ID</span>
         <input type="text" id="settings-mp-device" placeholder="PAX_A910__SMARTPOS..."
-          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          style="padding:12px 14px; border-radius:10px; border:1px solid rrgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
       </label>
       <small style="color:rgba(252,228,228,0.35); font-size:11px; line-height:1.5;">
         Encontre o Device ID no app Mercado Pago Point → Configurações → Meu dispositivo.
@@ -882,17 +882,17 @@
       <label style="display:flex; flex-direction:column; gap:6px;">
         <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Client ID</span>
         <input type="text" id="settings-cielo-client-id" placeholder="Seu Client ID Cielo"
-          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
       </label>
       <label style="display:flex; flex-direction:column; gap:6px;">
         <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Access Token</span>
         <input type="password" id="settings-cielo-token" placeholder="Seu Access Token Cielo"
-          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
       </label>
       <label style="display:flex; flex-direction:column; gap:6px;">
         <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Serial Number (LIO)</span>
         <input type="text" id="settings-cielo-serial" placeholder="Número de série da LIO"
-          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
       </label>
     </div>
 
@@ -901,12 +901,12 @@
       <label style="display:flex; flex-direction:column; gap:6px;">
         <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Stone Code</span>
         <input type="text" id="settings-stone-code" placeholder="Seu Stone Code"
-          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
       </label>
       <label style="display:flex; flex-direction:column; gap:6px;">
         <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Token de Autenticação</span>
         <input type="password" id="settings-stone-token" placeholder="Token Stone"
-          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
       </label>
     </div>
 
@@ -915,12 +915,12 @@
       <label style="display:flex; flex-direction:column; gap:6px;">
         <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Token PagSeguro</span>
         <input type="password" id="settings-pagseguro-token" placeholder="Seu token PagSeguro"
-          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
       </label>
       <label style="display:flex; flex-direction:column; gap:6px;">
         <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Email da conta</span>
         <input type="email" id="settings-pagseguro-email" placeholder="email@dominio.com"
-          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
       </label>
     </div>
 
@@ -929,7 +929,7 @@
       <label style="display:flex; flex-direction:column; gap:6px;">
         <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">URL do Webhook de Cobrança</span>
         <input type="text" id="settings-outra-webhook" placeholder="https://sua-maquininha.com/cobrar"
-          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
       </label>
       <small style="color:rgba(252,228,228,0.35); font-size:11px; line-height:1.5;">
         O FluxON vai enviar um POST com o valor e o ID do pedido para essa URL.
@@ -959,7 +959,7 @@
           <label style="display:flex; flex-direction:column; gap:6px;">
             <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Número de mesas</span>
             <input type="number" id="settings-num-mesas" min="0" max="100" placeholder="Ex: 20"
-              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
           </label>
 
           <div style="font-size:12px; font-weight:700; color:rgba(252,228,228,0.5); text-transform:uppercase; letter-spacing:1px; margin-top:4px;">Tempos automáticos por etapa (minutos)</div>
@@ -967,19 +967,19 @@
           <label style="display:flex; flex-direction:column; gap:6px;">
             <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:600;">Recebido → Preparo <span style="color:rgba(252,228,228,0.3); font-weight:400;">(0 = desativado)</span></span>
             <input type="number" id="settings-tempo-recebido" min="0" placeholder="Ex: 2"
-              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
           </label>
 
           <label style="display:flex; flex-direction:column; gap:6px;">
             <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:600;">Preparo → Pronto <span style="color:rgba(252,228,228,0.3); font-weight:400;">(0 = desativado)</span></span>
             <input type="number" id="settings-tempo-preparo" min="0" placeholder="Ex: 20"
-              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
           </label>
 
           <label style="display:flex; flex-direction:column; gap:6px;">
             <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:600;">Pronto → Finalizado <span style="color:rgba(252,228,228,0.3); font-weight:400;">(0 = desativado)</span></span>
             <input type="number" id="settings-tempo-pronto" min="0" placeholder="Ex: 10"
-              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
           </label>
 
           <button class="primary-button" id="btn-salvar-mesas" style="margin-top:4px; width:100%;">Salvar configuração</button>
@@ -1003,7 +1003,7 @@
     <label style="display:flex; flex-direction:column; gap:6px;">
       <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">URL do Webhook</span>
       <input type="text" id="settings-webhook-satisfaction" placeholder="https://seu-webhook.com/satisfacao"
-      style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+      style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
     </label>
     <button class="primary-button" id="btn-salvar-webhook" style="margin-top:4px; width:100%;">Salvar Webhook</button>
     <p id="settings-webhook-status" style="margin-top:4px; font-size:13px; min-height:18px;"></p>
@@ -1025,7 +1025,7 @@
     <label style="display:flex; flex-direction:column; gap:6px;">
       <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">URL do Webhook</span>
       <input type="text" id="settings-webhook-fechamento" placeholder="https://seu-n8n.com/webhook/fechamento"
-        style="padding:12px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+        style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
     </label>
     <button class="primary-button" id="btn-salvar-webhook-fechamento" style="margin-top:4px; width:100%;">Salvar Webhook</button>
     <p id="settings-webhook-fechamento-status" style="margin-top:4px; font-size:13px; min-height:18px;"></p>
@@ -1122,7 +1122,7 @@
   <div style="
     position:relative;
     background:transparent;
-    border:1px solid rgba(180,30,30,0.2);
+    border:1px solid rgba(255,255,255,0.08);
     border-radius:12px;
     padding:10px;
     display:flex;
@@ -1130,9 +1130,9 @@
     gap:8px;
   ">
     <input id="new-items-search" autocomplete="off" placeholder="Buscar item no cardápio..." 
-      style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid rgba(91,28,28,0.5); background:rgba(20,3,3,0.3); color:rgba(252,228,228,0.7); outline:none; font-size:14px; font-family:inherit;" />
+      style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.10); background:rgba(28,28,30,0.3); color:rgba(252,228,228,0.7); outline:none; font-size:14px; font-family:inherit;" />
     <div id="autocomplete-dropdown" style="display:none; position:absolute; top:48px; left:10px; right:10px; z-index:9999;
-      background:rgba(30,6,6,0.98); border:1px solid rgba(91,28,28,0.85); border-radius:12px; 
+      background:rgba(20,20,22,0.98); border:1px solid rgba(255,255,255,0.14); border-radius:12px; 
       margin-top:4px; max-height:220px; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,0.6);"></div>
     <div id="itens-selecionados" style="display:flex; flex-direction:column; gap:6px; width:100%;"></div>
     <input type="hidden" id="new-items" />
@@ -1141,7 +1141,7 @@
 
        <div id="delivery-outer-wrap" style="
 background:transparent;
-border:1px solid rgba(180,30,30,0.2);
+border:1px solid rgba(255,255,255,0.08);
   border-radius:12px;
   padding:10px 14px;
   display:flex;
@@ -1158,14 +1158,14 @@ border:1px solid rgba(180,30,30,0.2);
         id="new-address"
         type="text"
         placeholder="Rua, número, bairro, complemento..."
-        style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); outline:none; font-size:14px; font-family:inherit;"
+        style="width:100%; padding:10px 14px; border-radius:10px; border:1px solidrgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); outline:none; font-size:14px; font-family:inherit;"
       />
     </div>
 
     <!-- FORMA DE PAGAMENTO -->
     <div style="display:flex; flex-direction:column; gap:6px;">
       <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px;">Forma de pagamento</span>
-      <select id="new-payment" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid rgba(180,30,30,0.2); background:#0a0a0a; color:rgba(252,228,228,1); outline:none; font-size:14px; font-family:inherit; appearance:none; cursor:pointer;">
+      <select id="new-payment" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); outline:none; font-size:14px; font-family:inherit; appearance:none; cursor:pointer;">
         <option value="">Selecione...</option>
         <option value="pix">PIX</option>
         <option value="credito">Cartão de crédito</option>
@@ -1182,7 +1182,7 @@ border:1px solid rgba(180,30,30,0.2);
         </label>
 
         <div class="modal-actions" style="align-items:center; gap:12px; flex-wrap:wrap;">
-          <div style="display:flex; align-items:center; gap:8px; background:#0d0d0d; border:1px solid rgba(180,30,30,0.2); border-radius:12px; padding:0 14px; flex:1; min-width:140px;">
+          <div style="display:flex; align-items:center; gap:8px; background:#0d0d0d; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:0 14px; flex:1; min-width:140px;">
             <span style="color:rgba(252,228,228,0.7); font-weight:700; font-size:14px;">R$</span>
             <input 
               type="text" 
