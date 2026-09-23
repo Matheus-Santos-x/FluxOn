@@ -82,7 +82,7 @@ body {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 12px;
-  padding: 20px 24px;
+  padding: 12px 24px;
   background: transparent;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(20px);
@@ -93,7 +93,7 @@ body {
   text-align: center;
   font-weight: 900;
   letter-spacing: 3px;
-  font-size: 28px;
+  font-size: 22px;
   background: var(--gradient-primary);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
