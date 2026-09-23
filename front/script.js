@@ -5226,13 +5226,36 @@ async function openItemModal(item = null) {
             style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
         </label>
        <label style="color:rgba(252,228,228,0.8); font-size:13px;">Categoria
-  <select id="item-categoria"
-    style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none; appearance:none;">
-    <option value="">Selecione uma categoria...</option>
-    ${categoriasDb.map(cat =>
-      `<option value="${escapeHtml(cat.nome)}" ${item?.categoria === cat.nome ? 'selected' : ''}>${escapeHtml(cat.nome)}</option>`
-    ).join('')}
-  </select>
+  <div style="position:relative; margin-top:6px;">
+    <div id="cat-selected-display" onclick="toggleCatDropdown()" style="
+      width:100%; padding:10px 14px; border-radius:10px;
+      border:1px solid rgba(249,115,115,0.25); background:rgba(28,28,30,0.45);
+      color:rgba(252,228,228,1); font-size:14px; cursor:pointer;
+      display:flex; justify-content:space-between; align-items:center;
+    ">
+      <span id="cat-selected-label">${item?.categoria || 'Selecione uma categoria...'}</span>
+      <span style="color:rgba(252,228,228,0.4); font-size:12px;">▼</span>
+    </div>
+    <input type="hidden" id="item-categoria" value="${item?.categoria || ''}" />
+    <div id="cat-custom-dropdown" style="
+      display:none; position:absolute; left:0; right:0; top:48px; z-index:9999;
+      background:rgba(20,20,22,0.98); border:1px solid rgba(249,115,115,0.25);
+      border-radius:10px; max-height:200px; overflow-y:auto;
+      box-shadow:0 12px 40px rgba(0,0,0,0.6);
+    ">
+      ${categoriasDb.map(cat => `
+        <div onclick="selecionarCategoria('${escapeHtml(cat.nome)}')" style="
+          padding:10px 14px; cursor:pointer; font-size:14px;
+          color:rgba(252,228,228,0.9); border-bottom:1px solid rgba(255,255,255,0.06);
+          transition:background 0.15s;
+        "
+        onmouseover="this.style.background='rgba(249,115,115,0.1)'"
+        onmouseout="this.style.background='transparent'">
+          ${escapeHtml(cat.nome)}
+        </div>
+      `).join('')}
+    </div>
+  </div>
 </label>
 
         <label style="color:rgba(252,228,228,0.8); font-size:13px;">Fotos do Item (até 3)
@@ -5299,6 +5322,17 @@ async function openItemModal(item = null) {
 
  const variacoes = item?.opcoes ? (Array.isArray(item.opcoes) ? item.opcoes : JSON.parse(item.opcoes)) : [];
 variacoes.forEach(v => adicionarVariacao(v.nome || v.name, v.preco, v.texto_livre || false, v.filtro || ""));
+}
+
+function toggleCatDropdown() {
+  const d = document.getElementById("cat-custom-dropdown");
+  if (d) d.style.display = d.style.display === "none" ? "block" : "none";
+}
+
+function selecionarCategoria(nome) {
+  document.getElementById("item-categoria").value = nome;
+  document.getElementById("cat-selected-label").textContent = nome;
+  document.getElementById("cat-custom-dropdown").style.display = "none";
 }
 
 function adicionarVariacao(nome = "", preco = "", textoLivre = false, filtro = "") {
