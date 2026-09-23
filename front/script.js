@@ -5828,9 +5828,43 @@ async function criarCategoria() {
 }
 
 async function renomearCategoria(id, nomeAntigo) {
-  const novoNome = prompt(`Novo nome para "${nomeAntigo}":`, nomeAntigo);
-  if (!novoNome || novoNome.trim() === nomeAntigo) return;
-  const novo = novoNome.trim();
+  const novoNome = await new Promise((resolve) => {
+    const existing = document.getElementById("rename-modal");
+    if (existing) existing.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "rename-modal";
+    modal.className = "modal-backdrop open";
+    modal.innerHTML = `
+      <div class="modal confirm-modal" style="max-width:400px;">
+        <div class="modal-header">
+          <h3>✏️ Renomear Categoria</h3>
+        </div>
+        <div class="modal-body" style="gap:12px;">
+          <input id="rename-input" type="text" value="${escapeHtml(nomeAntigo)}"
+            style="width:100%; padding:12px 14px; border-radius:10px;
+            border:1px solid rgba(249,115,115,0.3); background:#0d0d0d;
+            color:rgba(252,228,228,1); font-size:15px; outline:none; font-family:inherit;" />
+        </div>
+        <div class="modal-actions">
+          <button class="ghost-button" id="rename-cancel">Cancelar</button>
+          <button class="primary-button" id="rename-confirm">Salvar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    const input = document.getElementById("rename-input");
+    input.focus();
+    input.select();
+    document.getElementById("rename-cancel").addEventListener("click", () => { modal.remove(); resolve(null); });
+    document.getElementById("rename-confirm").addEventListener("click", () => { modal.remove(); resolve(input.value.trim()); });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { modal.remove(); resolve(input.value.trim()); } });
+    modal.addEventListener("click", (e) => { if (e.target === modal) { modal.remove(); resolve(null); } });
+  });
+
+  if (!novoNome || novoNome === nomeAntigo) return;
+  const novo = novoNome;
+
 
   try {
     // Renomeia a categoria na tabela categorias
