@@ -1181,14 +1181,14 @@ border:1px solid rgba(255,255,255,0.08);
 
         <div class="modal-actions" style="align-items:center; gap:12px; flex-wrap:wrap; justify-content:space-between;">
           <div style="display:inline-flex; align-items:center; gap:6px; border-bottom:1px solid rgba(249,115,115,0.4); padding-bottom:8px;">
-  <span style="color:rgba(252,228,228,0.5); font-weight:700; font-size:16px;">R$</span>
-  <input 
-    type="text" 
-    id="new-total-price" 
-    placeholder="0,00" 
-    inputmode="decimal"
-    style="width:120px; border:none; background:transparent; padding:4px 0; color:rgba(252,228,228,1); outline:none; font-size:22px; font-weight:800;"
-  />
+<span style="color:rgba(249,115,115,0.85); font-size:36px; font-family:Georgia,'Times New Roman',serif; font-style:italic; font-weight:400; line-height:1;">R$</span>
+<input 
+  type="text" 
+  id="new-total-price" 
+  placeholder="0,00" 
+  inputmode="decimal"
+  style="width:140px; border:none; background:transparent; padding:4px 0; color:rgba(252,228,228,0.95); outline:none; font-size:36px; font-family:Georgia,'Times New Roman',serif; font-style:italic; font-weight:400;"
+/>
 </div>
           <div style="display:flex; gap:10px;">
     <button class="ghost-button" id="cancel-create">Cancelar</button>
@@ -1315,11 +1315,13 @@ border:1px solid rgba(255,255,255,0.08);
   <script src="script.js"></script>
 <script>
   document.getElementById('new-phone').addEventListener('input', function(e) {
-    let v = e.target.value.replace(/\D/g, '').slice(0, 11);
-    if (v.length <= 10) {
-      v = v.replace(/^(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
-    } else {
-      v = v.replace(/^(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
+    const cur = e.target.value;
+    const digits = cur.replace(/\D/g, '').slice(0, 11);
+    let v = digits;
+    if (digits.length > 6) {
+      v = digits.slice(0,2) + ' ' + digits.slice(2,7) + '-' + digits.slice(7);
+    } else if (digits.length > 2) {
+      v = digits.slice(0,2) + ' ' + digits.slice(2);
     }
     e.target.value = v;
   });
