@@ -3571,10 +3571,10 @@ function renderItensSelecionados() {
   itensSelecionados.innerHTML = itensPedido.map((it, i) => `
     <div style="
       display:flex; align-items:center; justify-content:space-between;
-      padding:10px 4px;
-      background:transparent;
-      border:none;
-      border-bottom:1px solid rgba(255, 255, 255, 0.08);
+      padding:10px 14px;
+      background:#0d0d0d;
+border:1px solid rgba(255, 255, 255, 0.08);
+      border-radius:10px;
       width:100%;
       gap:12px;
     ">
@@ -3591,35 +3591,35 @@ function renderItensSelecionados() {
         ` : ''}
       </div>
 
-      <!-- DIREITA: − input + -->
-      <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
-        
+      <!-- DIREITA: − qty + -->
+      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+
+        ${it.qty === 1 ? `
+        <button onclick="removerItemPedido(${i})" style="
+          background:none; border:none;
+          color:rgba(224,112,96,1);
+          cursor:pointer; padding:0 4px; line-height:1;
+          display:flex; align-items:center; justify-content:center;
+        ">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          </svg>
+        </button>
+        ` : `
         <button onclick="alterarQtd(${i}, -1)" style="
           background:none; border:none;
           color:rgba(252,228,228,0.5);
           font-size:18px; font-weight:900; cursor:pointer;
           padding:0 4px; line-height:1;
         ">−</button>
+        `}
 
-        <input 
-          type="number" 
-          min="1"
-          value="${it.qty}"
-          onchange="setQtd(${i}, this.value)"
-          style="
-            width:46px; text-align:center;
-            background:rgba(28,28,30,0.4);
-            border:1px solid rgba(255,255,255,0.12);
-            border-radius:8px;
-            color:rgba(252,228,228,1);
-            font-weight:800; font-size:14px;
-            padding:4px 6px;
-            font-family:'Space Grotesk', sans-serif;
-            outline:none;
-          "
-        />
-
-        <span style="color:rgba(252,228,228,0.4); font-size:12px;">un</span>
+        <span style="
+          min-width:18px; text-align:center;
+          color:rgba(252,228,228,1);
+          font-weight:800; font-size:14px;
+          font-family:'Space Grotesk', sans-serif;
+        ">${it.qty}</span>
 
         <button onclick="alterarQtd(${i}, 1)" style="
           background:none; border:none;
