@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <link rel="icon" type="image/png" href="fenix-logo-png.png" />
-<link rel="manifest" href="manifest.json" />
+<link rel="manifest" href="manifest.json" />f
 <meta name="theme-color" content="#e53935" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FluxON</title>
@@ -1320,15 +1320,29 @@ border:1px solid rgba(255,255,255,0.08);
   <script src="script.js"></script>
 <script>
   document.getElementById('new-phone').addEventListener('input', function(e) {
-    const cur = e.target.value;
-    const digits = cur.replace(/\D/g, '').slice(0, 11);
+    const input = e.target;
+    const digitsBeforeCursor = input.value.slice(0, input.selectionStart).replace(/\D/g, '').length;
+
+    const digits = input.value.replace(/\D/g, '').slice(0, 11);
     let v = digits;
     if (digits.length > 6) {
       v = digits.slice(0,2) + ' ' + digits.slice(2,7) + '-' + digits.slice(7);
     } else if (digits.length > 2) {
       v = digits.slice(0,2) + ' ' + digits.slice(2);
     }
-    e.target.value = v;
+    input.value = v;
+
+    // Recoloca o cursor na posição certa, contando só dígitos
+    let pos = v.length, count = 0;
+    if (digitsBeforeCursor === 0) {
+      pos = 0;
+    } else {
+      for (let i = 0; i < v.length; i++) {
+        if (/\d/.test(v[i])) count++;
+        if (count === digitsBeforeCursor) { pos = i + 1; break; }
+      }
+    }
+    input.setSelectionRange(pos, pos);
   });
 </script>
 
