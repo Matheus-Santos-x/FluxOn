@@ -3564,10 +3564,10 @@ function renderItensSelecionados() {
   itensSelecionados.innerHTML = itensPedido.map((it, i) => `
     <div style="
       display:flex; align-items:center; justify-content:space-between;
-      padding:10px 14px;
-      background:#0d0d0d;
-border:1px solid rgba(255, 255, 255, 0.08);
-      border-radius:10px;
+      padding:10px 4px;
+      background:transparent;
+      border:none;
+      border-bottom:1px solid rgba(255, 255, 255, 0.08);
       width:100%;
       gap:12px;
     ">
