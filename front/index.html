@@ -1179,7 +1179,7 @@ border:1px solid rgba(255,255,255,0.08);
   <textarea id="new-notes" placeholder="Sem cebola, bebida sem gelo" style="min-height:90px; border:1px solid rgba(249,115,115,0.3); border-radius:10px; background:rgba(28,28,30,0.3); padding:10px 14px; resize:none; color:rgba(252,228,228,0.7); outline:none; font-size:14px; font-family:inherit;"></textarea>
 </label>
 
-        <div class="modal-actions" style="align-items:center; gap:12px; flex-wrap:wrap;">
+        <div class="modal-actions" style="align-items:center; gap:12px; flex-wrap:wrap; justify-content:space-between;">
           <div style="display:inline-flex; align-items:center; gap:6px; border-bottom:1px solid rgba(249,115,115,0.4); padding-bottom:8px;">
   <span style="color:rgba(252,228,228,0.5); font-weight:700; font-size:16px;">R$</span>
   <input 
@@ -1190,9 +1190,11 @@ border:1px solid rgba(255,255,255,0.08);
     style="width:120px; border:none; background:transparent; padding:4px 0; color:rgba(252,228,228,1); outline:none; font-size:22px; font-weight:800;"
   />
 </div>
-          <button class="ghost-button" id="cancel-create">Cancelar</button>
-          <button class="primary-button" id="save-create">Salvar</button>
-        </div>
+          <div style="display:flex; gap:10px;">
+    <button class="ghost-button" id="cancel-create">Cancelar</button>
+    <button class="primary-button" id="save-create">Salvar</button>
+  </div>
+</div>
       </div>
     </div>
   </div>
