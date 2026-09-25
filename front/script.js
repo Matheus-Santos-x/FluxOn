@@ -948,8 +948,12 @@ function editarPedidoMesa(key) {
           <p style="margin:2px 0 0; font-size:12px; color:rgba(251,191,36,0.9);">R$ ${(it.price * it.qty).toFixed(2).replace(".", ",")}</p>
         </div>
         <div style="display:flex; align-items:center; gap:6px;">
-          ${it.qty === 1 ? `
-          <button onclick="window._epRemover(${i})" style="width:24px; height:24px; border-radius:6px; background:rgba(180,40,40,0.3); border:0.5px solid rgba(180,40,40,0.4); color:rgba(224,112,96,1); font-size:12px; cursor:pointer; line-height:1; font-family:inherit; display:flex; align-items:center; justify-content:center;">🗑️</button>
+                   ${it.qty === 1 ? `
+          <button onclick="window._epRemover(${i})" style="width:24px; height:24px; border-radius:6px; background:rgba(180,40,40,0.3); border:0.5px solid rgba(180,40,40,0.4); color:rgba(224,112,96,1); cursor:pointer; line-height:1; font-family:inherit; display:flex; align-items:center; justify-content:center;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            </svg>
+          </button>
           ` : `
           <button onclick="window._epQty(${i}, -1)" style="width:24px; height:24px; border-radius:6px; background:rgba(255,255,255,0.08); border:0.5px solid rgba(255,255,255,0.15); color:#fff; font-size:14px; cursor:pointer; line-height:1; font-family:inherit;">−</button>
           `}
