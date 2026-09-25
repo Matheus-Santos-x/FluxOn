@@ -936,7 +936,7 @@ function editarPedidoMesa(key) {
     setupSalvar();
   }
 
-  function renderItens() {
+      function renderItens() {
     const lista = document.getElementById("ep-lista");
     if (!lista) return;
     lista.innerHTML = itens.map((it, i) => `
@@ -948,10 +948,13 @@ function editarPedidoMesa(key) {
           <p style="margin:2px 0 0; font-size:12px; color:rgba(251,191,36,0.9);">R$ ${(it.price * it.qty).toFixed(2).replace(".", ",")}</p>
         </div>
         <div style="display:flex; align-items:center; gap:6px;">
+          ${it.qty === 1 ? `
+          <button onclick="window._epRemover(${i})" style="width:24px; height:24px; border-radius:6px; background:rgba(180,40,40,0.3); border:0.5px solid rgba(180,40,40,0.4); color:rgba(224,112,96,1); font-size:12px; cursor:pointer; line-height:1; font-family:inherit; display:flex; align-items:center; justify-content:center;">🗑️</button>
+          ` : `
           <button onclick="window._epQty(${i}, -1)" style="width:24px; height:24px; border-radius:6px; background:rgba(255,255,255,0.08); border:0.5px solid rgba(255,255,255,0.15); color:#fff; font-size:14px; cursor:pointer; line-height:1; font-family:inherit;">−</button>
+          `}
           <span style="font-size:13px; min-width:16px; text-align:center; color:rgba(252,228,228,0.95);">${it.qty}</span>
           <button onclick="window._epQty(${i}, 1)" style="width:24px; height:24px; border-radius:6px; background:rgba(255,255,255,0.08); border:0.5px solid rgba(255,255,255,0.15); color:#fff; font-size:14px; cursor:pointer; line-height:1; font-family:inherit;">+</button>
-          <button onclick="window._epRemover(${i})" style="width:24px; height:24px; border-radius:6px; background:rgba(180,40,40,0.3); border:0.5px solid rgba(180,40,40,0.4); color:rgba(224,112,96,1); font-size:13px; cursor:pointer; margin-left:4px; font-family:inherit;">×</button>
         </div>
       </div>
     `).join("");
