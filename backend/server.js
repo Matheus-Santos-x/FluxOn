@@ -14,6 +14,7 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import Redis from "ioredis";
 import ws from "ws";
 import OpenAI from "openai";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -112,6 +113,15 @@ io.on("connection", (socket) => {
   console.log(`🔌 Cliente conectado: ${socket.id}`);
 
   socket.on("join_restaurant", (restaurant_id) => {
+    let ok = false;
+    try {
+      const p = jwt.verify(socket.handshake.auth?.token || "", process.env.JWT_SECRET, { algorithms: ["HS256"] });
+      ok = p.restaurant_id === restaurant_id;
+    } catch {}
+    if (!ok) {
+      console.warn(`🔒 SOCKET[${AUTH_MODE}] join sem token válido: ${restaurant_id}`);
+      if (AUTH_MODE === "enforce") return;
+    }
     socket.join(restaurant_id);
     console.log(`🏠 Socket ${socket.id} entrou na sala: ${restaurant_id}`);
   });
@@ -170,15 +180,8 @@ app.use(cors({
     return callback(new Error(`CORS: origem não permitida: ${origin}`));
   },
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-service-key']
 }));
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  if (req.method === "OPTIONS") return res.sendStatus(200);
-  next();
-});
 
 app.use((req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
@@ -187,6 +190,90 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '10mb' }));
+
+// ===== AUTH (primeiro em modo "log", depois "enforce") =====
+const AUTH_MODE = process.env.AUTH_MODE || "log";
+const SERVICE_KEY = process.env.SERVICE_API_KEY || "";
+
+function safeEqual(a, b) {
+  const x = Buffer.from(String(a)), y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+
+function readAuth(req) {
+  const h = req.headers.authorization || "";
+  if (h.startsWith("Bearer ")) {
+    try {
+      const p = jwt.verify(h.slice(7), process.env.JWT_SECRET, { algorithms: ["HS256"] });
+      return { kind: "user", restaurant_id: p.restaurant_id, plan: p.plan, email: p.email };
+    } catch {}
+  }
+  const key = req.headers["x-service-key"];
+  if (SERVICE_KEY && key && safeEqual(key, SERVICE_KEY)) return { kind: "service" };
+  return null;
+}
+
+function denyOrPass(req, res, next, motivo, status = 401) {
+  console.warn(`🔒 AUTH[${AUTH_MODE}] ${req.method} ${req.originalUrl} — ${motivo}`);
+  if (AUTH_MODE === "enforce") return res.status(status).json({ error: "Não autorizado" });
+  return next();
+}
+
+function requireAuth(req, res, next) {
+  const auth = readAuth(req);
+  req.auth = auth;
+  if (!auth) return denyOrPass(req, res, next, "sem credencial válida");
+  const rid = req.params.restaurant_id || req.query.restaurant_id || req.body?.restaurant_id;
+  if (auth.kind === "user" && rid && rid !== auth.restaurant_id)
+    return denyOrPass(req, res, next, "restaurante diferente do token", 403);
+  return next();
+}
+
+function requireOwner(req, res, next) {
+  const a = req.auth || readAuth(req);
+  if (a?.kind === "user" && a.restaurant_id !== req.params.restaurant_id)
+    return denyOrPass(req, res, next, "restaurante diferente do token", 403);
+  return next();
+}
+
+const requireRowOwner = (table) => async (req, res, next) => {
+  const a = req.auth || readAuth(req);
+  if (a?.kind !== "user") return next(); // chave de serviço, ou sem login (modo log)
+  const { data } = await supabase.from(table).select("restaurant_id").eq("id", req.params.id).single();
+  if (data && data.restaurant_id === a.restaurant_id) return next();
+  return denyOrPass(req, res, next, `${table} de outro restaurante ou inexistente`, 403);
+};
+
+// Prefixos do painel (só registram por enquanto)
+app.use("/crm/:restaurant_id", requireAuth);
+app.use("/api/v1/metrics/:restaurant_id", requireAuth);
+app.use("/api/v1/caixa/:restaurant_id", requireAuth);
+app.use("/orders", requireAuth); // só login: aqui o :id pode ser de pedido, não de restaurante
+for (const p of ["integracao", "impressora", "fiscal", "marketplace", "mp", "tracking-url",
+  "webhook-satisfaction", "webhook-fechamento", "imprimir-pedido", "reimprimir-pedido"]) {
+  app.use(`/api/v1/restaurante/:restaurant_id/${p}`, requireAuth);
+}
+
+function requireAuthWrite(req, res, next) {
+  if (req.method === "GET" || req.method === "OPTIONS") return next();
+  return requireAuth(req, res, next);
+}
+for (const p of ["config", "horarios", "dominio", "dominio-cardapio", "dominio-delivery"]) {
+  app.use(`/api/v1/restaurante/:restaurant_id/${p}`, requireAuthWrite);
+}
+app.use("/api/v1/cardapio", (req, res, next) =>
+  (req.method === "GET" || req.path.endsWith("/validar-itens")) ? next() : requireAuth(req, res, next));
+app.use("/api/v1/categorias", requireAuth);
+app.use("/api/v1/upload-image", requireAuth);
+app.use("/api/v1/pedidos-cliente", requireAuth);
+app.use("/api/v1/pedidos-mesa", requireAuth);
+app.use("/api/v1/fidelidade/premios", requireAuth);
+app.use("/api/v1/fidelidade/:restaurant_id/clientes", requireAuth);
+app.use("/api/v1/pedidos", (req, res, next) => {
+  const criando = req.method === "POST" && req.path === "/" && !req.body?.order_id;
+  return criando ? next() : requireAuth(req, res, next);
+});
+
 // ===== RATE LIMITING =====
 const limiter = rateLimit({
   windowMs: 60 * 1000, // 1 minuto
@@ -257,27 +344,39 @@ async function getRestaurantPlan(restaurant_id) {
    if (error) return "essential";
 return (data?.plan || "essential").toLowerCase();
   } catch (err) {
-    return "essencial";
+    return "essential";
   }
 }
 
+// ===== PLANOS (conforme a página de vendas) =====
 const PLAN_HIERARCHY = ["essential", "advanced", "executive", "custom"];
 
 function planLevel(plan) {
   const idx = PLAN_HIERARCHY.indexOf((plan || "essential").toLowerCase());
   return idx === -1 ? 0 : idx;
 }
+const hasPlan = (plan, min) => planLevel(plan) >= planLevel(min);
 
-function canUseTracking(plan)        { return planLevel(plan) >= planLevel("advanced");  }
-function canUseCRM(plan)             { return planLevel(plan) >= planLevel("advanced");  }
-function canUsePDV(plan)             { return planLevel(plan) >= planLevel("advanced");  }
-function canUseEstoque(plan)         { return planLevel(plan) >= planLevel("advanced");  }
-function canUseCarrinho(plan)        { return planLevel(plan) >= planLevel("advanced");  }
-function canUseResults(plan)         { return planLevel(plan) >= planLevel("executive"); }
-function canUseAutoatendimento(plan) { return planLevel(plan) >= planLevel("executive"); }
-function canUseFidelizacao(plan)     { return planLevel(plan) >= planLevel("executive"); }
-function canUseMetas(plan)           { return planLevel(plan) >= planLevel("executive"); }
-function canUseMultiUnidades(plan)   { return planLevel(plan) >= planLevel("custom");    }
+// ESSENTIAL: QR, cardápio personalizado, dashboard de resultados (Home), caixa, PDV, nota fiscal (opcional), avaliação
+function canUseAutoatendimento(plan) { return hasPlan(plan, "essential"); }
+function canUsePDV(plan)             { return hasPlan(plan, "essential"); }
+function canUseCaixa(plan)           { return hasPlan(plan, "essential"); }
+function canUseNotaFiscal(plan)      { return hasPlan(plan, "essential"); }
+function canUseAvaliacao(plan)       { return hasPlan(plan, "essential"); }
+
+// ADVANCED: IA 24h, rastreio, carrinho abandonado, cardápio com AI (e CRM, a confirmar)
+function canUseIA24h(plan)           { return hasPlan(plan, "advanced"); }
+function canUseTracking(plan)        { return hasPlan(plan, "advanced"); }
+function canUseCarrinho(plan)        { return hasPlan(plan, "advanced"); }
+function canUseCardapioIA(plan)      { return hasPlan(plan, "advanced"); }
+function canUseCRM(plan)             { return hasPlan(plan, "advanced"); }
+
+// EXECUTIVE: dashboard de ROI, campanhas, programa de fidelização
+function canUseROI(plan)             { return hasPlan(plan, "executive"); }
+function canUseCampanhas(plan)       { return hasPlan(plan, "executive"); }
+function canUseFidelizacao(plan)     { return hasPlan(plan, "executive"); }
+const canUseResults = canUseROI; // nome antigo: as rotas de métricas continuam funcionando sem mexer
+
 
 function planError(res, current_plan, required) {
   return res.status(403).json({
@@ -292,6 +391,9 @@ function normalizePhone(input) {
   const digits = String(input).replace(/\D/g, "").trim();
   return digits || null;
 }
+
+const pick = (obj = {}, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
+const CONFIG_CAMPOS = ["nome_exibicao","logo_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega"];
 
 
 /* ========================================
@@ -769,7 +871,7 @@ app.get("/crm/:restaurant_id", async (req, res) => {
 
 const ORIGINS_FORA_DO_KANBAN = ["autoatendimento", "mesa"];
 
-app.get("/orders/:restaurant_id", async (req, res) => {
+app.get("/orders/:restaurant_id", requireOwner, async (req, res) => {
   try {
     const { restaurant_id } = req.params;
     const cutoff = new Date();
@@ -814,7 +916,7 @@ app.get("/api/v1/pedidos-mesa", async (req, res) => {
 });
 
 // ✅ NOVA ROTA — Adiciona itens novos ao pedido existente e imprime só os novos
-app.patch("/api/v1/pedidos/:id/adicionar-itens", async (req, res) => {
+app.patch("/api/v1/pedidos/:id/adicionar-itens", requireRowOwner("orders"), async (req, res) => {
   try {
     const { id } = req.params;
     const { itens_novos, total_adicional, client_name, client_phone, notes } = req.body;
@@ -887,7 +989,7 @@ console.log(`🖨️ Job de impressão adicionado — Pedido #${pedidoAtualizado
   }
 });
 
-app.patch("/orders/:id/status", async (req, res) => {
+app.patch("/orders/:id/status", requireRowOwner("orders"), async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body || {};
@@ -1088,17 +1190,6 @@ app.post("/api/v1/pedidos", async (req, res) => {
     const exists = await restaurantExists(restaurant_id);
     if (!exists) return sendError(res, 404, "Restaurante não encontrado");
 
-    // 🔒 Restrição: autoatendimento só para Executive e Custom
-    if (finalOrigin === "autoatendimento") {
-      const plan = await getRestaurantPlan(restaurant_id);
-      if (!["executive", "custom"].includes(plan.toLowerCase())) {
-        return res.status(403).json({
-          error: "Autoatendimento disponível apenas nos planos Executive e Custom",
-          current_plan: plan,
-          upgrade_to: "executive"
-        });
-      }
-    }
     const now = new Date().toISOString();
     let resultData;
 
@@ -1122,6 +1213,7 @@ const { data, error } = await supabase
   .from("orders")
   .update(updatePayload)
   .eq("id", order_id)
+  .eq("restaurant_id", restaurant_id)
   .select()
   .single();
 
@@ -1153,6 +1245,7 @@ const nextNumber = numData || 1;
       origin: finalOrigin,
       destino: calcularDestino(finalOrigin),
         table_number: table_number || null,
+      tracking_token: crypto.randomBytes(10).toString("hex"),
         created_at: now,
         update_at: now
     }])
@@ -1167,8 +1260,11 @@ const nextNumber = numData || 1;
 }
 
     // Gera código único: primeiros 8 caracteres do restaurant_id + order_number
-const shortRestaurantId = restaurant_id.substring(0, 8);
-const trackingCode = `${shortRestaurantId}_${resultData.order_number}`;
+let trackingCode = resultData.tracking_token;
+if (!trackingCode) {
+  trackingCode = crypto.randomBytes(10).toString("hex");
+  await supabase.from("orders").update({ tracking_token: trackingCode }).eq("id", resultData.id);
+}
 
 const { data: restData } = await supabase
   .from("restaurants")
@@ -1318,7 +1414,7 @@ app.post("/auth/refresh", async (req, res) => {
     const token = authHeader.split(" ")[1];
     let payload;
     try {
-      payload = jwt.verify(token, process.env.JWT_SECRET);
+      payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
     } catch {
       return res.status(401).json({ error: "Token inválido ou expirado" });
     }
@@ -1564,14 +1660,14 @@ app.get("/api/v1/metrics/:restaurant_id/timeline", async (req, res) => {
     const currentOrdersCount = timeline.reduce((sum, day) => sum + day.orders, 0);
     const currentTicket = currentOrdersCount > 0 ? currentRevenue / currentOrdersCount : 0;
 const currentROI = currentRevenue / planPrice;
-
+ 
     const comparison = {
       revenue_growth: previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : 0,
       orders_growth: previousOrdersCount > 0 ? ((currentOrdersCount - previousOrdersCount) / previousOrdersCount) * 100 : 0,
       ticket_growth: previousTicket > 0 ? ((currentTicket - previousTicket) / previousTicket) * 100 : 0,
       roi_growth: previousROI > 0 ? ((currentROI - previousROI) / previousROI) * 100 : 0
     };
-
+// só para salvar
     console.log(`✅ Timeline gerada: ${timeline.length} pontos`);
     console.log(`📊 Último ponto: ${timeline[timeline.length - 1]?.date} (deve ser hoje: ${today.toISOString().split('T')[0]})`);
 
@@ -1609,160 +1705,40 @@ const currentROI = currentRevenue / planPrice;
 app.get("/api/v1/tracking/:tracking_code", async (req, res) => {
   try {
     const { tracking_code } = req.params;
-    
-    console.log(`🔍 Rastreando pedido: ${tracking_code}`);
-    
-    let query = supabase
-      .from("orders")
-      .select("id, order_number, restaurant_id, client_name, client_phone, status, itens, total_price, created_at, update_at, preparing_at, mounting_at, delivering_at, delivered_at, service_type, address, payment_method, notes")
-      .limit(1);
-    
-   // Verifica se é formato: restaurantId_orderNumber
-if (tracking_code.includes('_')) {
-  const [shortId, orderNumber] = tracking_code.split('_');
-  
-  console.log(`📍 Buscando: Restaurant ${shortId}*, Pedido #${orderNumber}`);
-  
-  // Busca todos os pedidos com esse order_number
-const { data: allOrders, error: searchError } = await supabase
-    .from("orders")
-    .select("id, order_number, restaurant_id, client_name, client_phone, status, itens, total_price, created_at, update_at, preparing_at, mounting_at, delivering_at, delivered_at, service_type, address, payment_method, notes")
-    .eq("order_number", parseInt(orderNumber));
-  
-  if (searchError || !allOrders || allOrders.length === 0) {
-    console.log(`❌ Nenhum pedido #${orderNumber} encontrado`);
-    return res.status(404).json({
-      success: false,
-      error: "Pedido não encontrado"
-    });
-  }
-  
-  // Filtra pelo restaurant_id que começa com shortId
-  const data = allOrders.find(order => order.restaurant_id.startsWith(shortId));
-  
-  if (!data) {
-    console.log(`❌ Pedido #${orderNumber} não encontrado para restaurant ${shortId}*`);
-    return res.status(404).json({
-      success: false,
-      error: "Pedido não encontrado"
-    });
-  }
-  
-  // Pula o resto do query e vai direto pro processamento
-  // (apaga as linhas 713-732 e substitui por):
-  
-  const statusMap = {
-    "draft": { progress: 0, label: "Rascunho" },
-    "pending": { progress: 20, label: "Pedido Confirmado" },
-    "preparing": { progress: 40, label: "Em Preparo" },
-    "mounting": { progress: 60, label: "Montando" },
-    "delivering": { progress: 80, label: "Saiu para Entrega" },
-    "finished": { progress: 100, label: "Pedido Entregue" },
-    "cancelled": { progress: 0, label: "Cancelado" },
-    "canceled": { progress: 0, label: "Cancelado" }
-  };
-  
-  const currentStatus = data.status || "pending";
-  const statusInfo = statusMap[currentStatus] || statusMap["pending"];
-  
-  const items = Array.isArray(data.itens) ? data.itens.map(item => ({
-    name: item.name || item.produto || "Item",
-    quantity: item.quantity || item.quantidade || 1,
-    price: parseFloat(item.price || item.preco || 0)
-  })) : [];
-  
-  let timeRemaining = 0;
-  if (currentStatus === "pending") timeRemaining = 40;
-  else if (currentStatus === "preparing") timeRemaining = 30;
-  else if (currentStatus === "mounting") timeRemaining = 15;
-  else if (currentStatus === "delivering") timeRemaining = 20;
-  
-const response = {
-  success: true,
-  order: {
-    id: data.id,
-    order_number: data.order_number,
-    client_name: data.client_name,
-    status: currentStatus,
-    progress: statusInfo.progress,
-    timeRemaining,
-    total_amount: parseFloat(data.total_price) || 0,
-    items,
-    service_type: data.service_type,
-    address: data.address,
-    payment_method: data.payment_method,
-    notes: data.notes,
-    confirmed_at: data.created_at,
-    preparing_at: data.preparing_at || null,
-    mounting_at: data.mounting_at || null,
-    delivering_at: data.delivering_at || null,
-    delivered_at: data.delivered_at || null,
-    cancelled_at: data.cancelled_at || null
-  }
-};
-  
-  console.log(`✅ Pedido rastreado: #${data.order_number} - Status: ${currentStatus}`);
-  
-  return res.json(response);
-}
 
-    // Se for UUID completo (fallback)
-    else if (tracking_code.includes('-')) {
-      query = query.eq("id", tracking_code);
-    } 
-    // Se for apenas número (não permitir)
-    else {
-      return res.status(400).json({
-        success: false,
-        error: "Formato inválido. Use: restaurantId_orderNumber"
-      });
+    if (!/^[a-f0-9]{20}$/.test(tracking_code)) {
+      return res.status(404).json({ success: false, error: "Pedido não encontrado" });
     }
-    
-    const { data, error } = await query.single();
-    
+
+    const { data, error } = await supabase
+      .from("orders")
+      .select("id, order_number, client_name, status, itens, total_price, created_at, preparing_at, mounting_at, delivering_at, delivered_at, cancelled_at, service_type, address, payment_method, notes")
+      .eq("tracking_token", tracking_code)
+      .single();
+
     if (error || !data) {
-      console.log(`❌ Pedido não encontrado: ${tracking_code}`);
-      return res.status(404).json({
-        success: false,
-        error: "Pedido não encontrado"
-      });
+      return res.status(404).json({ success: false, error: "Pedido não encontrado" });
     }
-    
-    const statusMap = {
-      "draft": { progress: 0, label: "Rascunho" },
-      "pending": { progress: 20, label: "Pedido Confirmado" },
-      "preparing": { progress: 40, label: "Em Preparo" },
-      "mounting": { progress: 60, label: "Montando" },
-      "delivering": { progress: 80, label: "Saiu para Entrega" },
-      "finished": { progress: 100, label: "Pedido Entregue" },
-      "cancelled": { progress: 0, label: "Cancelado" },
-      "canceled": { progress: 0, label: "Cancelado" }
-    };
-    
+
+    const progressMap = { draft: 0, pending: 20, preparing: 40, mounting: 60, delivering: 80, finished: 100, cancelled: 0, canceled: 0 };
+    const timeMap = { pending: 40, preparing: 30, mounting: 15, delivering: 20 };
     const currentStatus = data.status || "pending";
-    const statusInfo = statusMap[currentStatus] || statusMap["pending"];
-    
+
     const items = Array.isArray(data.itens) ? data.itens.map(item => ({
-      name: item.name || item.produto || "Item",
-      quantity: item.quantity || item.quantidade || 1,
+      name: item.name || item.nome || item.produto || "Item",
+      quantity: item.quantity || item.qty || item.quantidade || 1,
       price: parseFloat(item.price || item.preco || 0)
     })) : [];
-    
-    let timeRemaining = 0;
-    if (currentStatus === "pending") timeRemaining = 40;
-    else if (currentStatus === "preparing") timeRemaining = 30;
-    else if (currentStatus === "mounting") timeRemaining = 15;
-    else if (currentStatus === "delivering") timeRemaining = 20;
-    
-    const response = {
+
+    return res.json({
       success: true,
       order: {
         id: data.id,
-        order_number: data.order_number || tracking_code,
+        order_number: data.order_number,
         client_name: data.client_name,
         status: currentStatus,
-        progress: statusInfo.progress,
-        timeRemaining,
+        progress: progressMap[currentStatus] ?? 20,
+        timeRemaining: timeMap[currentStatus] || 0,
         total_amount: parseFloat(data.total_price) || 0,
         items,
         service_type: data.service_type,
@@ -1770,24 +1746,18 @@ const response = {
         payment_method: data.payment_method,
         notes: data.notes,
         confirmed_at: data.created_at,
-        preparing_at: currentStatus === "preparing" || currentStatus === "mounting" || currentStatus === "delivering" || currentStatus === "finished" ? data.created_at : null,
-        ready_at: currentStatus === "mounting" || currentStatus === "delivering" || currentStatus === "finished" ? data.created_at : null,
-        out_for_delivery_at: currentStatus === "delivering" || currentStatus === "finished" ? data.created_at : null,
-        delivered_at: currentStatus === "finished" ? data.created_at : null,
-        cancelled_at: currentStatus === "cancelled" || currentStatus === "canceled" ? data.created_at : null
+        preparing_at: data.preparing_at || null,
+        mounting_at: data.mounting_at || null,
+        delivering_at: data.delivering_at || null,
+        delivered_at: data.delivered_at || null,
+        cancelled_at: data.cancelled_at || null
       }
-    };
-    
-    console.log(`✅ Pedido rastreado: #${data.order_number} - Status: ${currentStatus}`);
-    
-    return res.json(response);
-    
+    });
   } catch (err) {
     console.error("❌ Erro em /api/v1/tracking:", err);
     return sendError(res, 500, "Erro ao rastrear pedido");
   }
 });
-
 // ONDE COLAR: server.js, após a rota de timeline, antes do app.get("")
 
 app.get("/api/v1/metrics/:restaurant_id/timing", async (req, res) => {
@@ -2325,8 +2295,8 @@ app.post("/api/v1/cardapio", async (req, res) => {
 app.patch("/api/v1/cardapio/:id", async (req, res) => {
   const { id } = req.params;
   const { data, error } = await supabase
-    .from("cardapio")
-    .update(req.body)
+        .from("cardapio")
+    .update(pick(req.body, ["nome","descricao","preco","categoria","foto_url","ordem","opcoes","ativo"]))
     .eq("id", id)
     .select().single();
 
@@ -2346,8 +2316,10 @@ app.post("/api/v1/upload-image", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return sendError(res, 400, "Nenhum arquivo enviado");
 
-    const ext = req.file.originalname.split(".").pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const tipo = await fileTypeFromBuffer(req.file.buffer);
+    if (!tipo || !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(tipo.mime))
+      return sendError(res, 400, "Envie uma imagem JPG, PNG, WEBP ou GIF");
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${tipo.ext}`;
 
     const bucket = req.body.bucket || req.query.bucket || "cardapio-images";
     const allowedBuckets = ["cardapio-images", "restaurante-logos", "premios-images"];
@@ -2356,7 +2328,7 @@ app.post("/api/v1/upload-image", upload.single("file"), async (req, res) => {
     const { data, error } = await supabase.storage
       .from(bucket)
       .upload(fileName, req.file.buffer, {
-        contentType: req.file.mimetype,
+        contentType: tipo.mime,
         upsert: false
       });
 
@@ -2489,7 +2461,7 @@ app.get("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
 app.patch("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
   try {
     const { restaurant_id } = req.params;
-    const fields = req.body;
+    const fields = pick(req.body, CONFIG_CAMPOS);
 
     const { error } = await supabase
       .from("restaurante_config")
@@ -3149,7 +3121,7 @@ app.post("/api/v1/restaurante/:restaurant_id/imprimir-pedido", async (req, res) 
     if (!config?.api_key) return sendError(res, 400, "Impressora não configurada");
 
     const { data: order, error: orderError } = await supabase
-      .from("orders").select("*").eq("id", order_id).single();
+      .from("orders").select("*").eq("id", order_id).eq("restaurant_id", restaurant_id).single();
     if (orderError || !order) return sendError(res, 404, "Pedido não encontrado");
 
     // Só imprime resumo (caixa) — impressão normal fica no PATCH preparing
@@ -3173,7 +3145,7 @@ app.post("/api/v1/restaurante/:restaurant_id/reimprimir-pedido", async (req, res
     const config = await getIntegracaoComCache(restaurant_id, "printnode");
     if (!config?.api_key) return sendError(res, 400, "Impressora não configurada");
     const { data: order, error: orderError } = await supabase
-      .from("orders").select("*").eq("id", order_id).single();
+      .from("orders").select("*").eq("id", order_id).eq("restaurant_id", restaurant_id).single();
     if (orderError || !order) return sendError(res, 404, "Pedido não encontrado");
     const impressorasSemCaixa = config.impressoras.filter(i => !toBool(i.is_caixa) && !toBool(i.caixa));
     const success = await printByCategory(order, config.api_key, impressorasSemCaixa);
@@ -3250,8 +3222,8 @@ app.patch("/api/v1/fidelidade/premios/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { data, error } = await supabase
-      .from("premios_fidelidade")
-      .update(req.body)
+            .from("premios_fidelidade")
+      .update(pick(req.body, ["nome","descricao","pontos_necessarios","foto_url","ativo"]))
       .eq("id", id)
       .select().single();
     if (error) return sendError(res, 500, "Erro ao atualizar prêmio");
@@ -3601,8 +3573,9 @@ app.post("/api/v1/restaurante/:restaurant_id/mp/cobrar", async (req, res) => {
     const { restaurant_id } = req.params;
     const { order_id, valor, metodo } = req.body; // ← metodo já aqui
 
-    if (!order_id || !valor) 
-      return sendError(res, 400, "order_id e valor são obrigatórios");
+    const { data: pedidoMp } = await supabase
+      .from("orders").select("id").eq("id", order_id).eq("restaurant_id", restaurant_id).single();
+    if (!pedidoMp) return sendError(res, 404, "Pedido não encontrado");
 
     const config = await getIntegracao(restaurant_id, "maquininha");
     if (!config?.mp_access_token || !config?.mp_device_id)
@@ -4122,7 +4095,7 @@ io.to(restaurant_id).emit("caixa_atualizado", { status: "fechado" });
   // Busca métricas do dia para enriquecer o webhook
   let metricas = {};
   try {
-  const metResp = await fetch(`http://localhost:${PORT}/api/v1/metrics/${restaurant_id}/resumo-dia?desde=${encodeURIComponent(caixa.created_at)}`);
+  const metResp = await fetch(`http://localhost:${PORT}/api/v1/metrics/${restaurant_id}/resumo-dia?desde=${encodeURIComponent(caixa.created_at)}`, { headers: { "x-service-key": SERVICE_KEY } });
     if (metResp.ok) metricas = await metResp.json();
   } catch(e) { console.warn("⚠️ Não foi possível buscar métricas:", e.message); }
 
@@ -4186,7 +4159,11 @@ app.post("/api/v1/caixa/:restaurant_id/webhook-fechamento", async (req, res) => 
   }
 });
 
-app.post("/internal/processar-webhooks", async (req, res) => {
+app.post("/internal/processar-webhooks", (req, res, next) => {
+  const a = readAuth(req);
+  if (a?.kind === "service") return next();
+  return denyOrPass(req, res, next, "rota interna sem chave de serviço");
+}, async (req, res) => {
   try {
     const duasHorasAtras = new Date(Date.now() - 1 * 60 * 1000).toISOString();
     const umDiaAtras = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -4237,6 +4214,9 @@ app.post("/api/v1/ia/sugestao", async (req, res) => {
 
     const exists = await restaurantExists(restaurant_id);
     if (!exists) return sendError(res, 404, "Restaurante não encontrado");
+
+    const planIA = await getRestaurantPlan(restaurant_id);                       // ← ADICIONE
+    if (!canUseCardapioIA(planIA)) return planError(res, planIA, "advanced");   // ← ADICIONE
 
     // Busca o cardápio ativo real — a IA só pode sugerir o que existe aqui
     const { data: cardapio, error } = await supabase
