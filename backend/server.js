@@ -244,6 +244,14 @@ const requireRowOwner = (table) => async (req, res, next) => {
   return denyOrPass(req, res, next, `${table} de outro restaurante ou inexistente`, 403);
 };
 
+const requireRowOwner = (table) => async (req, res, next) => {
+  const a = req.auth || readAuth(req);
+  if (a?.kind !== "user") return next(); // chave de serviço, ou sem login (modo log)
+  const { data } = await supabase.from(table).select("restaurant_id").eq("id", req.params.id).single();
+  if (data && data.restaurant_id === a.restaurant_id) return next();
+  return denyOrPass(req, res, next, `${table} de outro restaurante ou inexistente`, 403);
+};
+
 // Prefixos do painel (só registram por enquanto)
 app.use("/crm/:restaurant_id", requireAuth);
 app.use("/api/v1/metrics/:restaurant_id", requireAuth);
@@ -304,6 +312,8 @@ app.use("/api/", limiter);
 app.use("/auth/", limiterStrict);
 app.use("/orders/", limiter);
 app.use("/api/v1/ia/", limiterIA);
+const iaUso = new Map();
+const IA_LIMITE_DIARIO = 1000;
 
 
 const ALLOWED_STATUS = ["draft", "pending", "preparing", "mounting", "delivering", "finished", "cancelled", "canceled"];
@@ -1174,7 +1184,7 @@ app.post("/api/v1/pedidos", async (req, res) => {
   try {
     const {
       restaurant_id, client_name, client_phone, items, itens, notes,
-      service_type, address, payment_method, total_price, origin,
+      service_type, address, payment_method, total_price: total_price_cliente, origin,
       status, order_id, table_number
     } = req.body || {};
 
@@ -1189,6 +1199,20 @@ app.post("/api/v1/pedidos", async (req, res) => {
 
     const exists = await restaurantExists(restaurant_id);
     if (!exists) return sendError(res, 404, "Restaurante não encontrado");
+
+    // 💰 Pedido público (sem login nem chave): o servidor confere o total pelo cardápio
+    let total_price = total_price_cliente;
+    if (!readAuth(req) && !order_id && finalOrigin !== "fidelidade" && normalizedItems.length > 0) {
+      const { total: totalServidor, naoEncontrados } = await calcularTotalServidor(restaurant_id, normalizedItems);
+      const diverge = Math.abs(totalServidor - (parseFloat(total_price_cliente) || 0)) > 0.01;
+      if (naoEncontrados.length > 0 || diverge) {
+        console.warn(`💰 TOTAL[${AUTH_MODE}] restaurante=${restaurant_id} cliente=${total_price_cliente} servidor=${totalServidor} fora_do_cardapio=${JSON.stringify(naoEncontrados)}`);
+        if (AUTH_MODE === "enforce") {
+          if (naoEncontrados.length > 0) return sendError(res, 400, `Item fora do cardápio: ${naoEncontrados[0]}`);
+          total_price = totalServidor;
+        }
+      }
+    }
 
     const now = new Date().toISOString();
     let resultData;
@@ -2134,22 +2158,7 @@ const qNorm = q.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerC
 });
 
 // POST - Valida itens enviados pelo cliente (busca fuzzy por nome)
-app.post("/api/v1/cardapio/:restaurant_id/validar-itens", async (req, res) => {
-  const { restaurant_id } = req.params;
-  const { itens } = req.body;
-
-  if (!Array.isArray(itens) || itens.length === 0) {
-    return sendError(res, 400, "itens deve ser um array não vazio");
-  }
-
-  const { data: cardapio, error } = await supabase
-    .from("cardapio")
-    .select("id, nome, preco, opcoes")
-    .eq("restaurant_id", restaurant_id)
-    .eq("ativo", true);
-
-  if (error) return sendError(res, 500, "Erro ao buscar cardápio");
-
+function validarItensCardapio(cardapio, itens) {
   function normalizarNome(nome) {
     return String(nome || "")
       .normalize("NFD")
@@ -2253,7 +2262,45 @@ app.post("/api/v1/cardapio/:restaurant_id/validar-itens", async (req, res) => {
     };
   });
 
-  return res.json({ resultados });
+  return resultados;
+}
+
+async function calcularTotalServidor(restaurant_id, itens) {
+  const { data: cardapio } = await supabase
+    .from("cardapio").select("id, nome, preco, opcoes")
+    .eq("restaurant_id", restaurant_id).eq("ativo", true);
+  const entrada = itens.map(i => ({
+    nome: i.name || i.nome || "",
+    preco: i.price ?? i.preco ?? 0,
+    qty: Number(i.qty || i.quantidade || i.quantity || 1)
+  }));
+  const resultados = validarItensCardapio(cardapio || [], entrada);
+  let total = 0;
+  const naoEncontrados = [];
+  resultados.forEach((r, idx) => {
+    if (!r.encontrado) { naoEncontrados.push(r.nome_cliente); return; }
+    total += r.preco_correto * entrada[idx].qty;
+  });
+  return { total: Math.round(total * 100) / 100, naoEncontrados };
+}
+
+app.post("/api/v1/cardapio/:restaurant_id/validar-itens", async (req, res) => {
+  const { restaurant_id } = req.params;
+  const { itens } = req.body;
+
+  if (!Array.isArray(itens) || itens.length === 0) {
+    return sendError(res, 400, "itens deve ser um array não vazio");
+  }
+
+  const { data: cardapio, error } = await supabase
+    .from("cardapio")
+    .select("id, nome, preco, opcoes")
+    .eq("restaurant_id", restaurant_id)
+    .eq("ativo", true);
+
+  if (error) return sendError(res, 500, "Erro ao buscar cardápio");
+
+  return res.json({ resultados: validarItensCardapio(cardapio, itens) });
 });
 
 // PATCH - Salva ordem das categorias
@@ -4215,8 +4262,13 @@ app.post("/api/v1/ia/sugestao", async (req, res) => {
     const exists = await restaurantExists(restaurant_id);
     if (!exists) return sendError(res, 404, "Restaurante não encontrado");
 
-    const planIA = await getRestaurantPlan(restaurant_id);                       // ← ADICIONE
-    if (!canUseCardapioIA(planIA)) return planError(res, planIA, "advanced");   // ← ADICIONE
+    const planIA = await getRestaurantPlan(restaurant_id);
+    if (!canUseCardapioIA(planIA)) return planError(res, planIA, "advanced");
+
+    const chaveIA = `${restaurant_id}:${new Date().toISOString().slice(0, 10)}`;
+    const usoIA = (iaUso.get(chaveIA) || 0) + 1;
+    if (usoIA > IA_LIMITE_DIARIO) return res.status(429).json({ error: "Limite diário do assistente atingido" });
+    iaUso.set(chaveIA, usoIA);
 
     // Busca o cardápio ativo real — a IA só pode sugerir o que existe aqui
     const { data: cardapio, error } = await supabase
