@@ -1333,7 +1333,7 @@ return res.status(201).json({
 });
 
 // PATCH - Modifica itens de um pedido existente
-app.patch("/api/v1/pedidos/:id", async (req, res) => {
+app.patch("/api/v1/pedidos/:id", requireRowOwner("orders"), async (req, res) => {
   try {
     const { id } = req.params;
     const { items, itens, notes, total_price, address, payment_method } = req.body;
@@ -1441,7 +1441,7 @@ app.post("/auth/refresh", async (req, res) => {
 });
 
 // GET - Busca pedido por ID
-app.get("/api/v1/pedidos/:id", async (req, res) => {
+app.get("/api/v1/pedidos/:id", requireRowOwner("orders"), async (req, res) => {
   try {
     const { id } = req.params;
     const { data, error } = await supabase
@@ -2084,7 +2084,7 @@ app.post("/api/v1/cardapio/:restaurant_id/categorias", async (req, res) => {
 });
 
 // PATCH - Renomeia/atualiza categoria (nome e/ou foto)
-app.patch("/api/v1/categorias/:id", async (req, res) => {
+app.patch("/api/v1/categorias/:id", requireRowOwner("categorias"), async (req, res) => {
   const { id } = req.params;
   const { nome, foto_url } = req.body;
 
@@ -2106,7 +2106,7 @@ app.patch("/api/v1/categorias/:id", async (req, res) => {
 });
 
 // DELETE - Remove categoria
-app.delete("/api/v1/categorias/:id", async (req, res) => {
+app.delete("/api/v1/categorias/:id", requireRowOwner("categorias"), async (req, res) => {
   const { id } = req.params;
   const { error } = await supabase.from("categorias").delete().eq("id", id);
   if (error) return sendError(res, 500, "Erro ao excluir categoria");
@@ -2292,7 +2292,7 @@ app.post("/api/v1/cardapio", async (req, res) => {
 });
 
 // PATCH - Edita item
-app.patch("/api/v1/cardapio/:id", async (req, res) => {
+app.patch("/api/v1/cardapio/:id", requireRowOwner("cardapio"), async (req, res) => {
   const { id } = req.params;
   const { data, error } = await supabase
         .from("cardapio")
@@ -2305,7 +2305,7 @@ app.patch("/api/v1/cardapio/:id", async (req, res) => {
 });
 
 // DELETE - Remove item
-app.delete("/api/v1/cardapio/:id", async (req, res) => {
+app.delete("/api/v1/cardapio/:id", requireRowOwner("cardapio"), async (req, res) => {
   const { id } = req.params;
   const { error } = await supabase.from("cardapio").delete().eq("id", id);
   if (error) return sendError(res, 500, "Erro ao deletar item");
@@ -3156,7 +3156,7 @@ app.post("/api/v1/restaurante/:restaurant_id/reimprimir-pedido", async (req, res
   }
 });
 
-app.patch("/api/v1/pedidos/:id/payment", async (req, res) => {
+app.patch("/api/v1/pedidos/:id/payment", requireRowOwner("orders"), async (req, res) => {
   try {
     const { id } = req.params;
     const { payment_method } = req.body;
@@ -3218,7 +3218,7 @@ app.post("/api/v1/fidelidade/premios", async (req, res) => {
 });
 
 // Edita prêmio
-app.patch("/api/v1/fidelidade/premios/:id", async (req, res) => {
+app.patch("/api/v1/fidelidade/premios/:id", requireRowOwner("premios_fidelidade"), async (req, res) => {
   try {
     const { id } = req.params;
     const { data, error } = await supabase
@@ -3234,7 +3234,7 @@ app.patch("/api/v1/fidelidade/premios/:id", async (req, res) => {
 });
 
 // Deleta prêmio
-app.delete("/api/v1/fidelidade/premios/:id", async (req, res) => {
+app.delete("/api/v1/fidelidade/premios/:id", requireRowOwner("premios_fidelidade"), async (req, res) => {
   try {
     const { id } = req.params;
     const { error } = await supabase.from("premios_fidelidade").delete().eq("id", id);
