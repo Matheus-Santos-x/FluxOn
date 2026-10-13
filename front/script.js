@@ -10,6 +10,14 @@ const METRICS_URL = `${API_BASE}/api/v1/metrics`;
 const FORECAST_URL = `${API_BASE}/api/v1/demand-forecast`;
 let selectedOrderIds = new Set();
 
+const _fetch = window.fetch.bind(window);
+window.fetch = (url, opts = {}) => {
+  const t = localStorage.getItem("fluxon_token");
+  if (t && String(url).startsWith(API_BASE))
+    opts = { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${t}` } };
+  return _fetch(url, opts);
+};
+
 // ===== STATUS MAP =====
 const STATUS_TO_BACKEND = {
   recebido: "pending",
