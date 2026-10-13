@@ -4054,7 +4054,7 @@ document.getElementById("search-order")?.addEventListener("input", function() {
   renderBoard();
 });
   
-socket = io(API_BASE, { transports: ["websocket"] });
+socket = io(API_BASE, { transports: ["websocket"], auth: { token: localStorage.getItem("fluxon_token") } });
 
 socket.on("connect", () => {
   const rid = getRestaurantId();
