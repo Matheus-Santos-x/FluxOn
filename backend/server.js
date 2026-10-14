@@ -244,14 +244,6 @@ const requireRowOwner = (table) => async (req, res, next) => {
   return denyOrPass(req, res, next, `${table} de outro restaurante ou inexistente`, 403);
 };
 
-const requireRowOwner = (table) => async (req, res, next) => {
-  const a = req.auth || readAuth(req);
-  if (a?.kind !== "user") return next(); // chave de serviço, ou sem login (modo log)
-  const { data } = await supabase.from(table).select("restaurant_id").eq("id", req.params.id).single();
-  if (data && data.restaurant_id === a.restaurant_id) return next();
-  return denyOrPass(req, res, next, `${table} de outro restaurante ou inexistente`, 403);
-};
-
 // Prefixos do painel (só registram por enquanto)
 app.use("/crm/:restaurant_id", requireAuth);
 app.use("/api/v1/metrics/:restaurant_id", requireAuth);
@@ -3618,7 +3610,10 @@ app.patch("/api/v1/restaurante/:restaurant_id/mp", async (req, res) => {
 app.post("/api/v1/restaurante/:restaurant_id/mp/cobrar", async (req, res) => {
   try {
     const { restaurant_id } = req.params;
-    const { order_id, valor, metodo } = req.body; // ← metodo já aqui
+      const { order_id, valor, metodo } = req.body; // ← metodo já aqui
+
+    if (!order_id || !valor) 
+      return sendError(res, 400, "order_id e valor são obrigatórios");
 
     const { data: pedidoMp } = await supabase
       .from("orders").select("id").eq("id", order_id).eq("restaurant_id", restaurant_id).single();
