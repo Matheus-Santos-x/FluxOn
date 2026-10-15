@@ -7662,6 +7662,128 @@ function onMaquininhaChange(tipo) {
     });
   }
 
+// ===== PAUSAR ITEM NA HOME =====
+let _itensPausados = [];
+
+(function _setupPausarHome() {
+  document.addEventListener("DOMContentLoaded", () => {
+    const input    = document.getElementById("home-pausar-busca");
+    const dropdown = document.getElementById("home-pausar-dropdown");
+    if (!input) return;
+
+    let timer = null;
+    input.addEventListener("input", () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (!q) { dropdown.style.display = "none"; return; }
+      timer = setTimeout(async () => {
+        const rid = getRestaurantId();
+        if (!rid) return;
+        try {
+          const qNorm = q.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+          const resp  = await fetch(`${API_BASE}/api/v1/cardapio/${rid}/busca?q=${encodeURIComponent(qNorm)}`);
+          const itens = await resp.json();
+          if (!itens.length) { dropdown.style.display = "none"; return; }
+          dropdown.innerHTML = itens.map(it => `
+            <div onclick="_selecionarPausar('${escapeHtml(it.nome)}')" style="
+              padding:10px 14px; cursor:pointer; font-size:14px;
+              color:rgba(252,228,228,0.9); border-bottom:1px solid rgba(255,255,255,0.06);
+              display:flex; justify-content:space-between;
+            "
+            onmouseover="this.style.background='rgba(255,255,255,0.06)'"
+            onmouseout="this.style.background='transparent'">
+              <span>${escapeHtml(it.nome)}</span>
+              <span style="color:rgba(252,228,228,0.35); font-size:12px;">${formatCurrency(it.preco)}</span>
+            </div>
+          `).join("");
+          dropdown.style.display = "block";
+        } catch(e) { dropdown.style.display = "none"; }
+      }, 250);
+    });
+  });
+})();
+
+window._selecionarPausar = function(nome) {
+  const input    = document.getElementById("home-pausar-busca");
+  const dropdown = document.getElementById("home-pausar-dropdown");
+  if (input)    input.value = nome;
+  if (dropdown) dropdown.style.display = "none";
+};
+
+async function _pausarItemHome() {
+  const input = document.getElementById("home-pausar-busca");
+  const nome  = input?.value.trim();
+  if (!nome) return;
+
+  const rid = getRestaurantId();
+  try {
+    // Busca o item e desativa
+    const resp = await fetch(`${API_BASE}/api/v1/cardapio/${rid}/busca?q=${encodeURIComponent(nome)}`);
+    const itens = await resp.json();
+    const item  = itens.find(i => i.nome.toLowerCase() === nome.toLowerCase()) || itens[0];
+    if (!item) { alert("Item não encontrado no cardápio."); return; }
+
+    await fetch(`${API_BASE}/api/v1/cardapio/${item.id}`, {
+      method: "PATCH",
+      headers: buildHeaders(),
+      body: JSON.stringify({ ativo: false })
+    });
+
+    if (!_itensPausados.includes(item.nome)) _itensPausados.push(item.nome);
+    if (input) input.value = "";
+    _renderPausadosHome();
+  } catch(e) {
+    alert("Erro ao pausar item: " + e.message);
+  }
+}
+
+async function _reativarItemHome(nome) {
+  const rid = getRestaurantId();
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/cardapio/${rid}/busca?q=${encodeURIComponent(nome)}&admin=true`);
+    // busca mesmo inativos
+    const respAll = await fetch(`${API_BASE}/api/v1/cardapio/${rid}?admin=true`);
+    const todos   = await respAll.json();
+    const item    = todos.find(i => i.nome.toLowerCase() === nome.toLowerCase());
+    if (!item) return;
+
+    await fetch(`${API_BASE}/api/v1/cardapio/${item.id}`, {
+      method: "PATCH",
+      headers: buildHeaders(),
+      body: JSON.stringify({ ativo: true })
+    });
+
+    _itensPausados = _itensPausados.filter(n => n !== nome);
+    _renderPausadosHome();
+  } catch(e) {
+    alert("Erro ao reativar: " + e.message);
+  }
+}
+
+function _renderPausadosHome() {
+  const lista = document.getElementById("home-pausados-lista");
+  if (!lista) return;
+
+  if (!_itensPausados.length) {
+    lista.innerHTML = `<div style="color:rgba(252,228,228,0.2); font-size:13px; font-style:italic;">Nenhum item pausado</div>`;
+    return;
+  }
+
+  lista.innerHTML = _itensPausados.map(nome => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(252,228,228,0.4)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span style="font-size:14px; color:rgba(252,228,228,0.8); font-weight:600;">${escapeHtml(nome)}</span>
+      </div>
+      <button onclick="_reativarItemHome('${escapeHtml(nome)}')" style="
+        padding:6px 14px; border-radius:8px;
+        border:1px solid rgba(255,255,255,0.15);
+        background:transparent; color:rgba(252,228,228,0.7);
+        font-size:12px; font-weight:700; cursor:pointer; font-family:inherit;
+      ">Reativar</button>
+    </div>
+  `).join("");
+}
 
 // ===== INICIALIZA =====
 if (document.readyState === 'loading') {
