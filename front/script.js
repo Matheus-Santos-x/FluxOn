@@ -526,7 +526,7 @@ function showHome() {
   crmView?.classList.add("hidden");
   resultsView?.classList.add("hidden");
   document.getElementById("autoatendimento-view")?.classList.add("hidden");
-  document.getElementById("mesas-view")?.classList.add("hidden"); // ← garante que mesas some
+  document.getElementById("mesas-view")?.classList.add("hidden");
   document.getElementById("settings-view")?.classList.add("hidden");
   document.getElementById("fidelidade-view")?.classList.add("hidden");
   document.getElementById("cardapio-view")?.classList.add("hidden");
@@ -534,15 +534,21 @@ function showHome() {
   hideTabsBar();
   closeDrawer();
   document.getElementById("open-create")?.classList.add("hidden");
-  document.getElementById("home-restaurant-name").textContent =
-    localStorage.getItem("restaurant_name") || "Restaurante";
 
-    const hora = new Date().getHours();
+  const nomeRest = localStorage.getItem("restaurant_name") || "Restaurante";
+  const nomeUser = localStorage.getItem("user_name") || "";
+  const el = document.getElementById("home-restaurant-name");
+  if (el) el.textContent = nomeRest;
+
+  const nomeEl = document.getElementById("home-greeting-name");
+  if (nomeEl) nomeEl.textContent = nomeUser ? `, ${nomeUser.split(" ")[0]}` : "";
+
+  const hora = new Date().getHours();
   const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
   const greetingEl = document.getElementById("home-greeting-label");
   if (greetingEl) greetingEl.textContent = saudacao;
-  
-    renderHomeStats();
+
+  renderHomeStats();
 }
 
 function showMesas() {
@@ -564,16 +570,15 @@ function showMesas() {
 
 function renderHomeStats() {
   const hojeStr = new Date().toDateString();
+  const numMesas = parseInt(localStorage.getItem("fluxon_num_mesas") || "10");
 
-  // Pedidos hoje (exclui cancelados)
+  // ── Pedidos hoje (excl. cancelados) ──
   const pedidosHoje = orders.filter(o => {
     if (o._frontStatus === "cancelado") return false;
-    const d = new Date(o.created_at);
-    return d.toDateString() === hojeStr;
-  }).length;
+    return new Date(o.created_at).toDateString() === hojeStr;
+  });
 
-  // Mesas ocupadas
-  const numMesas = parseInt(localStorage.getItem("fluxon_num_mesas") || "10");
+  // ── Mesas ocupadas ──
   const mesasOcupadasSet = new Set();
   orders.forEach(o => {
     if (["recebido", "preparo", "pronto"].includes(o._frontStatus) && o.destino === "mesas" && o.table_number) {
@@ -581,10 +586,209 @@ function renderHomeStats() {
     }
   });
 
+  // ── Faturamento hoje (só finalizados) ──
+  const faturamentoHoje = orders
+    .filter(o => o._frontStatus === "finalizado" && new Date(o.created_at).toDateString() === hojeStr)
+    .reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
+
+  // ── Atualiza stats ──
   const pedidosEl = document.getElementById("home-stat-pedidos");
-  const mesasEl = document.getElementById("home-stat-mesas");
-  if (pedidosEl) pedidosEl.textContent = pedidosHoje;
-  if (mesasEl) mesasEl.textContent = `${mesasOcupadasSet.size}/${numMesas}`;
+  const mesasEl   = document.getElementById("home-stat-mesas");
+  const fatEl     = document.getElementById("home-stat-faturamento");
+  if (pedidosEl) pedidosEl.textContent = pedidosHoje.length;
+  if (mesasEl)   mesasEl.textContent   = `${mesasOcupadasSet.size}/${numMesas}`;
+  if (fatEl)     fatEl.textContent     = formatCurrency(faturamentoHoje);
+
+  // ── Status dinâmico ──
+  _atualizarStatusHome();
+
+  // ── Último pedido ──
+  _atualizarUltimoPedido();
+
+  // ── Mesas abertas há mais tempo ──
+  _atualizarMesasTempo();
+
+  // ── Notas fiscais ──
+  _atualizarNotasFiscais();
+
+  // ── Itens pausados ──
+  _atualizarItensPausados();
+}
+
+function _atualizarStatusHome() {
+  const titleEl = document.getElementById("home-status-title");
+  const subEl   = document.getElementById("home-status-sub");
+  if (!titleEl || !subEl) return;
+
+  // Pedidos atrasados = em "recebido" há mais de 5 min
+  const agora = Date.now();
+  const tempoRecebido = parseFloat(localStorage.getItem("fluxon_tempo_recebido")) || 1.5;
+  const limiteMs = tempoRecebido * 60 * 1000;
+
+  const atrasados = orders.filter(o => {
+    if (o._frontStatus !== "recebido") return false;
+    const raw = o.created_at.includes("Z") || o.created_at.includes("+") ? o.created_at : o.created_at + "Z";
+    return agora - new Date(raw).getTime() > limiteMs;
+  });
+
+  // Mesas abertas há mais de 1h30
+  const mesasVelhas = _getMesasAbertas().filter(m => m.minutos > 90);
+
+  // Pedidos ativos no momento
+  const ativos = orders.filter(o => ["recebido", "preparo", "pronto", "caminho"].includes(o._frontStatus));
+
+  if (atrasados.length > 0) {
+    titleEl.textContent = "Pedido atrasado ⚠️";
+    titleEl.style.color = "rgba(239,68,68,1)";
+    subEl.textContent   = `${atrasados.length} pedido${atrasados.length > 1 ? "s" : ""} aguardando confirmação.`;
+  } else if (mesasVelhas.length > 0) {
+    titleEl.textContent = "Mesa aberta há mais de 1h30";
+    titleEl.style.color = "rgba(251,191,36,1)";
+    subEl.textContent   = `Mesa${mesasVelhas.length > 1 ? "s" : ""} ${mesasVelhas.map(m => m.label).join(", ")} — por favor, verificar.`;
+  } else if (ativos.length > 5) {
+    titleEl.textContent = "Movimentado 🔥";
+    titleEl.style.color = "rgba(249,115,115,1)";
+    subEl.textContent   = `${ativos.length} pedidos em andamento agora.`;
+  } else if (ativos.length > 0) {
+    titleEl.textContent = "Tudo em ordem ✅";
+    titleEl.style.color = "rgba(252,228,228,0.95)";
+    subEl.textContent   = `${ativos.length} pedido${ativos.length > 1 ? "s" : ""} em andamento.`;
+  } else {
+    titleEl.textContent = "Tranquilo por aqui 😌";
+    titleEl.style.color = "rgba(252,228,228,0.95)";
+    subEl.textContent   = "Nenhum pedido ativo no momento.";
+  }
+}
+
+function _atualizarUltimoPedido() {
+  const card = document.getElementById("home-ultimo-pedido");
+  if (!card) return;
+
+  const ordenados = [...orders]
+    .filter(o => o._frontStatus !== "cancelado")
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  if (!ordenados.length) { card.style.display = "none"; return; }
+
+  const ult = ordenados[0];
+  const minAtras = Math.floor((Date.now() - new Date(
+    ult.created_at.includes("Z") || ult.created_at.includes("+") ? ult.created_at : ult.created_at + "Z"
+  ).getTime()) / 60000);
+
+  const statusLabels = {
+    recebido: "Recebido", preparo: "Em preparo", pronto: "Pronto",
+    caminho: "A caminho", finalizado: "Finalizado"
+  };
+
+  document.getElementById("home-ultimo-cliente").textContent = ult.client_name || "Cliente";
+  document.getElementById("home-ultimo-info").textContent    =
+    `${statusLabels[ult._frontStatus] || ult._frontStatus} · há ${minAtras < 1 ? "menos de 1" : minAtras} min`;
+  document.getElementById("home-ultimo-valor").textContent   = formatCurrency(ult.total_price || 0);
+
+  const badge = document.getElementById("home-ultimo-badge");
+  if (badge) badge.style.display = minAtras < 3 ? "inline-block" : "none";
+
+  card.style.display = "flex";
+}
+
+function _getMesasAbertas() {
+  const mesaMap = {};
+  const agora   = Date.now();
+
+  orders.forEach(o => {
+    if (!["recebido", "preparo", "pronto"].includes(o._frontStatus)) return;
+    if (o.destino !== "mesas") return;
+    const key   = o.table_number ? String(o.table_number) : "balcao";
+    const label = o.table_number ? `Mesa ${o.table_number}` : "Balcão";
+    const raw   = o.created_at.includes("Z") || o.created_at.includes("+") ? o.created_at : o.created_at + "Z";
+    const min   = Math.floor((agora - new Date(raw).getTime()) / 60000);
+    if (!mesaMap[key] || min > mesaMap[key].minutos) {
+      mesaMap[key] = { key, label, minutos: min };
+    }
+  });
+
+  return Object.values(mesaMap).sort((a, b) => b.minutos - a.minutos);
+}
+
+function _atualizarMesasTempo() {
+  const card  = document.getElementById("home-mesas-tempo");
+  const lista = document.getElementById("home-mesas-lista");
+  if (!card || !lista) return;
+
+  const mesas = _getMesasAbertas().slice(0, 3);
+  if (!mesas.length) { card.style.display = "none"; return; }
+
+  lista.innerHTML = mesas.map(m => {
+    const cor   = m.minutos > 90 ? "rgba(239,68,68,1)" : m.minutos > 60 ? "rgba(251,191,36,1)" : "rgba(34,197,94,1)";
+    const texto = m.minutos >= 60
+      ? `${Math.floor(m.minutos / 60)}h${m.minutos % 60 > 0 ? String(m.minutos % 60).padStart(2, "0") + "min" : ""}`
+      : `${m.minutos} min`;
+    return `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:14px; font-weight:700; color:rgba(252,228,228,0.85);">${m.label}</span>
+        <span style="font-size:14px; font-weight:900; color:${cor};">${texto}</span>
+      </div>`;
+  }).join("");
+
+  card.style.display = "block";
+}
+
+function _atualizarItensPausados() {
+  const card  = document.getElementById("home-itens-pausados");
+  const lista = document.getElementById("home-pausados-lista");
+  if (!card || !lista) return;
+
+  // Itens pausados = pedidos com status "preparo" que tenham a flag paused
+  // Por ora usa a lógica de pedidos cancelados como proxy — ajusta conforme
+  // sua implementação real de pause de cardápio
+  const pausados = (window._itensPausados || []);
+  if (!pausados.length) { card.style.display = "none"; return; }
+
+  lista.innerHTML = pausados.map(nome =>
+    `<span style="background:rgba(239,68,68,0.15); color:rgba(239,68,68,0.9); font-size:12px; font-weight:700; padding:4px 10px; border-radius:99px;">${nome}</span>`
+  ).join("");
+  card.style.display = "block";
+}
+
+async function _atualizarNotasFiscais() {
+  const card = document.getElementById("home-notas-card");
+  if (!card) return;
+
+  try {
+    const rid  = getRestaurantId();
+    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/notas-fiscais/contador`);
+    if (!resp.ok) { card.style.display = "none"; return; }
+
+    const { usado, limite } = await resp.json();
+    const pct  = Math.min((usado / limite) * 100, 100);
+    const circ = 2 * Math.PI * 15.9;
+
+document.getElementById("home-notas-used").textContent  = usado;
+document.getElementById("home-notas-limit").textContent = limite;
+
+// Texto auxiliar embaixo
+const subEl = card.querySelector(".home-notas-sub");
+if (subEl) {
+  if (usado > limite) {
+    subEl.textContent = `+${usado - limite} extras este mês`;
+    subEl.style.color = "rgba(239,68,68,0.8)";
+  } else {
+    subEl.textContent = "Emitidas este mês";
+    subEl.style.color = "rgba(252,228,228,0.35)";
+  }
+}
+
+    const ring = document.getElementById("home-notas-ring");
+    if (ring) {
+      const filled = (pct / 100) * circ;
+      ring.setAttribute("stroke-dasharray", `${filled.toFixed(1)} ${circ.toFixed(1)}`);
+      ring.setAttribute("stroke", pct > 90 ? "rgba(239,68,68,1)" : pct > 70 ? "rgba(251,191,36,1)" : "rgba(34,197,94,1)");
+    }
+
+    card.style.display = "flex";
+  } catch (e) {
+    card.style.display = "none";
+  }
 }
 
 function renderMesas() {
