@@ -4332,6 +4332,63 @@ Responda SOMENTE em JSON válido, neste formato exato, sem nada antes ou depois:
   }
 });
 
+// ===== NOTAS FISCAIS — CONTADOR =====
+
+app.get("/api/v1/restaurante/:restaurant_id/notas-fiscais/contador", requireOwner, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const agora = new Date();
+    const mes   = agora.getMonth() + 1;
+    const ano   = agora.getFullYear();
+
+    const { data } = await supabase
+      .from("notas_fiscais_contador")
+      .select("quantidade")
+      .eq("restaurant_id", restaurant_id)
+      .eq("mes", mes)
+      .eq("ano", ano)
+      .single();
+
+    const usado = data?.quantidade || 0;
+    return res.json({ usado, limite: 500, mes, ano });
+  } catch (err) {
+    return sendError(res, 500, err.message);
+  }
+});
+
+app.post("/api/v1/restaurante/:restaurant_id/notas-fiscais/incrementar", requireAuth, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const agora = new Date();
+    const mes   = agora.getMonth() + 1;
+    const ano   = agora.getFullYear();
+
+    const { data: existente } = await supabase
+      .from("notas_fiscais_contador")
+      .select("id, quantidade")
+      .eq("restaurant_id", restaurant_id)
+      .eq("mes", mes)
+      .eq("ano", ano)
+      .single();
+
+    if (existente) {
+      await supabase
+        .from("notas_fiscais_contador")
+        .update({ quantidade: existente.quantidade + 1 })
+        .eq("id", existente.id);
+    } else {
+      await supabase
+        .from("notas_fiscais_contador")
+        .insert([{ restaurant_id, mes, ano, quantidade: 1 }]);
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, err.message);
+  }
+});
+
+
 // ===== HEALTH CHECK =====
 app.get("/health", (req, res) => {
   res.json({
