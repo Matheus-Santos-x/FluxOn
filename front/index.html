@@ -280,123 +280,140 @@ input:focus, textarea:focus, select:focus {
   </main>
 
 
-<main class="crm-view hidden" id="home-view" style="padding:0; overflow:auto;">
+<main class="crm-view hidden" id="home-view" style="padding:0; overflow:auto; height:calc(100vh - 56px);">
   <div style="
-    min-height:calc(100vh - 56px);
-    padding:32px 40px 24px 40px;
-    display:flex;
-    flex-direction:column;
-    gap:24px;
-    position:relative;
+    height:100%;
+    padding:32px 48px;
+    display:grid;
+    grid-template-rows:auto 1fr 1fr auto;
+    gap:20px;
+    box-sizing:border-box;
   ">
 
-    <!-- LINHA 1: STATUS + NOTAS FISCAIS -->
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:24px;">
+    <!-- LINHA 1: STATUS (esquerda) + NOTAS FISCAIS (canto direito) -->
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
 
-      <!-- ESQUERDA: saudação + status -->
       <div>
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-          <span style="width:8px; height:8px; border-radius:50%; background:rgba(34,197,94,1); display:inline-block; flex-shrink:0;"></span>
-          <span id="home-greeting-label" style="font-size:13px; font-weight:700; color:rgba(252,228,228,0.6); text-transform:uppercase; letter-spacing:1px;">Bom dia</span>
-          <span id="home-greeting-name" style="font-size:13px; color:rgba(252,228,228,0.5);"></span>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+          <span style="width:8px; height:8px; border-radius:50%; background:rgba(34,197,94,1); display:inline-block;"></span>
+          <span id="home-greeting-label" style="font-size:13px; font-weight:700; color:rgba(252,228,228,0.5); text-transform:uppercase; letter-spacing:1.5px;">Bom dia</span>
+          <span id="home-greeting-name" style="font-size:13px; color:rgba(252,228,228,0.4);"></span>
         </div>
-        <h1 id="home-status-title" style="font-size:42px; font-weight:900; color:rgba(252,228,228,0.95); margin:0 0 6px 0; line-height:1.1; font-family:'Space Grotesk',sans-serif;">Tudo em ordem</h1>
-        <p id="home-status-sub" style="font-size:14px; color:rgba(252,228,228,0.45); margin:0;">Nenhum alerta no momento.</p>
+        <h1 id="home-status-title" style="font-size:40px; font-weight:900; color:rgba(252,228,228,0.95); margin:0 0 6px 0; line-height:1.1; font-family:'Space Grotesk',sans-serif;">Tudo em ordem</h1>
+        <p id="home-status-sub" style="font-size:14px; color:rgba(252,228,228,0.4); margin:0;">Nenhum alerta no momento.</p>
       </div>
 
-      <!-- DIREITA: notas fiscais -->
+      <!-- NOTAS FISCAIS — canto direito, compacto -->
       <div id="home-notas-card" style="
         background:rgba(18,18,20,1);
-        border:1px solid rgba(255,255,255,0.1);
+        border:1px solid rgba(255,255,255,0.09);
         border-radius:16px;
-        padding:20px 24px;
-        min-width:220px;
-        flex-shrink:0;
+        padding:16px 20px;
+        min-width:200px;
+        display:flex;
+        flex-direction:column;
+        gap:8px;
       ">
-        <div style="font-size:12px; font-weight:700; color:rgba(252,228,228,0.5); margin-bottom:8px;">Notas Fiscais</div>
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:16px;">
-          <div style="font-size:32px; font-weight:900; font-family:'Space Grotesk',sans-serif; color:rgba(252,228,228,0.95);">
-            <span id="home-notas-used">0</span><span style="color:rgba(252,228,228,0.3); font-size:20px;">/<span id="home-notas-limit">500</span></span>
+        <div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.4); letter-spacing:1px; text-transform:uppercase;">Notas Fiscais</div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+          <div style="font-size:28px; font-weight:900; font-family:'Space Grotesk',sans-serif; color:rgba(252,228,228,0.95); line-height:1;">
+            <span id="home-notas-used">0</span><span style="color:rgba(252,228,228,0.25); font-size:16px;">/<span id="home-notas-limit">500</span></span>
           </div>
-          <!-- ring circular -->
-          <svg viewBox="0 0 36 36" style="width:44px; height:44px; transform:rotate(-90deg); flex-shrink:0;">
-            <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/>
-            <circle id="home-notas-ring" cx="18" cy="18" r="15.9" fill="none" stroke="rgba(34,197,94,1)" stroke-width="3"
-              stroke-dasharray="0 100" stroke-linecap="round"/>
+          <svg viewBox="0 0 36 36" style="width:38px; height:38px; transform:rotate(-90deg); flex-shrink:0;">
+            <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="3"/>
+            <circle id="home-notas-ring" cx="18" cy="18" r="15.9" fill="none" stroke="rgba(34,197,94,1)" stroke-width="3" stroke-dasharray="0 100" stroke-linecap="round"/>
           </svg>
         </div>
-        <div class="home-notas-sub" style="font-size:11px; color:rgba(252,228,228,0.35); margin-top:4px;">Emitidas este mês</div>
+        <div class="home-notas-sub" style="font-size:11px; color:rgba(252,228,228,0.3);">Emitidas este mês</div>
       </div>
 
     </div>
 
-    <!-- LINHA 2: STATS ESQUERDA + ÚLTIMO PEDIDO DIREITA -->
-    <div style="display:grid; grid-template-columns:320px 1fr; gap:16px; align-items:start;">
+    <!-- LINHA 2: STATS (esquerda pequenos) + ÚLTIMO PEDIDO (direita grande) -->
+    <div style="display:grid; grid-template-columns:260px 1fr; gap:16px;">
 
       <!-- STATS EMPILHADOS -->
       <div style="display:flex; flex-direction:column; gap:12px;">
 
-        <div style="background:rgba(18,18,20,1); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:18px 20px; display:flex; align-items:center; gap:16px;">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(249,115,115,0.8)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        <div style="
+          flex:1;
+          background:rgba(18,18,20,1);
+          border:1px solid rgba(255,255,255,0.08);
+          border-radius:14px;
+          padding:16px 20px;
+          display:flex; align-items:center; gap:14px;
+        ">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(249,115,115,0.7)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           <div>
-            <div style="font-size:12px; color:rgba(252,228,228,0.45); margin-bottom:2px;">Pedidos hoje</div>
-            <div style="font-size:28px; font-weight:900; color:rgba(252,228,228,0.95); font-family:'Space Grotesk',sans-serif;" id="home-stat-pedidos">0</div>
+            <div style="font-size:11px; color:rgba(252,228,228,0.4); margin-bottom:2px;">Pedidos hoje</div>
+            <div style="font-size:26px; font-weight:900; color:rgba(252,228,228,0.95); font-family:'Space Grotesk',sans-serif; line-height:1;" id="home-stat-pedidos">0</div>
           </div>
         </div>
 
-        <div style="background:rgba(18,18,20,1); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:18px 20px; display:flex; align-items:center; gap:16px;">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(139,92,246,0.8)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        <div style="
+          flex:1;
+          background:rgba(18,18,20,1);
+          border:1px solid rgba(255,255,255,0.08);
+          border-radius:14px;
+          padding:16px 20px;
+          display:flex; align-items:center; gap:14px;
+        ">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(139,92,246,0.7)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
           <div>
-            <div style="font-size:12px; color:rgba(252,228,228,0.45); margin-bottom:2px;">Mesas ocupadas</div>
-            <div style="font-size:28px; font-weight:900; color:rgba(252,228,228,0.95); font-family:'Space Grotesk',sans-serif;" id="home-stat-mesas">0/0</div>
-          </div>
-        </div>
-
-        <div style="background:rgba(18,18,20,1); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:18px 20px; display:flex; align-items:center; gap:16px;">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(251,191,36,0.8)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-          <div>
-            <div style="font-size:12px; color:rgba(252,228,228,0.45); margin-bottom:2px;">Faturamento hoje</div>
-            <div style="font-size:22px; font-weight:900; color:rgba(252,228,228,0.95); font-family:'Space Grotesk',sans-serif;" id="home-stat-faturamento">R$ 0,00</div>
+            <div style="font-size:11px; color:rgba(252,228,228,0.4); margin-bottom:2px;">Mesas ocupadas</div>
+            <div style="font-size:26px; font-weight:900; color:rgba(252,228,228,0.95); font-family:'Space Grotesk',sans-serif; line-height:1;" id="home-stat-mesas">0/0</div>
           </div>
         </div>
 
       </div>
 
-      <!-- ÚLTIMO PEDIDO -->
+      <!-- ÚLTIMO PEDIDO — ocupa todo o espaço direito -->
       <div id="home-ultimo-pedido" style="
         background:rgba(18,18,20,1);
         border:1px solid rgba(255,255,255,0.08);
         border-radius:14px;
-        padding:22px 24px;
+        padding:22px 28px;
         display:none;
+        flex-direction:column;
+        justify-content:space-between;
       ">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <span style="font-size:13px; font-weight:700; color:rgba(252,228,228,0.5);">Último pedido</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <span style="font-size:12px; font-weight:700; color:rgba(252,228,228,0.4); text-transform:uppercase; letter-spacing:1px;">Último pedido</span>
           <span id="home-ultimo-badge" style="
             display:none;
             background:rgba(249,115,115,0.15);
             color:rgba(249,115,115,1);
-            border:1px solid rgba(249,115,115,0.4);
+            border:1px solid rgba(249,115,115,0.35);
             font-size:10px; font-weight:800;
             padding:3px 12px; border-radius:99px;
             text-transform:uppercase; letter-spacing:1px;
           ">NOVO</span>
         </div>
         <div style="display:flex; align-items:center; gap:16px;">
-          <div style="width:40px; height:40px; background:rgba(249,115,115,0.12); border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(249,115,115,0.9)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <div style="width:44px; height:44px; background:rgba(249,115,115,0.1); border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(249,115,115,0.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           </div>
           <div style="flex:1;">
-            <div style="font-size:17px; font-weight:800; color:rgba(252,228,228,0.95); margin-bottom:3px;" id="home-ultimo-cliente">—</div>
+            <div style="font-size:18px; font-weight:800; color:rgba(252,228,228,0.95); margin-bottom:4px;" id="home-ultimo-cliente">—</div>
             <div style="font-size:13px; color:rgba(252,228,228,0.4);" id="home-ultimo-info">—</div>
           </div>
-          <div style="font-size:22px; font-weight:900; color:rgba(252,228,228,0.95); font-family:'Space Grotesk',sans-serif;" id="home-ultimo-valor">R$ 0,00</div>
+          <div style="font-size:26px; font-weight:900; color:rgba(252,228,228,0.95); font-family:'Space Grotesk',sans-serif;" id="home-ultimo-valor">—</div>
         </div>
+      </div>
+
+      <!-- placeholder quando não tem pedido -->
+      <div id="home-sem-pedido" style="
+        background:rgba(18,18,20,1);
+        border:1px solid rgba(255,255,255,0.05);
+        border-radius:14px;
+        display:flex; align-items:center; justify-content:center;
+      ">
+        <span style="font-size:13px; color:rgba(252,228,228,0.2); font-style:italic;">Nenhum pedido ainda hoje</span>
       </div>
 
     </div>
 
-    <!-- LINHA 3: MESAS + PAUSAR ITEM -->
+    <!-- LINHA 3: MESAS (esquerda) + PAUSAR ITEM (direita) -->
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
 
       <!-- MESAS ABERTAS HÁ MAIS TEMPO -->
@@ -407,74 +424,86 @@ input:focus, textarea:focus, select:focus {
         padding:20px 24px;
         display:none;
       ">
-        <div style="font-size:13px; font-weight:700; color:rgba(252,228,228,0.5); margin-bottom:16px;">Mesas abertas há mais tempo</div>
+        <div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.4); text-transform:uppercase; letter-spacing:1px; margin-bottom:16px;">Mesas abertas há mais tempo</div>
         <div id="home-mesas-lista" style="display:flex; flex-direction:column; gap:14px;"></div>
       </div>
 
-      <!-- PAUSAR ITEM QUE ACABOU -->
+      <!-- placeholder mesas quando vazio -->
+      <div id="home-mesas-vazio" style="
+        background:rgba(18,18,20,1);
+        border:1px solid rgba(255,255,255,0.05);
+        border-radius:14px;
+        display:flex; align-items:center; justify-content:center;
+      ">
+        <span style="font-size:13px; color:rgba(252,228,228,0.2); font-style:italic;">Nenhuma mesa aberta</span>
+      </div>
+
+      <!-- PAUSAR ITEM -->
       <div style="
         background:rgba(18,18,20,1);
         border:1px solid rgba(255,255,255,0.08);
         border-radius:14px;
         padding:20px 24px;
+        display:flex;
+        flex-direction:column;
+        gap:14px;
       ">
-        <div style="font-size:13px; font-weight:700; color:rgba(252,228,228,0.5); margin-bottom:14px;">Pausar item que acabou</div>
+        <div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.4); text-transform:uppercase; letter-spacing:1px;">Pausar item que acabou</div>
 
-        <div style="display:flex; gap:10px; margin-bottom:14px;">
-          <div style="flex:1; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px 14px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(252,228,228,0.3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="home-pausar-busca" type="text" placeholder="Buscar item..." autocomplete="off" style="
-              flex:1; background:transparent; border:none; outline:none;
-              color:rgba(252,228,228,0.8); font-size:14px; font-family:inherit;
-            "/>
+        <div style="display:flex; gap:10px;">
+          <div style="flex:1; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px 14px; position:relative;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(252,228,228,0.3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="home-pausar-busca" type="text" placeholder="Buscar item..." autocomplete="off" style="flex:1; background:transparent; border:none; outline:none; color:rgba(252,228,228,0.85); font-size:14px; font-family:inherit;"/>
           </div>
           <button onclick="_pausarItemHome()" style="
-            padding:10px 18px; border-radius:10px;
-            border:1px solid rgba(255,255,255,0.15);
+            padding:10px 20px; border-radius:10px;
+            border:1px solid rgba(255,255,255,0.12);
             background:transparent; color:rgba(252,228,228,0.8);
             font-size:13px; font-weight:700; cursor:pointer; font-family:inherit;
-            white-space:nowrap;
           ">Pausar</button>
         </div>
 
-        <!-- DROPDOWN AUTOCOMPLETE -->
         <div id="home-pausar-dropdown" style="
-          display:none; background:rgba(20,20,22,0.98);
-          border:1px solid rgba(255,255,255,0.12); border-radius:10px;
-          max-height:160px; overflow-y:auto; margin-bottom:10px;
+          display:none;
+          background:rgba(20,20,22,0.98);
+          border:1px solid rgba(255,255,255,0.1);
+          border-radius:10px;
+          max-height:150px;
+          overflow-y:auto;
+          margin-top:-8px;
         "></div>
 
-        <div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">Itens pausados</div>
-        <div id="home-pausados-lista" style="display:flex; flex-direction:column; gap:8px;">
-          <div style="color:rgba(252,228,228,0.2); font-size:13px; font-style:italic;">Nenhum item pausado</div>
+        <div>
+          <div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">Itens pausados</div>
+          <div id="home-pausados-lista">
+            <div style="color:rgba(252,228,228,0.2); font-size:13px; font-style:italic;">Nenhum item pausado</div>
+          </div>
         </div>
       </div>
 
     </div>
 
-    <!-- RODAPÉ: botão ir para pedidos -->
-    <div style="display:flex; justify-content:flex-end; margin-top:auto;">
+    <!-- LINHA 4: RODAPÉ -->
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div style="font-size:11px; color:rgba(252,228,228,0.18); font-weight:600; letter-spacing:1px; text-transform:uppercase;">FluxON · Evorise</div>
       <button onclick="showBoard()" style="
-        display:flex; align-items:center; gap:14px;
+        display:flex; align-items:center; gap:12px;
         background:transparent;
-        border:1.5px solid rgba(249,115,115,0.6);
-        border-radius:14px;
-        padding:16px 28px;
+        border:1.5px solid rgba(249,115,115,0.5);
+        border-radius:12px;
+        padding:14px 24px;
         color:rgba(252,228,228,0.9);
-        font-size:15px; font-weight:700;
+        font-size:14px; font-weight:700;
         cursor:pointer; font-family:inherit;
         transition:all 0.2s;
       "
       onmouseover="this.style.background='rgba(249,115,115,0.08)'"
       onmouseout="this.style.background='transparent'">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(249,115,115,0.9)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(249,115,115,0.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
         Ir para pedidos
-        <span style="color:rgba(249,115,115,0.7);">→</span>
+        <span style="color:rgba(249,115,115,0.6);">→</span>
       </button>
     </div>
-
-    <!-- RODAPÉ TEXTO -->
-    <div style="font-size:11px; color:rgba(252,228,228,0.2); font-weight:600; letter-spacing:1px; text-transform:uppercase;">FluxON · Evorise</div>
 
   </div>
 </main>
