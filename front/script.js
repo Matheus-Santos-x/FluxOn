@@ -661,19 +661,25 @@ function _atualizarStatusHome() {
 }
 
 function _atualizarUltimoPedido() {
-  const card = document.getElementById("home-ultimo-pedido");
+  const card        = document.getElementById("home-ultimo-pedido");
+  const placeholder = document.getElementById("home-sem-pedido");
   if (!card) return;
 
   const ordenados = [...orders]
     .filter(o => o._frontStatus !== "cancelado")
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-  if (!ordenados.length) { card.style.display = "none"; return; }
+  if (!ordenados.length) {
+    card.style.display        = "none";
+    if (placeholder) placeholder.style.display = "flex";
+    return;
+  }
+
+  if (placeholder) placeholder.style.display = "none";
 
   const ult = ordenados[0];
-  const minAtras = Math.floor((Date.now() - new Date(
-    ult.created_at.includes("Z") || ult.created_at.includes("+") ? ult.created_at : ult.created_at + "Z"
-  ).getTime()) / 60000);
+  const raw = ult.created_at.includes("Z") || ult.created_at.includes("+") ? ult.created_at : ult.created_at + "Z";
+  const minAtras = Math.floor((Date.now() - new Date(raw).getTime()) / 60000);
 
   const statusLabels = {
     recebido: "Recebido", preparo: "Em preparo", pronto: "Pronto",
@@ -711,22 +717,33 @@ function _getMesasAbertas() {
 }
 
 function _atualizarMesasTempo() {
-  const card  = document.getElementById("home-mesas-tempo");
-  const lista = document.getElementById("home-mesas-lista");
+  const card     = document.getElementById("home-mesas-tempo");
+  const vazio    = document.getElementById("home-mesas-vazio");
+  const lista    = document.getElementById("home-mesas-lista");
   if (!card || !lista) return;
 
   const mesas = _getMesasAbertas().slice(0, 3);
-  if (!mesas.length) { card.style.display = "none"; return; }
+
+  if (!mesas.length) {
+    card.style.display  = "none";
+    if (vazio) vazio.style.display = "flex";
+    return;
+  }
+
+  if (vazio) vazio.style.display = "none";
 
   lista.innerHTML = mesas.map(m => {
-    const cor   = m.minutos > 90 ? "rgba(239,68,68,1)" : m.minutos > 60 ? "rgba(251,191,36,1)" : "rgba(34,197,94,1)";
+    const cor   = m.minutos > 90 ? "rgba(239,68,68,1)" : m.minutos > 60 ? "rgba(251,191,36,1)" : "rgba(252,228,228,0.7)";
     const texto = m.minutos >= 60
       ? `${Math.floor(m.minutos / 60)}h${m.minutos % 60 > 0 ? String(m.minutos % 60).padStart(2, "0") + "min" : ""}`
       : `${m.minutos} min`;
     return `
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:14px; font-weight:700; color:rgba(252,228,228,0.85);">${m.label}</span>
-        <span style="font-size:14px; font-weight:900; color:${cor};">${texto}</span>
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(252,228,228,0.35)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          <span style="font-size:14px; font-weight:700; color:rgba(252,228,228,0.85);">${m.label}</span>
+        </div>
+        <span style="font-size:15px; font-weight:900; color:${cor}; font-family:'Space Grotesk',sans-serif;">${texto}</span>
       </div>`;
   }).join("");
 
