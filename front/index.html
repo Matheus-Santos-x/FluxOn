@@ -284,9 +284,10 @@ input:focus, textarea:focus, select:focus {
   <div style="
     height:100%;
     padding:40px 60px;
-    display:grid;
-    grid-template-rows:auto 1fr 1fr auto;
+display:grid;
+grid-template-rows:auto 1fr 1fr auto;
 gap:28px;
+min-height:calc(100vh - 56px);
     box-sizing:border-box;
   ">
 
@@ -373,10 +374,11 @@ gap:20px;">
         background:rgba(18,18,20,1);
         border:1px solid rgba(255,255,255,0.08);
         border-radius:14px;
-        padding:22px 28px;
-        display:none;
-        flex-direction:column;
-        justify-content:space-between;
+        padding:28px 32px;
+display:none;
+flex-direction:column;
+justify-content:space-between;
+min-height:100%;
       ">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
           <span style="font-size:12px; font-weight:700; color:rgba(252,228,228,0.4); text-transform:uppercase; letter-spacing:1px;">Último pedido</span>
@@ -390,7 +392,7 @@ gap:20px;">
             text-transform:uppercase; letter-spacing:1px;
           ">NOVO</span>
         </div>
-        <div style="display:flex; align-items:center; gap:16px;">
+        <div style="ddisplay:flex; align-items:center; gap:16px; margin-top:auto;">
           <div style="width:44px; height:44px; background:rgba(249,115,115,0.1); border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(249,115,115,0.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           </div>
