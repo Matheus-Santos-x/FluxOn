@@ -283,10 +283,10 @@ input:focus, textarea:focus, select:focus {
 <main class="crm-view hidden" id="home-view" style="padding:0; overflow:auto; height:calc(100vh - 56px);">
   <div style="
     height:100%;
-    padding:32px 48px;
+    padding:40px 60px;
     display:grid;
     grid-template-rows:auto 1fr 1fr auto;
-    gap:20px;
+gap:28px;
     box-sizing:border-box;
   ">
 
@@ -330,7 +330,8 @@ input:focus, textarea:focus, select:focus {
     </div>
 
     <!-- LINHA 2: STATS (esquerda pequenos) + ÚLTIMO PEDIDO (direita grande) -->
-    <div style="display:grid; grid-template-columns:260px 1fr; gap:16px;">
+    <div style="display:grid; grid-template-columns:280px 1fr;
+gap:20px;">
 
       <!-- STATS EMPILHADOS -->
       <div style="display:flex; flex-direction:column; gap:12px;">
@@ -414,7 +415,8 @@ input:focus, textarea:focus, select:focus {
     </div>
 
     <!-- LINHA 3: MESAS (esquerda) + PAUSAR ITEM (direita) -->
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr;
+gap:20px;">
 
       <!-- MESAS ABERTAS HÁ MAIS TEMPO -->
       <div id="home-mesas-tempo" style="
@@ -487,7 +489,7 @@ input:focus, textarea:focus, select:focus {
     <div style="display:flex; justify-content:space-between; align-items:center;">
       <div style="font-size:11px; color:rgba(252,228,228,0.18); font-weight:600; letter-spacing:1px; text-transform:uppercase;">FluxON · Evorise</div>
       <button onclick="showBoard()" style="
-        display:flex; align-items:center; gap:12px;
+        display:flex; align-items:center; gap:16px;
         background:transparent;
         border:1.5px solid rgba(249,115,115,0.5);
         border-radius:12px;
