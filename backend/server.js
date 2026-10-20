@@ -2677,7 +2677,8 @@ app.patch("/api/v1/restaurante/:restaurant_id/fiscal", async (req, res) => {
     const { restaurant_id } = req.params;
     const { focusnfe_token, cnpj, inscricao_estadual, regime_tributario } = req.body;
     const existing = await getIntegracao(restaurant_id, "focusnfe");
-    const dados = {
+        const dados = {
+      ...existing,
       focusnfe_token: focusnfe_token !== "configurado" ? focusnfe_token : existing?.focusnfe_token,
       cnpj, inscricao_estadual, regime_tributario
     };
@@ -2686,6 +2687,30 @@ app.patch("/api/v1/restaurante/:restaurant_id/fiscal", async (req, res) => {
       updated_at: new Date().toISOString()
     }, { onConflict: "restaurant_id,tipo" });
     return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// PATCH - Liga/desliga a emissão de nota fiscal
+app.patch("/api/v1/restaurante/:restaurant_id/fiscal/emissao", async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const { ativo } = req.body;
+    if (typeof ativo !== "boolean") return sendError(res, 400, "ativo deve ser true ou false");
+
+    const existing = await getIntegracao(restaurant_id, "focusnfe");
+    if (!existing) return sendError(res, 400, "Configure o Focus NFe nas configurações antes");
+
+    const { error } = await supabase.from("integracoes").upsert({
+      restaurant_id, tipo: "focusnfe",
+      dados: { ...existing, emissao_ativa: ativo },
+      ativo: true,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "restaurant_id,tipo" });
+
+    if (error) return sendError(res, 500, "Erro ao salvar");
+    return res.json({ success: true, emissao_ativa: ativo });
   } catch (err) {
     return sendError(res, 500, "Erro interno");
   }
@@ -4349,8 +4374,9 @@ app.get("/api/v1/restaurante/:restaurant_id/notas-fiscais/contador", requireOwne
       .eq("ano", ano)
       .single();
 
-    const usado = data?.quantidade || 0;
-    return res.json({ usado, limite: 500, mes, ano });
+        const usado = data?.quantidade || 0;
+    const fiscal = await getIntegracao(restaurant_id, "focusnfe");
+    return res.json({ usado, limite: 500, mes, ano, emissao_ativa: fiscal?.emissao_ativa !== false });
   } catch (err) {
     return sendError(res, 500, err.message);
   }
