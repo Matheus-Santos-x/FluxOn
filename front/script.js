@@ -776,12 +776,15 @@ async function _atualizarNotasFiscais() {
     const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/notas-fiscais/contador`);
     if (!resp.ok) { card.style.display = "none"; return; }
 
-    const { usado, limite } = await resp.json();
+    const { usado, limite, emissao_ativa } = await resp.json();
     const pct  = Math.min((usado / limite) * 100, 100);
     const circ = 2 * Math.PI * 15.9;
 
 document.getElementById("home-notas-used").textContent  = usado;
 document.getElementById("home-notas-limit").textContent = limite;
+
+const nfToggle = document.getElementById("home-nf-toggle");
+if (nfToggle && !nfToggle.disabled) nfToggle.checked = emissao_ativa !== false;
 
 // Texto auxiliar embaixo
 const subEl = card.querySelector(".home-notas-sub");
@@ -802,9 +805,29 @@ if (subEl) {
       ring.setAttribute("stroke", pct > 90 ? "rgba(239,68,68,1)" : pct > 70 ? "rgba(251,191,36,1)" : "rgba(34,197,94,1)");
     }
 
-    card.style.display = "flex";
+    card.style.display = "block";
   } catch (e) {
     card.style.display = "none";
+  }
+}
+
+async function _toggleEmissaoNF(el) {
+  const novo = el.checked;
+  el.disabled = true;
+  try {
+    const rid  = getRestaurantId();
+    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/fiscal/emissao`, {
+      method: "PATCH",
+      headers: buildHeaders(),
+      body: JSON.stringify({ ativo: novo })
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || "Erro ao salvar");
+  } catch (e) {
+    el.checked = !novo; // volta ao estado anterior se falhar
+    alert("Não foi possível alterar a emissão de nota fiscal: " + e.message);
+  } finally {
+    el.disabled = false;
   }
 }
 
