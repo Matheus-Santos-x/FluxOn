@@ -372,7 +372,7 @@ input:focus, textarea:focus, select:focus {
       <span id="home-notas-used" style="font-size:26px;">0</span><span style="color:rgba(252,228,228,.28); font-size:26px; font-weight:700;">/<span id="home-notas-limit">500</span></span>
     </div>
     <label class="fx-switch" title="Ligar/desligar emissão de nota fiscal">
-      <input type="checkbox" id="home-nf-toggle" checked>
+      <input type="checkbox" id="home-nf-toggle" onchange="_toggleEmissaoNF(this)">
       <span></span>
     </label>
   </div>
