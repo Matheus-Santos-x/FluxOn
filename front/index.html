@@ -326,6 +326,13 @@ input:focus, textarea:focus, select:focus {
 #home-view #home-pausados-lista::-webkit-scrollbar-thumb{ background:rgba(252,165,165,.25); border-radius:4px; }
 #home-view #home-mesas-lista,
 #home-view #home-pausados-lista{ scrollbar-width:thin; scrollbar-color:rgba(252,165,165,.25) transparent; }
+    #home-view .fx-switch{ position:relative; width:44px; height:24px; flex-shrink:0; display:block; }
+#home-view .fx-switch input{ position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer; z-index:2; }
+#home-view .fx-switch span{ position:absolute; inset:0; border-radius:99px; background:rgba(255,255,255,.12); transition:background .2s; }
+#home-view .fx-switch span::after{ content:""; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition:transform .2s; }
+#home-view .fx-switch input:checked + span{ background:#22c55e; }
+#home-view .fx-switch input:checked + span::after{ transform:translateX(20px); }
+#home-view .fx-switch input:focus-visible + span{ outline:2px solid #fca5a5; outline-offset:2px; }
     @media (prefers-reduced-motion:reduce){ #home-view *{ animation:none !important } }
   </style>
 
@@ -358,19 +365,23 @@ input:focus, textarea:focus, select:focus {
         </div>
 
         <!-- NOTAS FISCAIS -->
-        <div id="home-notas-card" class="fx-card" style="padding:16px 20px; min-width:196px;">
-          <div class="fx-label" style="margin-bottom:10px;">Notas fiscais</div>
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:14px;">
-            <div class="fx-num">
-              <span id="home-notas-used" style="font-size:28px;">0</span><span style="color:rgba(252,228,228,.28); font-size:13px; font-weight:400;">/<span id="home-notas-limit">500</span></span>
-            </div>
-            <svg viewBox="0 0 36 36" style="width:36px; height:36px; transform:rotate(-90deg); flex-shrink:0;">
-              <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="2.5"/>
-              <circle id="home-notas-ring" cx="18" cy="18" r="15.9" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-dasharray="0 100" stroke-linecap="round" style="transition:stroke-dasharray .8s ease;"/>
-            </svg>
-          </div>
-          <div class="home-notas-sub" style="font-size:11px; color:rgba(252,228,228,.32); margin-top:6px;">Emitidas este mês</div>
-        </div>
+       <div id="home-notas-card" class="fx-card" style="padding:16px 20px; min-width:230px;">
+  <div class="fx-label" style="margin-bottom:10px; font-size:12px;">Notas Fiscais</div>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:18px;">
+    <div class="fx-num">
+      <span id="home-notas-used" style="font-size:26px;">0</span><span style="color:rgba(252,228,228,.28); font-size:26px; font-weight:700;">/<span id="home-notas-limit">500</span></span>
+    </div>
+    <label class="fx-switch" title="Ligar/desligar emissão de nota fiscal">
+      <input type="checkbox" id="home-nf-toggle" checked>
+      <span></span>
+    </label>
+  </div>
+  <!-- mantidos escondidos para o JS atual não quebrar -->
+  <div style="display:none;">
+    <svg viewBox="0 0 36 36"><circle id="home-notas-ring" cx="18" cy="18" r="15.9" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-dasharray="0 100"/></svg>
+    <div class="home-notas-sub">Emitidas este mês</div>
+  </div>
+</div>
       </div>
     </div>
 
