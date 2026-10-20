@@ -320,6 +320,12 @@ input:focus, textarea:focus, select:focus {
       background:rgba(239,68,68,.08); cursor:pointer; font-family:inherit; white-space:nowrap; transition:background .2s, border-color .2s; }
     #home-view .fx-btn:hover{ background:rgba(239,68,68,.16); border-color:rgba(248,113,113,.6); }
     #home-view .fx-btn:focus-visible{ outline:2px solid #fca5a5; outline-offset:2px; }
+    #home-view #home-mesas-lista::-webkit-scrollbar,
+#home-view #home-pausados-lista::-webkit-scrollbar{ width:4px; }
+#home-view #home-mesas-lista::-webkit-scrollbar-thumb,
+#home-view #home-pausados-lista::-webkit-scrollbar-thumb{ background:rgba(252,165,165,.25); border-radius:4px; }
+#home-view #home-mesas-lista,
+#home-view #home-pausados-lista{ scrollbar-width:thin; scrollbar-color:rgba(252,165,165,.25) transparent; }
     @media (prefers-reduced-motion:reduce){ #home-view *{ animation:none !important } }
   </style>
 
