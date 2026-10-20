@@ -369,7 +369,7 @@ input:focus, textarea:focus, select:focus {
     </div>
 
     <!-- MEIO: livre -->
-    <div style="flex:1; min-height:120px; pointer-events:none;"></div>
+    <div style="flex:1; min-height:0; pointer-events:none;"></div>
 
     <!-- PARTE INFERIOR -->
     <div style="display:flex; flex-direction:column; gap:12px;">
@@ -427,7 +427,7 @@ input:focus, textarea:focus, select:focus {
 
         <div id="home-mesas-tempo" class="fx-card" style="padding:18px 22px; display:none; grid-column:1; height:220px;">
           <div class="fx-label" style="margin-bottom:14px;">Mesas abertas há mais tempo</div>
-          <div id="home-mesas-lista" style="display:flex; flex-direction:column; gap:12px;"></div>
+          <div id="home-mesas-lista" style="display:flex; flex-direction:column; gap:12px; max-height:150px; overflow-y:auto; padding-right:6px;"></div>
         </div>
 
         <div id="home-mesas-vazio" class="fx-card" style="display:flex; align-items:center; justify-content:center; grid-column:1; padding:20px; height:220px;">
@@ -444,9 +444,9 @@ input:focus, textarea:focus, select:focus {
             <button class="fx-btn" onclick="_pausarItemHome()">Pausar</button>
           </div>
           <div id="home-pausar-dropdown" style="display:none; background:rgba(14,14,16,.99); border:1px solid rgba(255,255,255,.08); border-radius:10px; max-height:140px; overflow-y:auto; margin-top:-8px;"></div>
-          <div>
-            <div class="fx-label" style="margin-bottom:8px; color:rgba(252,228,228,.32);">Itens pausados</div>
-            <div id="home-pausados-lista">
+          <div style="flex:1; min-height:0; display:flex; flex-direction:column;">
+  <div class="fx-label" style="margin-bottom:8px; color:rgba(252,228,228,.32);">Itens pausados</div>
+  <div id="home-pausados-lista" style="flex:1; min-height:0; overflow-y:auto; padding-right:6px;">
               <div style="color:rgba(252,228,228,.26); font-size:13px; font-style:italic;">Nenhum item pausado</div>
             </div>
           </div>
