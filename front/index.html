@@ -950,6 +950,28 @@ input:focus, textarea:focus, select:focus {
               <option value="3">Regime Normal</option>
             </select>
           </label>
+                   <label style="display:flex; flex-direction:column; gap:6px;">
+            <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Ambiente da nota fiscal</span>
+            <select id="settings-nfe-ambiente" style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit; cursor:pointer;">
+              <option value="homologacao">Homologação (teste, sem valor fiscal)</option>
+              <option value="producao">Produção</option>
+            </select>
+          </label>
+          <label style="display:flex; flex-direction:column; gap:6px;">
+            <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">NCM padrão dos itens</span>
+            <input type="text" id="settings-nfe-ncm" placeholder="8 dígitos" maxlength="8" inputmode="numeric"
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          </label>
+          <label style="display:flex; flex-direction:column; gap:6px;">
+            <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">CFOP padrão</span>
+            <input type="text" id="settings-nfe-cfop" placeholder="5102" maxlength="4" inputmode="numeric"
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          </label>
+          <label style="display:flex; flex-direction:column; gap:6px;">
+            <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">CSOSN padrão</span>
+            <input type="text" id="settings-nfe-csosn" placeholder="102" maxlength="3" inputmode="numeric"
+              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          </label>
           <button class="primary-button" id="btn-salvar-nfe" style="margin-top:4px; width:100%;">Salvar configuração fiscal</button>
           <p id="settings-nfe-status" style="margin-top:4px; font-size:13px; min-height:18px;"></p>
         </div>
