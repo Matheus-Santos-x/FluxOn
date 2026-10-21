@@ -2765,7 +2765,17 @@ async function incrementarContadorNF(restaurant_id) {
   }
 }
 
+// Executa a emissão e, ao terminar, avisa o front em tempo real
 async function emitirNFCe(orderId) {
+  try {
+    await _emitirNFCeInterno(orderId);
+  } finally {
+    const { data } = await supabase.from("orders").select("*").eq("id", orderId).single();
+    if (data?.nfe_status) emitOrderUpdate(data.restaurant_id, data);
+  }
+}
+
+async function _emitirNFCeInterno(orderId) {
   const { data: pedido } = await supabase.from("orders").select("*").eq("id", orderId).single();
   if (!pedido || pedido.status !== "finished" || pedido.nfe_status) return;
   if (pedido.origin === "fidelidade") return;
