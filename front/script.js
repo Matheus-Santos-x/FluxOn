@@ -1584,6 +1584,12 @@ async function loadSettingsData() {
       document.getElementById("settings-ie").value = dataFiscal.inscricao_estadual;
     if (dataFiscal.regime_tributario)
       document.getElementById("settings-regime").value = dataFiscal.regime_tributario;
+
+    const setIf = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.value = v; };
+    setIf("settings-nfe-ambiente", dataFiscal.ambiente);
+    setIf("settings-nfe-ncm", dataFiscal.ncm_padrao);
+    setIf("settings-nfe-cfop", dataFiscal.cfop_padrao);
+    setIf("settings-nfe-csosn", dataFiscal.csosn_padrao);
   } catch (e) {
     console.error("Erro ao carregar fiscal:", e);
   }
@@ -6650,15 +6656,20 @@ async function salvarFiscal() {
   const cnpj = document.getElementById("settings-cnpj").value.trim();
   const inscricao_estadual = document.getElementById("settings-ie").value.trim();
   const regime_tributario = document.getElementById("settings-regime").value;
+  const ambiente = document.getElementById("settings-nfe-ambiente")?.value || "homologacao";
+  const ncm_padrao = document.getElementById("settings-nfe-ncm")?.value.trim() || "";
+  const cfop_padrao = document.getElementById("settings-nfe-cfop")?.value.trim() || "";
+  const csosn_padrao = document.getElementById("settings-nfe-csosn")?.value.trim() || "";
   const status = document.getElementById("settings-nfe-status");
 
   try {
     const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/fiscal`, {
       method: "PATCH",
       headers: buildHeaders(),
-      body: JSON.stringify({ focusnfe_token, cnpj, inscricao_estadual, regime_tributario })
+      body: JSON.stringify({ focusnfe_token, cnpj, inscricao_estadual, regime_tributario, ambiente, ncm_padrao, cfop_padrao, csosn_padrao })
     });
-    status.textContent = resp.ok ? "✅ Configuração fiscal salva!" : "❌ Erro ao salvar.";
+    const d = await resp.json().catch(() => ({}));
+    status.textContent = resp.ok ? "✅ Configuração fiscal salva!" : `❌ ${d.error || "Erro ao salvar."}`;
     status.style.color = resp.ok ? "rgba(34,197,94,0.9)" : "rgba(239,68,68,0.9)";
   } catch (e) {
     status.textContent = "❌ Erro de conexão.";
