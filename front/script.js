@@ -2228,9 +2228,11 @@ if (!resumoBtn) {
 }
 resumoBtn.onclick = () => imprimirResumo(activeOrderId);
 const isDeliveryOrder = String(order.service_type || "").toLowerCase() === "delivery";
-resumoBtn.classList.toggle("hidden",
-  order._frontStatus !== "pronto" || isDeliveryOrder
-);
+const mostrarResumo =
+  (order._frontStatus === "pronto" && !isDeliveryOrder) ||
+  (order._frontStatus === "finalizado" && order.nfe_status === "autorizada");
+resumoBtn.classList.toggle("hidden", !mostrarResumo);
+resumoBtn.innerHTML = order._frontStatus === "finalizado" ? "🖨️ Reimprimir Resumo com QR" : "🖨️ Imprimir Resumo";
 
   modalCancelBtn?.classList.toggle("hidden", ["cancelado", "finalizado"].includes(order._frontStatus));
   if (modalNextBtn) {
@@ -2477,6 +2479,8 @@ const paymentStr = pagamentosValidos.length === 1
 
         const idx = orders.findIndex(x => x.id === orderId);
         if (idx !== -1) orders[idx]._frontStatus = "finalizado";
+        // Emissão ligada: imprime o resumo com o QR da nota (sem travar a tela)
+        if (document.getElementById("home-nf-toggle")?.checked) imprimirResumo(orderId);
         modal.remove();
         await fetchOrders();
         renderBoard();
