@@ -2970,6 +2970,17 @@ app.patch("/api/v1/restaurante/:restaurant_id/fiscal/emissao", async (req, res) 
     const existing = await getIntegracao(restaurant_id, "focusnfe");
     if (!existing) return sendError(res, 400, "Configure o Focus NFe nas configurações antes");
 
+    if (ativo) {
+      const faltando = [];
+      if (!existing.focusnfe_token) faltando.push("token do Focus NFe");
+      if (!existing.cnpj) faltando.push("CNPJ");
+      if (!existing.inscricao_estadual) faltando.push("inscrição estadual");
+      if (String(existing.ncm_padrao || process.env.NFCE_NCM_PADRAO || "").replace(/\D/g, "").length !== 8) faltando.push("NCM padrão");
+      if (String(existing.regime_tributario || "1") !== "1") faltando.push("regime Simples Nacional (único suportado)");
+      if (faltando.length > 0)
+        return sendError(res, 400, `Para ligar, falta configurar: ${faltando.join(", ")}`);
+    }
+
     const { error } = await supabase.from("integracoes").upsert({
       restaurant_id, tipo: "focusnfe",
       dados: { ...existing, emissao_ativa: ativo },
@@ -4679,39 +4690,6 @@ app.get("/api/v1/restaurante/:restaurant_id/notas-fiscais/contador", requireOwne
     return sendError(res, 500, err.message);
   }
 });
-
-app.post("/api/v1/restaurante/:restaurant_id/notas-fiscais/incrementar", requireAuth, async (req, res) => {
-  try {
-    const { restaurant_id } = req.params;
-    const agora = new Date();
-    const mes   = agora.getMonth() + 1;
-    const ano   = agora.getFullYear();
-
-    const { data: existente } = await supabase
-      .from("notas_fiscais_contador")
-      .select("id, quantidade")
-      .eq("restaurant_id", restaurant_id)
-      .eq("mes", mes)
-      .eq("ano", ano)
-      .single();
-
-    if (existente) {
-      await supabase
-        .from("notas_fiscais_contador")
-        .update({ quantidade: existente.quantidade + 1 })
-        .eq("id", existente.id);
-    } else {
-      await supabase
-        .from("notas_fiscais_contador")
-        .insert([{ restaurant_id, mes, ano, quantidade: 1 }]);
-    }
-
-    return res.json({ success: true });
-  } catch (err) {
-    return sendError(res, 500, err.message);
-  }
-});
-
 
 // ===== HEALTH CHECK =====
 app.get("/health", (req, res) => {
