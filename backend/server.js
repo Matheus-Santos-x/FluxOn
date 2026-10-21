@@ -2876,12 +2876,19 @@ async function _emitirNFCeInterno(orderId) {
     const auth = "Basic " + Buffer.from(`${fiscal.focusnfe_token}:`).toString("base64");
     const ref = encodeURIComponent(pedido.id);
 
-    const resp = await fetch(`${base}/v2/nfce?ref=${ref}`, {
-      method: "POST",
-      headers: { Authorization: auth, "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    let dados = await resp.json().catch(() => ({}));
+        // já existe na Focus? (ex: servidor reiniciou no meio) — consulta antes de reenviar
+    let dados = {};
+    const consulta = await fetch(`${base}/v2/nfce/${ref}`, { headers: { Authorization: auth } });
+    if (consulta.ok) dados = await consulta.json().catch(() => ({}));
+
+    if (!["autorizado", "processando_autorizacao"].includes(dados.status)) {
+      const resp = await fetch(`${base}/v2/nfce?ref=${ref}`, {
+        method: "POST",
+        headers: { Authorization: auth, "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      dados = await resp.json().catch(() => ({}));
+    }
 
     // se a SEFAZ ainda estiver processando, consulta algumas vezes
     for (let i = 0; i < 5 && dados.status === "processando_autorizacao"; i++) {
@@ -2916,6 +2923,32 @@ async function _emitirNFCeInterno(orderId) {
     await falhar(err.message);
   }
 }
+
+// POST - Reemite a nota de um pedido (após erro ou emissão travada)
+app.post("/api/v1/restaurante/:restaurant_id/notas-fiscais/reemitir", requireAuth, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const { order_id } = req.body || {};
+    if (!order_id) return sendError(res, 400, "order_id é obrigatório");
+
+    const { data: pedido } = await supabase
+      .from("orders").select("id, status, nfe_status")
+      .eq("id", order_id).eq("restaurant_id", restaurant_id).single();
+    if (!pedido) return sendError(res, 404, "Pedido não encontrado");
+    if (pedido.status !== "finished") return sendError(res, 400, "Só dá para emitir nota de pedido finalizado");
+    if (pedido.nfe_status === "autorizada") return sendError(res, 400, "Esta nota já foi autorizada");
+
+    // libera o pedido para uma nova tentativa e emite de novo
+    await supabase.from("orders").update({ nfe_status: null, nfe_erro: null }).eq("id", order_id);
+    await emitirNFCe(order_id);
+
+    const { data: atualizado } = await supabase
+      .from("orders").select("nfe_status, nfe_erro, nfe_url").eq("id", order_id).single();
+    return res.json({ success: true, ...atualizado });
+  } catch (err) {
+    return sendError(res, 500, err.message);
+  }
+});
 
 // PATCH - Liga/desliga a emissão de nota fiscal
 app.patch("/api/v1/restaurante/:restaurant_id/fiscal/emissao", async (req, res) => {
