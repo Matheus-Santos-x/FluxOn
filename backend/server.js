@@ -2668,7 +2668,11 @@ app.get("/api/v1/restaurante/:restaurant_id/fiscal", async (req, res) => {
       focusnfe_token: dados?.focusnfe_token ? "configurado" : "",
       cnpj: dados?.cnpj || "",
       inscricao_estadual: dados?.inscricao_estadual || "",
-      regime_tributario: dados?.regime_tributario || "1"
+           regime_tributario: dados?.regime_tributario || "1",
+      ambiente: dados?.ambiente || "homologacao",
+      ncm_padrao: dados?.ncm_padrao || "",
+      cfop_padrao: dados?.cfop_padrao || "5102",
+      csosn_padrao: dados?.csosn_padrao || "102"
     });
   } catch (err) {
     return sendError(res, 500, "Erro interno");
@@ -2679,11 +2683,17 @@ app.get("/api/v1/restaurante/:restaurant_id/fiscal", async (req, res) => {
 app.patch("/api/v1/restaurante/:restaurant_id/fiscal", async (req, res) => {
   try {
     const { restaurant_id } = req.params;
-    const { focusnfe_token, cnpj, inscricao_estadual, regime_tributario } = req.body;
+        const { focusnfe_token, cnpj, inscricao_estadual, regime_tributario, ambiente, ncm_padrao, cfop_padrao, csosn_padrao } = req.body;
+    if (ncm_padrao && String(ncm_padrao).replace(/\D/g, "").length !== 8)
+      return sendError(res, 400, "NCM deve ter 8 dígitos");
     const existing = await getIntegracao(restaurant_id, "focusnfe");
         const dados = {
       ...existing,
-      focusnfe_token: focusnfe_token !== "configurado" ? focusnfe_token : existing?.focusnfe_token,
+            focusnfe_token: focusnfe_token !== "configurado" ? focusnfe_token : existing?.focusnfe_token,
+      ...(ambiente !== undefined && { ambiente: ambiente === "producao" ? "producao" : "homologacao" }),
+      ...(ncm_padrao !== undefined && { ncm_padrao: String(ncm_padrao).replace(/\D/g, "") }),
+      ...(cfop_padrao !== undefined && { cfop_padrao: String(cfop_padrao).replace(/\D/g, "") || "5102" }),
+      ...(csosn_padrao !== undefined && { csosn_padrao: String(csosn_padrao).replace(/\D/g, "") || "102" }),
       cnpj, inscricao_estadual, regime_tributario
     };
     await supabase.from("integracoes").upsert({
