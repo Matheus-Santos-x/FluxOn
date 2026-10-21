@@ -2870,6 +2870,28 @@ const paymentStr = pagamentosValidos.length === 1
   renderModal();
 }
   
+async function reemitirNFCe(orderId) {
+  const rid = getRestaurantId();
+  const btn = document.getElementById("modal-nfe-reemitir");
+  if (btn) { btn.disabled = true; btn.textContent = "Reemitindo..."; }
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/notas-fiscais/reemitir`, {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify({ order_id: orderId })
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || "Erro ao reemitir");
+
+    const idx = orders.findIndex(o => o.id === orderId);
+    if (idx !== -1) orders[idx] = { ...orders[idx], nfe_status: data.nfe_status, nfe_erro: data.nfe_erro, nfe_url: data.nfe_url };
+    if (activeOrderId === orderId) openOrderModal(orderId);
+  } catch (e) {
+    alert("Não foi possível reemitir: " + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = "Reemitir"; }
+  }
+}
+
 function cancelOrder(orderId) {
   updateOrderStatus(orderId, "cancelado");
 }
