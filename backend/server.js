@@ -1033,6 +1033,10 @@ const { data: orderAntes } = await supabase
     if (error || !data) return sendError(res, 500, "Erro ao atualizar pedido");
     emitOrderUpdate(data.restaurant_id, data);
     
+if (status === "finished") {
+  emitirNFCe(data.id).catch(e => console.error("⚠️ Erro NFC-e:", e.message));
+}
+
 // ✅ COLOCA ISSO NO LUGAR:
 if (status === "preparing") {
   if (ordersEmImpressao.has(id)) {
@@ -2692,6 +2696,217 @@ app.patch("/api/v1/restaurante/:restaurant_id/fiscal", async (req, res) => {
   }
 });
 
+// Espera a NFC-e autorizar para imprimir o QR no resumo (null = imprime resumo normal)
+async function aguardarNFCeParaImpressao(order) {
+  try {
+    if (order.status !== "finished") return null; // antes de finalizar não existe nota
+    const fiscal = await getIntegracao(order.restaurant_id, "focusnfe");
+    if (fiscal?.emissao_ativa !== true) return null; // desligado: resumo normal
+
+    for (let i = 0; i < 10; i++) { // espera até ~15s
+      const { data } = await supabase
+        .from("orders")
+        .select("nfe_status, nfe_qrcode, nfe_chave, nfe_numero, nfe_serie")
+        .eq("id", order.id).single();
+      if (data?.nfe_status === "autorizada" && data.nfe_qrcode)
+        return { qrcode: data.nfe_qrcode, chave: data.nfe_chave, numero: data.nfe_numero, serie: data.nfe_serie };
+      if (data?.nfe_status === "erro") return null;
+      if (!data?.nfe_status && i >= 2) return null; // nota nem foi iniciada (ex: pedido sem valor)
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// ===== EMISSÃO DE NFC-e (Focus NFe) =====
+const FOCUS_URL = {
+  homologacao: "https://homologacao.focusnfe.com.br",
+  producao: "https://api.focusnfe.com.br"
+};
+
+function formaPagamentoNFCe(texto) {
+  const t = String(texto || "").toLowerCase();
+  if (t.includes("dinheiro") || t.includes("cash")) return "01";
+  if (t.includes("credito") || t.includes("crédito") || t.includes("credit")) return "03";
+  if (t.includes("debito") || t.includes("débito") || t.includes("debit")) return "04";
+  if (t.includes("pix")) return "17";
+  return "99";
+}
+
+function montarPagamentosNFCe(paymentMethod, totalCents) {
+  const str = String(paymentMethod || "");
+  if (str.includes("+")) {
+    const partes = str.split("+").map(p => {
+      const m = p.match(/\$\s*(\d+(?:\.\d+)?)/);
+      return { forma: formaPagamentoNFCe(p), cents: m ? Math.round(parseFloat(m[1]) * 100) : 0 };
+    });
+    const soma = partes.reduce((s, p) => s + p.cents, 0);
+    if (partes.every(p => p.cents > 0) && soma === totalCents) return partes;
+    return [{ forma: partes[0].forma, cents: totalCents }];
+  }
+  return [{ forma: formaPagamentoNFCe(str), cents: totalCents }];
+}
+
+async function incrementarContadorNF(restaurant_id) {
+  const agora = new Date();
+  const mes = agora.getMonth() + 1;
+  const ano = agora.getFullYear();
+  const { data: existente } = await supabase
+    .from("notas_fiscais_contador").select("id, quantidade")
+    .eq("restaurant_id", restaurant_id).eq("mes", mes).eq("ano", ano).single();
+  if (existente) {
+    await supabase.from("notas_fiscais_contador")
+      .update({ quantidade: existente.quantidade + 1 }).eq("id", existente.id);
+  } else {
+    await supabase.from("notas_fiscais_contador")
+      .insert([{ restaurant_id, mes, ano, quantidade: 1 }]);
+  }
+}
+
+async function emitirNFCe(orderId) {
+  const { data: pedido } = await supabase.from("orders").select("*").eq("id", orderId).single();
+  if (!pedido || pedido.status !== "finished" || pedido.nfe_status) return;
+  if (pedido.origin === "fidelidade") return;
+
+  const totalCents = Math.round((parseFloat(pedido.total_price) || 0) * 100);
+  if (totalCents <= 0) return;
+
+  const fiscal = await getIntegracao(pedido.restaurant_id, "focusnfe");
+  if (fiscal?.emissao_ativa !== true || !fiscal?.focusnfe_token || !fiscal?.cnpj) return;
+
+  // reserva o pedido: só uma chamada passa daqui (evita nota duplicada)
+  const { data: reservado } = await supabase
+    .from("orders").update({ nfe_status: "processando", nfe_ref: pedido.id })
+    .eq("id", orderId).is("nfe_status", null).select("id").single();
+  if (!reservado) return;
+
+  const falhar = async (msg) => {
+    console.error(`❌ NFC-e pedido #${pedido.order_number}: ${msg}`);
+    await supabase.from("orders")
+      .update({ nfe_status: "erro", nfe_erro: String(msg).slice(0, 500) }).eq("id", orderId);
+  };
+
+  try {
+    if (String(fiscal.regime_tributario || "1") !== "1")
+      return await falhar("Regime tributário não suportado (só Simples Nacional)");
+
+    const ncm = String(fiscal.ncm_padrao || process.env.NFCE_NCM_PADRAO || "").replace(/\D/g, "");
+    if (ncm.length !== 8) return await falhar("NCM padrão não configurado (ncm_padrao)");
+    const cfop = String(fiscal.cfop_padrao || "5102");
+    const csosn = String(fiscal.csosn_padrao || "102");
+
+    // itens do pedido COMPLETO (inclui tudo que foi adicionado depois)
+    const itens = (Array.isArray(pedido.itens) ? pedido.itens : [])
+      .map(it => ({
+        nome: String(it.name || it.nome || "Item").slice(0, 120),
+        qty: Number(it.qty || it.quantidade || it.quantity || 1),
+        precoCents: Math.round((parseFloat(it.price ?? it.preco ?? 0) || 0) * 100)
+      }))
+      .filter(it => it.precoCents > 0 && it.qty > 0);
+    if (itens.length === 0) return await falhar("Nenhum item com preço no pedido");
+
+    const brutos = itens.map(it => Math.round(it.precoCents * it.qty));
+    const somaCents = brutos.reduce((s, v) => s + v, 0);
+    const diff = totalCents - somaCents;
+    if (diff > 0)
+      return await falhar(`Total do pedido (${totalCents / 100}) maior que a soma dos itens (${somaCents / 100})`);
+
+    // total menor que a soma dos itens = desconto, distribuído nos itens
+    let descontoRestante = -diff;
+    const items = itens.map((it, i) => {
+      const desc = Math.min(descontoRestante, brutos[i] - 1);
+      descontoRestante -= desc;
+      const item = {
+        numero_item: String(i + 1),
+        codigo_produto: String(i + 1),
+        descricao: it.nome,
+        codigo_ncm: ncm,
+        cfop,
+        unidade_comercial: "UN",
+        quantidade_comercial: String(it.qty),
+        valor_unitario_comercial: (it.precoCents / 100).toFixed(2),
+        valor_bruto: (brutos[i] / 100).toFixed(2),
+        unidade_tributavel: "UN",
+        quantidade_tributavel: String(it.qty),
+        valor_unitario_tributavel: (it.precoCents / 100).toFixed(2),
+        inclui_no_total: "1",
+        icms_origem: "0",
+        icms_situacao_tributaria: csosn
+      };
+      if (desc > 0) item.valor_desconto = (desc / 100).toFixed(2);
+      return item;
+    });
+    if (descontoRestante > 0) return await falhar("Desconto maior que o valor dos itens");
+
+    const isDelivery = String(pedido.service_type || "").toLowerCase() === "delivery";
+    const formas_pagamento = montarPagamentosNFCe(pedido.payment_method, totalCents).map(p => ({
+      forma_pagamento: p.forma,
+      valor_pagamento: (p.cents / 100).toFixed(2),
+      ...(["03", "04"].includes(p.forma) ? { bandeira_operadora: "99" } : {})
+    }));
+
+    const payload = {
+      cnpj_emitente: String(fiscal.cnpj).replace(/\D/g, ""),
+      data_emissao: new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).replace(" ", "T") + "-03:00",
+      natureza_operacao: "Venda ao Consumidor",
+      tipo_documento: "1",
+      presenca_comprador: isDelivery ? "4" : "1",
+      finalidade_emissao: "1",
+      modalidade_frete: "9",
+      valor_produtos: (somaCents / 100).toFixed(2),
+      valor_desconto: ((somaCents - totalCents) / 100).toFixed(2),
+      valor_total: (totalCents / 100).toFixed(2),
+      items,
+      formas_pagamento
+    };
+
+    const base = FOCUS_URL[fiscal.ambiente === "producao" ? "producao" : "homologacao"];
+    const auth = "Basic " + Buffer.from(`${fiscal.focusnfe_token}:`).toString("base64");
+    const ref = encodeURIComponent(pedido.id);
+
+    const resp = await fetch(`${base}/v2/nfce?ref=${ref}`, {
+      method: "POST",
+      headers: { Authorization: auth, "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    let dados = await resp.json().catch(() => ({}));
+
+    // se a SEFAZ ainda estiver processando, consulta algumas vezes
+    for (let i = 0; i < 5 && dados.status === "processando_autorizacao"; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const r2 = await fetch(`${base}/v2/nfce/${ref}`, { headers: { Authorization: auth } });
+      dados = await r2.json().catch(() => dados);
+    }
+
+    if (dados.status === "autorizado") {
+      const caminho = dados.caminho_danfe || dados.url_consulta_nf || null;
+      const url = caminho && !String(caminho).startsWith("http") ? base + caminho : caminho;
+           console.log("🧾 Retorno Focus (autorizado):", JSON.stringify(dados));
+      await supabase.from("orders")
+        .update({
+          nfe_status: "autorizada",
+          nfe_url: url,
+          nfe_erro: null,
+          nfe_qrcode: dados.qrcode_url || null,
+          nfe_chave: dados.chave_nfe || null,
+          nfe_numero: dados.numero != null ? String(dados.numero) : null,
+          nfe_serie: dados.serie != null ? String(dados.serie) : null
+        }).eq("id", orderId);
+      await incrementarContadorNF(pedido.restaurant_id);
+      console.log(`🧾 NFC-e autorizada — Pedido #${pedido.order_number}`);
+    } else if (dados.status === "processando_autorizacao") {
+      await supabase.from("orders")
+        .update({ nfe_status: "processando", nfe_erro: "Aguardando retorno da SEFAZ" }).eq("id", orderId);
+    } else {
+      await falhar(dados.mensagem_sefaz || dados.mensagem || JSON.stringify(dados));
+    }
+  } catch (err) {
+    await falhar(err.message);
+  }
+}
+
 // PATCH - Liga/desliga a emissão de nota fiscal
 app.patch("/api/v1/restaurante/:restaurant_id/fiscal/emissao", async (req, res) => {
   try {
@@ -2730,7 +2945,7 @@ function gerarCupom(origin) {
   return `${prefixo}-${codigo}`;
 }
 
-async function printOrder(order, apiKey, printerId, is_caixa = false) {
+async function printOrder(order, apiKey, printerId, is_caixa = false, nfce = null) {
   try {
     const isDelivery = String(order.service_type || '').toLowerCase() === 'delivery';
     const itens = Array.isArray(order.itens) ? order.itens : [];
@@ -2975,6 +3190,31 @@ lf();
       b(GS, 0x56, 0x41, 0x06);
     }
     
+// 🧾 QR da NFC-e no final do resumo (só quando a nota foi autorizada)
+if (is_caixa && nfce?.qrcode && bytes.slice(-4).join(",") === [GS, 0x56, 0x41, 0x06].join(",")) {
+  const corte = bytes.splice(bytes.length - 4, 4); // tira o corte do final
+  const dadosQr = Buffer.from(String(nfce.qrcode), "ascii");
+  const len = dadosQr.length + 3;
+
+  lf();
+  b(ESC, 0x61, 0x01); // centraliza
+  b(ESC, 0x45, 0x01); txt('Consulte sua nota pelo QR Code'); b(ESC, 0x45, 0x00); lf();
+  lf();
+  b(GS, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00);                 // QR modelo 2
+  b(GS, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, 0x05);                       // tamanho
+  b(GS, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31);                       // correção de erro
+  b(GS, 0x28, 0x6B, len & 0xFF, (len >> 8) & 0xFF, 0x31, 0x50, 0x30);    // guarda os dados
+  dadosQr.forEach(v => bytes.push(v));
+  b(GS, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30);                       // imprime
+  lf();
+  if (nfce.numero) { txt(`NFC-e ${nfce.numero} Serie ${nfce.serie || ""}`); lf(); }
+  if (nfce.chave)  { txt('Chave de acesso:'); lf(); txt(nfce.chave); lf(); }
+  lf();
+  b(ESC, 0x61, 0x00);
+
+  bytes.push(...corte); // recoloca o corte no final
+}
+
 const rawBuffer = Buffer.from(bytes);
 let response;
 let tentativas = 0;
@@ -3191,7 +3431,9 @@ app.post("/api/v1/restaurante/:restaurant_id/imprimir-pedido", async (req, res) 
     // Só imprime resumo (caixa) — impressão normal fica no PATCH preparing
     if (!printer_id_override) return res.json({ success: true });
 
-    const success = await printOrder(order, config.api_key, printer_id_override, true);
+        // Emissão ligada + pedido já finalizado: espera a nota e imprime o QR no fim do resumo
+    const nfce = await aguardarNFCeParaImpressao(order);
+    const success = await printOrder(order, config.api_key, printer_id_override, true, nfce);
     if (!success) return sendError(res, 500, "Erro ao enviar para impressora");
     return res.json({ success: true });
 
@@ -3734,6 +3976,7 @@ app.post("/api/v1/restaurante/:restaurant_id/mp/cobrar", async (req, res) => {
             if (updated) {
               emitOrderUpdate(updated.restaurant_id, updated);
               console.log(`✅ Pedido ${order_id} finalizado via payment search`);
+              emitirNFCe(updated.id).catch(e => console.error("⚠️ Erro NFC-e:", e.message));
             }
             return;
           }
@@ -3757,6 +4000,7 @@ app.post("/api/v1/restaurante/:restaurant_id/mp/cobrar", async (req, res) => {
           if (updated) {
             emitOrderUpdate(updated.restaurant_id, updated);
             console.log(`✅ Pedido ${order_id} finalizado via polling MP`);
+            emitirNFCe(updated.id).catch(e => console.error("⚠️ Erro NFC-e:", e.message));
           }
 
         } else if (statusData.state === "CANCELED" || statusData.state === "ERROR") {
@@ -3957,6 +4201,7 @@ const statusResp = await fetch(
       if (updated) {
         emitOrderUpdate(order.restaurant_id, updated);
         console.log(`✅ Pedido ${order.order_number} finalizado via MP`);
+        emitirNFCe(updated.id).catch(e => console.error("⚠️ Erro NFC-e:", e.message));
       }
 
     } else if (statusData.state === "CANCELED" || statusData.state === "ERROR") {
@@ -4376,7 +4621,7 @@ app.get("/api/v1/restaurante/:restaurant_id/notas-fiscais/contador", requireOwne
 
         const usado = data?.quantidade || 0;
     const fiscal = await getIntegracao(restaurant_id, "focusnfe");
-    return res.json({ usado, limite: 500, mes, ano, emissao_ativa: fiscal?.emissao_ativa !== false });
+    return res.json({ usado, limite: 500, mes, ano, emissao_ativa: fiscal?.emissao_ativa === true });
   } catch (err) {
     return sendError(res, 500, err.message);
   }
