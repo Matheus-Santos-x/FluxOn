@@ -636,6 +636,7 @@ function _atualizarStatusHome() {
 
   // Pedidos ativos no momento
   const ativos = orders.filter(o => ["recebido", "preparo", "pronto", "caminho"].includes(o._frontStatus));
+  const notasComErro = orders.filter(o => o.nfe_status === "erro");
 
   if (atrasados.length > 0) {
     titleEl.textContent = "Pedido atrasado ⚠️";
@@ -645,6 +646,10 @@ function _atualizarStatusHome() {
     titleEl.textContent = "Mesa aberta há mais de 1h30";
     titleEl.style.color = "rgba(251,191,36,1)";
     subEl.textContent   = `Mesa${mesasVelhas.length > 1 ? "s" : ""} ${mesasVelhas.map(m => m.label).join(", ")} — por favor, verificar.`;
+  } else if (notasComErro.length > 0) {
+    titleEl.textContent = "Nota fiscal com erro ⚠️";
+    titleEl.style.color = "rgba(251,191,36,1)";
+    subEl.textContent   = `${notasComErro.length} nota${notasComErro.length > 1 ? "s" : ""} com erro — abra o pedido finalizado e clique em Reemitir.`;
   } else if (ativos.length > 5) {
     titleEl.textContent = "Movimentado 🔥";
     titleEl.style.color = "rgba(249,115,115,1)";
@@ -2280,6 +2285,28 @@ if (order.table_number) {
   }
 }
   
+  // Nota fiscal (NFC-e)
+  document.getElementById("modal-nfe-row")?.remove();
+  if (order.nfe_status) {
+    const nfeCores = { autorizada: "34,197,94", erro: "239,68,68", processando: "251,191,36" };
+    const nfeTextos = { autorizada: "Nota fiscal autorizada", erro: "Erro na nota fiscal", processando: "Nota fiscal em processamento" };
+    const cor = nfeCores[order.nfe_status] || "252,228,228";
+    const nfeRow = document.createElement("div");
+    nfeRow.id = "modal-nfe-row";
+    nfeRow.style.cssText = `display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 14px; border-radius:10px; background:rgba(${cor},0.1); border:1px solid rgba(${cor},0.35); margin-top:8px;`;
+    nfeRow.innerHTML = `
+      <div style="min-width:0; flex:1;">
+        <div style="font-size:13px; font-weight:700; color:rgba(${cor},1);">🧾 ${nfeTextos[order.nfe_status] || escapeHtml(order.nfe_status)}</div>
+        ${order.nfe_status !== "autorizada" && order.nfe_erro ? `<div style="font-size:12px; color:rgba(252,228,228,0.6); margin-top:4px;">${escapeHtml(order.nfe_erro)}</div>` : ""}
+      </div>
+      <div style="display:flex; gap:8px;">
+        ${order.nfe_url ? `<a href="${escapeHtml(order.nfe_url)}" target="_blank" rel="noopener" style="padding:6px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.18); color:rgba(252,228,228,0.8); font-size:12px; font-weight:700; text-decoration:none;">Ver nota</a>` : ""}
+        ${["erro", "processando"].includes(order.nfe_status) ? `<button id="modal-nfe-reemitir" onclick="reemitirNFCe('${order.id}')" style="padding:6px 12px; border-radius:8px; border:1px solid rgba(239,68,68,0.5); background:transparent; color:rgba(239,68,68,0.9); font-size:12px; font-weight:700; cursor:pointer; font-family:inherit;">Reemitir</button>` : ""}
+      </div>`;
+    const nfeBody = modalItems?.closest(".modal-body") || modalItems?.parentElement;
+    if (nfeBody) nfeBody.appendChild(nfeRow);
+  }
+
   openBackdrop(modalBackdrop);
 }
 
