@@ -1641,6 +1641,28 @@ app.patch("/admin/restaurants/:id/dominios", requireAdmin, async (req, res) => {
   }
 });
 
+app.post("/admin/impersonate", requireAdmin, async (req, res) => {
+  try {
+    const { restaurant_id } = req.body || {};
+    if (!restaurant_id) return sendError(res, 400, "restaurant_id é obrigatório");
+
+    const { data, error } = await supabase
+      .from("restaurants").select("*").eq("id", restaurant_id).single();
+    if (error || !data) return sendError(res, 404, "Restaurante não encontrado");
+
+    const token = jwt.sign(
+      { restaurant_id: data.id, email: data.email, plan: data.plan, impersonated_by: req.auth.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "4h" }
+    );
+
+    await logAdminAction(req.auth.email, "impersonate", { restaurant_id, restaurant_name: data.name });
+    return res.json({ success: true, token, restaurant: data });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
 // GET - Busca pedido por ID
 app.get("/api/v1/pedidos/:id", requireRowOwner("orders"), async (req, res) => {
   try {
