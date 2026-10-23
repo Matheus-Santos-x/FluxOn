@@ -184,6 +184,22 @@ input:focus, textarea:focus, select:focus {
   </style>
 </head>
 <body>
+  <!-- BANNER DE IMPERSONAÇÃO -->
+  <div id="impersonate-banner" class="hidden" style="
+    position:fixed; top:0; left:0; right:0; z-index:100000;
+    background:rgba(251,191,36,0.95); color:#1a1a1a;
+    padding:10px 20px; text-align:center;
+    font-size:13px; font-weight:800; font-family:inherit;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+  ">
+    <span>👁️ Você está vendo: <span id="impersonate-banner-name">—</span></span>
+    <button id="impersonate-banner-exit" style="
+      padding:4px 12px; border-radius:8px; border:1.5px solid #1a1a1a;
+      background:transparent; color:#1a1a1a; font-weight:800; font-size:12px;
+      cursor:pointer; font-family:inherit;
+    ">Sair</button>
+  </div>
+
   <!-- TELA DE LOGIN -->
   <div class="login-screen" id="login-screen">
     <div class="login-card">
@@ -1209,6 +1225,203 @@ input:focus, textarea:focus, select:focus {
     </div>
   </div>
 </main>
+
+<!-- ADMIN VIEW -->
+<main class="crm-view hidden" id="admin-view">
+  <div class="crm-header">
+    <div class="crm-title">🛡️ Painel Admin</div>
+    <button class="ghost-button" type="button" id="admin-back-btn">Voltar</button>
+  </div>
+  <div class="crm-content">
+    <div style="max-width:720px; display:flex; flex-direction:column; gap:20px;">
+
+      <!-- SELECT COM BUSCA + IMPERSONATE -->
+      <div style="position:relative;">
+        <div style="display:flex; gap:10px;">
+          <input id="admin-search-restaurant" autocomplete="off" placeholder="Buscar restaurante por nome..."
+            style="flex:1; padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.18);
+            background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+          <button class="primary-button" id="admin-btn-novo" style="white-space:nowrap;">+ Novo Restaurante</button>
+        </div>
+        <div id="admin-search-dropdown" style="display:none; position:absolute; left:0; right:0; top:50px; z-index:999;
+          background:rgba(20,20,22,0.98); border:1px solid rgba(255,255,255,0.18); border-radius:12px;
+          max-height:260px; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,0.6);"></div>
+      </div>
+
+      <!-- RESTAURANTE SELECIONADO -->
+      <div id="admin-selected-card" class="hidden" style="
+        background:rgba(28,28,30,0.45); border:1px solid rgba(255,255,255,0.18);
+        border-radius:14px; padding:18px 20px; display:flex; justify-content:space-between; align-items:center; gap:12px;">
+        <div>
+          <div id="admin-selected-name" style="font-size:16px; font-weight:800; color:rgba(252,228,228,0.95);"></div>
+          <div id="admin-selected-meta" style="font-size:12px; color:rgba(252,228,228,0.4); margin-top:4px;"></div>
+        </div>
+        <button class="ghost-button" id="admin-btn-impersonate" style="border-color:rgba(34,197,94,0.5); color:rgba(34,197,94,1); white-space:nowrap;">
+          👁️ Impersonate
+        </button>
+      </div>
+
+      <!-- FORMULÁRIOS DO RESTAURANTE SELECIONADO -->
+      <div id="admin-forms" class="hidden" style="display:flex; flex-direction:column; gap:0;">
+
+        <!-- 🏢 RESTAURANTE -->
+        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
+          <button onclick="toggleAccordion('admin-restaurante')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:18px;">🏢</span>
+              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Restaurante</span>
+            </div>
+            <span id="arrow-admin-restaurante" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
+          </button>
+          <div id="accordion-admin-restaurante" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Nome</span>
+              <input id="admin-f-name" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Email (login Google)</span>
+              <input id="admin-f-email" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Plano</span>
+              <select id="admin-f-plan" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;">
+                <option value="essential">Essential</option>
+                <option value="advanced">Advanced</option>
+                <option value="executive">Executive</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <button class="primary-button" id="admin-btn-save-restaurante" style="margin-top:4px;">Salvar</button>
+            <p id="admin-status-restaurante" style="font-size:13px; min-height:18px; margin:0;"></p>
+          </div>
+        </div>
+
+        <!-- 🎨 APARÊNCIA -->
+        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
+          <button onclick="toggleAccordion('admin-aparencia')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:18px;">🎨</span>
+              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Aparência do Cardápio</span>
+            </div>
+            <span id="arrow-admin-aparencia" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
+          </button>
+          <div id="accordion-admin-aparencia" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Nome de exibição</span>
+              <input id="admin-f-nome-exibicao" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Subtítulo</span>
+              <input id="admin-f-subtitulo" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Logo URL</span>
+              <input id="admin-f-logo" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+            </label>
+            <div style="display:flex; gap:10px;">
+              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Cor primária</span>
+                <input id="admin-f-cor-primaria" type="color" style="height:40px; padding:4px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; cursor:pointer;" />
+              </label>
+              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Cor secundária</span>
+                <input id="admin-f-cor-secundaria" type="color" style="height:40px; padding:4px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; cursor:pointer;" />
+              </label>
+              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Cor de fundo</span>
+                <input id="admin-f-cor-fundo" type="color" style="height:40px; padding:4px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; cursor:pointer;" />
+              </label>
+            </div>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Tema</span>
+              <select id="admin-f-tema" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;">
+                <option value="dark">Escuro</option>
+                <option value="light">Claro</option>
+              </select>
+            </label>
+            <button class="primary-button" id="admin-btn-save-aparencia" style="margin-top:4px;">Salvar</button>
+            <p id="admin-status-aparencia" style="font-size:13px; min-height:18px; margin:0;"></p>
+          </div>
+        </div>
+
+        <!-- 🕐 HORÁRIOS -->
+        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
+          <button onclick="toggleAccordion('admin-horarios')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:18px;">🕐</span>
+              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Horários de Funcionamento</span>
+            </div>
+            <span id="arrow-admin-horarios" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
+          </button>
+          <div id="accordion-admin-horarios" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
+            <div id="admin-horarios-lista" style="display:flex; flex-direction:column; gap:8px;"></div>
+            <button class="primary-button" id="admin-btn-save-horarios" style="margin-top:4px;">Salvar horários</button>
+            <p id="admin-status-horarios" style="font-size:13px; min-height:18px; margin:0;"></p>
+          </div>
+        </div>
+
+        <!-- 📋 DADOS E OPERAÇÃO -->
+        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
+          <button onclick="toggleAccordion('admin-operacao')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:18px;">📋</span>
+              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Dados e Operação</span>
+            </div>
+            <span id="arrow-admin-operacao" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
+          </button>
+          <div id="accordion-admin-operacao" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
+            <div style="display:flex; gap:10px;">
+              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Telefone</span>
+                <input id="admin-f-telefone" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+              </label>
+              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Instagram</span>
+                <input id="admin-f-instagram" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+              </label>
+            </div>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Endereço</span>
+              <input id="admin-f-endereco" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+            </label>
+            <div style="display:flex; gap:10px;">
+              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Número de mesas</span>
+                <input id="admin-f-mesas" type="number" min="0" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+              </label>
+              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Pedido mínimo (R$)</span>
+                <input id="admin-f-pedido-minimo" type="number" min="0" step="0.01" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+              </label>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Entrega mín. (min)</span>
+                <input id="admin-f-entrega-min" type="number" min="0" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+              </label>
+              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Entrega máx. (min)</span>
+                <input id="admin-f-entrega-max" type="number" min="0" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+              </label>
+            </div>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Pagamento online (separado por vírgula)</span>
+              <input id="admin-f-pagamento-online" placeholder="pix, credito" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Pagamento na entrega (separado por vírgula)</span>
+              <input id="admin-f-pagamento-entrega" placeholder="dinheiro, maquininha" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+            </label>
+            <button class="primary-button" id="admin-btn-save-operacao" style="margin-top:4px;">Salvar</button>
+            <p id="admin-status-operacao" style="font-size:13px; min-height:18px; margin:0;"></p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</main>
+
 <!-- MODAL DE PEDIDO -->
 <div class="modal-backdrop" id="modal">
   <div class="modal">
@@ -1416,6 +1629,11 @@ border:1px solid rgba(255,255,255,0.08);
 </button>
   <button type="button" class="drawer-item" id="drawer-results">
     <span class="drawer-icon">📈</span> Resultados
+  </button>
+
+  <div class="drawer-section-label" id="drawer-admin-label" style="display:none;">Admin</div>
+  <button type="button" class="drawer-item hidden" id="drawer-admin">
+    <span class="drawer-icon">🛡️</span> Painel Admin
   </button>
 
 </nav>
