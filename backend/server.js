@@ -195,6 +195,13 @@ app.use(express.json({ limit: '10mb' }));
 const AUTH_MODE = process.env.AUTH_MODE || "log";
 const SERVICE_KEY = process.env.SERVICE_API_KEY || "";
 
+const ADMIN_EMAILS = new Set(
+  String(process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean)
+);
+
 function safeEqual(a, b) {
   const x = Buffer.from(String(a)), y = Buffer.from(String(b));
   return x.length === y.length && crypto.timingSafeEqual(x, y);
@@ -205,7 +212,14 @@ function readAuth(req) {
   if (h.startsWith("Bearer ")) {
     try {
       const p = jwt.verify(h.slice(7), process.env.JWT_SECRET, { algorithms: ["HS256"] });
-      return { kind: "user", restaurant_id: p.restaurant_id, plan: p.plan, email: p.email };
+      return {
+        kind: "user",
+        restaurant_id: p.restaurant_id,
+        plan: p.plan,
+        email: p.email,
+        is_admin: !!p.is_admin,           // ← NOVO
+        impersonated_by: p.impersonated_by || null // ← NOVO
+      };
     } catch {}
   }
   const key = req.headers["x-service-key"];
@@ -243,6 +257,16 @@ const requireRowOwner = (table) => async (req, res, next) => {
   if (data && data.restaurant_id === a.restaurant_id) return next();
   return denyOrPass(req, res, next, `${table} de outro restaurante ou inexistente`, 403);
 };
+
+function requireAdmin(req, res, next) {
+  const auth = readAuth(req);
+  if (!auth || auth.kind !== "user" || !auth.is_admin) {
+    console.warn(`🔒 ADMIN bloqueado: ${req.method} ${req.originalUrl}`);
+    return res.status(403).json({ error: "Acesso restrito ao painel admin" });
+  }
+  req.auth = auth;
+  return next();
+}
 
 // Prefixos do painel (só registram por enquanto)
 app.use("/crm/:restaurant_id", requireAuth);
@@ -1411,6 +1435,16 @@ app.post("/auth/google", async (req, res) => {
     if (error || !data || data.length === 0)
       return res.status(403).json({ authorized: false });
 
+        const isAdmin = ADMIN_EMAILS.has(String(email).toLowerCase());
+
+    const token = jwt.sign(
+      { restaurant_id: data[0].id, email, plan: data[0].plan, is_admin: isAdmin },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    return res.json({ authorized: true, restaurant: data[0], token, is_admin: isAdmin });
+
     // Gera um JWT próprio para autenticar nas próximas requisições
     const token = jwt.sign(
       { restaurant_id: data[0].id, email, plan: data[0].plan },
@@ -1439,6 +1473,11 @@ app.post("/auth/refresh", async (req, res) => {
       return res.status(401).json({ error: "Token inválido ou expirado" });
     }
 
+    // ← NOVO: token de impersonação nunca vira token comum
+    if (payload.impersonated_by) {
+      return res.status(403).json({ error: "Token de impersonação não pode ser renovado" });
+    }
+
     const { data, error } = await supabase
       .from("restaurants")
       .select("id, plan")
@@ -1449,7 +1488,7 @@ app.post("/auth/refresh", async (req, res) => {
       return res.status(403).json({ error: "Restaurante não encontrado" });
 
     const newToken = jwt.sign(
-      { restaurant_id: data.id, email: payload.email, plan: data.plan },
+      { restaurant_id: data.id, email: payload.email, plan: data.plan, is_admin: !!payload.is_admin }, // ← is_admin preservado
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
@@ -1457,6 +1496,148 @@ app.post("/auth/refresh", async (req, res) => {
     return res.json({ success: true, token: newToken });
   } catch (err) {
     return res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+/* ========================================
+   🛡️ ADMIN (PainelMaster)
+======================================== */
+
+async function logAdminAction(adminEmail, acao, detalhes = {}) {
+  try {
+    await supabase.from("admin_audit_log").insert([{
+      admin_email: adminEmail,
+      acao,
+      detalhes,
+      created_at: new Date().toISOString()
+    }]);
+  } catch (e) {
+    console.error("⚠️ Erro ao gravar admin_audit_log:", e.message);
+  }
+}
+
+// GET - Confirma se o usuário logado é admin (o front usa isso pra decidir se mostra a aba)
+app.get("/admin/me", requireAdmin, (req, res) => {
+  return res.json({ is_admin: true, email: req.auth.email, restaurant_id: req.auth.restaurant_id });
+});
+
+// GET - Lista restaurantes (busca opcional por nome), esconde a própria conta admin
+app.get("/admin/restaurants", requireAdmin, async (req, res) => {
+  try {
+    const { q = "" } = req.query;
+    let query = supabase
+      .from("restaurants")
+      .select("id, name, email, plan, created_at")
+      .order("name");
+
+    if (q.trim()) query = query.ilike("name", `%${q.trim()}%`);
+
+    const { data, error } = await query;
+    if (error) return sendError(res, 500, "Erro ao buscar restaurantes");
+
+    const filtrados = (data || []).filter(r => !ADMIN_EMAILS.has(String(r.email || "").toLowerCase()));
+    return res.json(filtrados);
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// POST - Cria restaurante (atômico via RPC)
+app.post("/admin/restaurants", requireAdmin, async (req, res) => {
+  try {
+    const { name, email, plan } = req.body || {};
+    if (!name || !email) return sendError(res, 400, "name e email são obrigatórios");
+
+    const { data, error } = await supabase.rpc("admin_criar_restaurante", {
+      p_name: name,
+      p_email: email,
+      p_plan: plan || "essential"
+    });
+
+    if (error) return sendError(res, 500, "Erro ao criar restaurante: " + error.message);
+
+    await logAdminAction(req.auth.email, "criar_restaurante", { name, email, plan: plan || "essential" });
+    return res.status(201).json({ success: true, restaurant: data });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// PATCH - Edita dados cadastrais do restaurante (nome, email, plano)
+app.patch("/admin/restaurants/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const fields = pick(req.body, ["name", "email", "plan"]);
+    if (Object.keys(fields).length === 0) return sendError(res, 400, "nada para atualizar");
+
+    const { data, error } = await supabase
+      .from("restaurants").update(fields).eq("id", id).select().single();
+    if (error) return sendError(res, 500, "Erro ao atualizar restaurante");
+
+    await logAdminAction(req.auth.email, "editar_restaurante", { restaurant_id: id, fields });
+    return res.json({ success: true, restaurant: data });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// PATCH - Admin edita config (aparência/dados/operação) de qualquer restaurante
+app.patch("/admin/restaurants/:id/config", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const fields = pick(req.body, CONFIG_CAMPOS); // reaproveita a constante que já existe
+
+    const { error } = await supabase
+      .from("restaurante_config")
+      .upsert({ restaurant_id: id, ...fields }, { onConflict: "restaurant_id" });
+    if (error) return sendError(res, 500, "Erro ao salvar config");
+
+    await logAdminAction(req.auth.email, "editar_config", { restaurant_id: id, fields });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// PATCH - Admin substitui horários de qualquer restaurante
+app.patch("/admin/restaurants/:id/horarios", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { horarios } = req.body;
+    if (!Array.isArray(horarios)) return sendError(res, 400, "horarios deve ser um array");
+
+    await supabase.from("restaurante_horarios").delete().eq("restaurant_id", id);
+    if (horarios.length > 0) {
+      const rows = horarios.map(h => ({
+        restaurant_id: id, dia_semana: h.dia_semana, abertura: h.abertura, fechamento: h.fechamento, ativo: true
+      }));
+      const { error } = await supabase.from("restaurante_horarios").insert(rows);
+      if (error) return sendError(res, 500, "Erro ao salvar horários");
+    }
+
+    await logAdminAction(req.auth.email, "editar_horarios", { restaurant_id: id });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// PATCH - Admin edita URLs de domínio e zera o cache de CORS
+app.patch("/admin/restaurants/:id/dominios", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const fields = pick(req.body, ["cardapio_url", "fidelidade_url", "tracking_url", "cardapio_delivery_url"]);
+    if (Object.keys(fields).length === 0) return sendError(res, 400, "nada para atualizar");
+
+    const { error } = await supabase.from("restaurants").update(fields).eq("id", id);
+    if (error) return sendError(res, 500, "Erro ao salvar domínios");
+
+    _dominiosCache = null; // ← zera o cache de 5min do CORS, como combinado
+
+    await logAdminAction(req.auth.email, "editar_dominios", { restaurant_id: id, fields });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
   }
 });
 
