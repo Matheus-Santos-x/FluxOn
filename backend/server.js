@@ -1435,7 +1435,7 @@ app.post("/auth/google", async (req, res) => {
     if (error || !data || data.length === 0)
       return res.status(403).json({ authorized: false });
 
-        const isAdmin = ADMIN_EMAILS.has(String(email).toLowerCase());
+    const isAdmin = ADMIN_EMAILS.has(String(email).toLowerCase());
 
     const token = jwt.sign(
       { restaurant_id: data[0].id, email, plan: data[0].plan, is_admin: isAdmin },
@@ -1444,15 +1444,6 @@ app.post("/auth/google", async (req, res) => {
     );
 
     return res.json({ authorized: true, restaurant: data[0], token, is_admin: isAdmin });
-
-    // Gera um JWT próprio para autenticar nas próximas requisições
-    const token = jwt.sign(
-      { restaurant_id: data[0].id, email, plan: data[0].plan },
-      process.env.JWT_SECRET,
-     { expiresIn: "1d" }
-    );
-
-    return res.json({ authorized: true, restaurant: data[0], token });
   } catch (err) {
     console.error("Erro auth:", err);
     return res.status(500).json({ error: "Erro inesperado" });
