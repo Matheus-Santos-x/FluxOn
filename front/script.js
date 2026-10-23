@@ -154,6 +154,34 @@ const resultsState = {
   uiReady: false,
 };
 
+// ===== ADMIN STATE =====
+const ADMIN_URL = `${API_BASE}/admin`;
+let adminRestaurantsCache = [];
+let adminSelectedRestaurant = null;
+
+function getAdminToken() {
+  return localStorage.getItem("fluxon_admin_token") || localStorage.getItem("fluxon_token");
+}
+
+function buildAdminHeaders() {
+  const token = getAdminToken();
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { "Authorization": `Bearer ${token}` } : {})
+  };
+}
+
+function checkAdminAccess() {
+  const token = getAdminToken();
+  if (!token) return false;
+  const payload = decodeJwt(token);
+  return !!payload?.is_admin;
+}
+
+function isImpersonating() {
+  return !!localStorage.getItem("fluxon_admin_token");
+}
+
 // ===== HELPERS =====
 function toFrontStatus(back) {
   const k = String(back || "").toLowerCase();
@@ -398,6 +426,7 @@ function showBoard() {
   document.getElementById("fidelidade-view")?.classList.add("hidden");
   document.getElementById("mesas-view")?.classList.add("hidden");
   document.getElementById("home-view")?.classList.add("hidden");
+  document.getElementById("admin-view")?.classList.add("hidden");
   board?.classList.remove("hidden");
   showTabsBar();
   document.getElementById("tabs-bar")?.classList.remove("hidden");
@@ -419,6 +448,7 @@ function showCRM() {
   document.getElementById("fidelidade-view")?.classList.add("hidden");
   document.getElementById("mesas-view")?.classList.add("hidden");
   document.getElementById("home-view")?.classList.add("hidden");
+  document.getElementById("admin-view")?.classList.add("hidden");
   crmView?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
@@ -438,6 +468,7 @@ function showResults() {
   document.getElementById("fidelidade-view")?.classList.add("hidden");
   document.getElementById("mesas-view")?.classList.add("hidden");
   document.getElementById("home-view")?.classList.add("hidden"); // ← ADICIONADO
+  document.getElementById("admin-view")?.classList.add("hidden");
   resultsView?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
@@ -458,6 +489,7 @@ function showCardapio() {
   document.getElementById("mesas-view")?.classList.add("hidden");
   document.getElementById("fidelidade-view")?.classList.add("hidden");
   document.getElementById("home-view")?.classList.add("hidden");
+  document.getElementById("admin-view")?.classList.add("hidden");
   document.getElementById("cardapio-view")?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
@@ -478,6 +510,7 @@ function showFidelidade() {
   document.getElementById("cardapio-view")?.classList.add("hidden");
   document.getElementById("mesas-view")?.classList.add("hidden");
   document.getElementById("home-view")?.classList.add("hidden");
+  document.getElementById("admin-view")?.classList.add("hidden");
   document.getElementById("fidelidade-view")?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
@@ -498,6 +531,7 @@ function showAutoatendimento() {
   document.getElementById("cardapio-view")?.classList.add("hidden");
   document.getElementById("mesas-view")?.classList.add("hidden");
   document.getElementById("home-view")?.classList.add("hidden");
+  document.getElementById("admin-view")?.classList.add("hidden");
   document.getElementById("autoatendimento-view")?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
@@ -513,6 +547,7 @@ function showSettings() {
   document.getElementById("fidelidade-view")?.classList.add("hidden");
   document.getElementById("cardapio-view")?.classList.add("hidden");
   document.getElementById("home-view")?.classList.add("hidden");
+  document.getElementById("admin-view")?.classList.add("hidden");
   document.getElementById("open-create")?.classList.add("hidden");
   document.getElementById("settings-view")?.classList.remove("hidden");
   document.getElementById("tabs-bar")?.classList.add("hidden");
@@ -530,6 +565,7 @@ function showHome() {
   document.getElementById("settings-view")?.classList.add("hidden");
   document.getElementById("fidelidade-view")?.classList.add("hidden");
   document.getElementById("cardapio-view")?.classList.add("hidden");
+  document.getElementById("admin-view")?.classList.add("hidden");
   document.getElementById("home-view")?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
@@ -551,6 +587,339 @@ function showHome() {
   renderHomeStats();
 }
 
+function showAdmin() {
+  board?.classList.add("hidden");
+  crmView?.classList.add("hidden");
+  resultsView?.classList.add("hidden");
+  document.getElementById("autoatendimento-view")?.classList.add("hidden");
+  document.getElementById("settings-view")?.classList.add("hidden");
+  document.getElementById("cardapio-view")?.classList.add("hidden");
+  document.getElementById("fidelidade-view")?.classList.add("hidden");
+  document.getElementById("mesas-view")?.classList.add("hidden");
+  document.getElementById("home-view")?.classList.add("hidden");
+  document.getElementById("open-create")?.classList.add("hidden");
+  document.getElementById("admin-view")?.classList.remove("hidden");
+  hideTabsBar();
+  closeDrawer();
+  fetchAdminRestaurants();
+}
+
+async function fetchAdminRestaurants() {
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants`, { headers: buildAdminHeaders() });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Erro ao buscar restaurantes");
+    adminRestaurantsCache = data;
+  } catch (e) {
+    console.error("Erro ao buscar restaurantes (admin):", e);
+    alert("Erro ao carregar lista de restaurantes: " + e.message);
+  }
+}
+
+function renderAdminDropdown(query) {
+  const dropdown = document.getElementById("admin-search-dropdown");
+  if (!dropdown) return;
+  const q = query.trim().toLowerCase();
+  const filtrados = q
+    ? adminRestaurantsCache.filter(r => r.name.toLowerCase().includes(q))
+    : adminRestaurantsCache;
+
+  if (filtrados.length === 0) {
+    dropdown.innerHTML = `<div style="padding:14px; color:rgba(252,228,228,0.4); font-size:13px;">Nenhum restaurante encontrado.</div>`;
+    dropdown.style.display = "block";
+    return;
+  }
+
+  dropdown.innerHTML = filtrados.map(r => `
+    <div onclick="selecionarAdminRestaurante('${r.id}')" style="
+      padding:12px 16px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.07);
+      display:flex; justify-content:space-between; align-items:center;"
+      onmouseover="this.style.background='rgba(255,255,255,0.09)'"
+      onmouseout="this.style.background='transparent'">
+      <div>
+        <div style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px;">${escapeHtml(r.name)}</div>
+        <div style="color:rgba(252,228,228,0.4); font-size:11px;">${escapeHtml(r.email)}</div>
+      </div>
+      <span style="color:rgba(251,191,36,0.8); font-size:11px; font-weight:700; text-transform:uppercase;">${escapeHtml(r.plan || "")}</span>
+    </div>
+  `).join("");
+  dropdown.style.display = "block";
+}
+
+async function selecionarAdminRestaurante(id) {
+  const r = adminRestaurantsCache.find(x => x.id === id);
+  if (!r) return;
+  adminSelectedRestaurant = r;
+
+  document.getElementById("admin-search-dropdown").style.display = "none";
+  document.getElementById("admin-search-restaurant").value = "";
+
+  document.getElementById("admin-selected-card")?.classList.remove("hidden");
+  document.getElementById("admin-selected-name").textContent = r.name;
+  document.getElementById("admin-selected-meta").textContent = `${r.email} · ${r.plan}`;
+  document.getElementById("admin-forms")?.classList.remove("hidden");
+
+  // Preenche formulário "Restaurante"
+  document.getElementById("admin-f-name").value = r.name || "";
+  document.getElementById("admin-f-email").value = r.email || "";
+  document.getElementById("admin-f-plan").value = r.plan || "essential";
+
+  // Carrega config (aparência + operação) — rota GET não exige token do próprio restaurante
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${r.id}/config`);
+    const cfg = await resp.json();
+    document.getElementById("admin-f-nome-exibicao").value = cfg.nome_exibicao || "";
+    document.getElementById("admin-f-subtitulo").value = cfg.subtitulo || "";
+    document.getElementById("admin-f-logo").value = cfg.logo_url || "";
+    document.getElementById("admin-f-cor-primaria").value = cfg.cor_primaria || "#f97373";
+    document.getElementById("admin-f-cor-secundaria").value = cfg.cor_secundaria || "#b91c1c";
+    document.getElementById("admin-f-cor-fundo").value = cfg.cor_fundo || "#0c0a09";
+    document.getElementById("admin-f-tema").value = cfg.tema || "dark";
+    document.getElementById("admin-f-telefone").value = cfg.telefone || "";
+    document.getElementById("admin-f-instagram").value = cfg.instagram || "";
+    document.getElementById("admin-f-endereco").value = cfg.endereco || "";
+    document.getElementById("admin-f-mesas").value = cfg.num_mesas ?? 10;
+    document.getElementById("admin-f-pedido-minimo").value = cfg.pedido_minimo ?? 0;
+    document.getElementById("admin-f-entrega-min").value = cfg.tempo_entrega_min ?? "";
+    document.getElementById("admin-f-entrega-max").value = cfg.tempo_entrega_max ?? "";
+    document.getElementById("admin-f-pagamento-online").value = (cfg.pagamento_online || []).join(", ");
+    document.getElementById("admin-f-pagamento-entrega").value = (cfg.pagamento_entrega || []).join(", ");
+  } catch (e) {
+    console.error("Erro ao carregar config do restaurante:", e);
+  }
+
+  // Carrega horários
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${r.id}/horarios`);
+    const data = await resp.json();
+    renderAdminHorariosForm(data.horarios || []);
+  } catch (e) {
+    renderAdminHorariosForm([]);
+  }
+}
+
+function renderAdminHorariosForm(horariosExistentes) {
+  const dias = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
+  const lista = document.getElementById("admin-horarios-lista");
+  if (!lista) return;
+
+  lista.innerHTML = dias.map((nome, i) => {
+    const existente = horariosExistentes.find(h => h.dia_semana === i);
+    const abertura = existente?.abertura?.slice(0,5) || "08:00";
+    const fechamento = existente?.fechamento?.slice(0,5) || "22:00";
+    return `
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="width:80px; font-size:12px; color:rgba(252,228,228,0.6); font-weight:700;">${nome}</span>
+        <input type="time" class="admin-horario-abertura" data-dia="${i}" value="${abertura}"
+          style="flex:1; padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none;" />
+        <span style="color:rgba(252,228,228,0.3);">até</span>
+        <input type="time" class="admin-horario-fechamento" data-dia="${i}" value="${fechamento}"
+          style="flex:1; padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none;" />
+      </div>
+    `;
+  }).join("");
+}
+
+async function salvarAdminRestauranteBasico() {
+  if (!adminSelectedRestaurant) return;
+  const status = document.getElementById("admin-status-restaurante");
+  const body = {
+    name: document.getElementById("admin-f-name").value.trim(),
+    email: document.getElementById("admin-f-email").value.trim(),
+    plan: document.getElementById("admin-f-plan").value
+  };
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants/${adminSelectedRestaurant.id}`, {
+      method: "PATCH", headers: buildAdminHeaders(), body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error);
+    Object.assign(adminSelectedRestaurant, body);
+    document.getElementById("admin-selected-name").textContent = body.name;
+    document.getElementById("admin-selected-meta").textContent = `${body.email} · ${body.plan}`;
+    status.textContent = "✅ Salvo!"; status.style.color = "rgba(34,197,94,0.9)";
+  } catch (e) {
+    status.textContent = "❌ " + e.message; status.style.color = "rgba(239,68,68,0.9)";
+  }
+}
+
+async function salvarAdminAparencia() {
+  if (!adminSelectedRestaurant) return;
+  const status = document.getElementById("admin-status-aparencia");
+  const body = {
+    nome_exibicao: document.getElementById("admin-f-nome-exibicao").value.trim(),
+    subtitulo: document.getElementById("admin-f-subtitulo").value.trim(),
+    logo_url: document.getElementById("admin-f-logo").value.trim(),
+    cor_primaria: document.getElementById("admin-f-cor-primaria").value,
+    cor_secundaria: document.getElementById("admin-f-cor-secundaria").value,
+    cor_fundo: document.getElementById("admin-f-cor-fundo").value,
+    tema: document.getElementById("admin-f-tema").value
+  };
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants/${adminSelectedRestaurant.id}/config`, {
+      method: "PATCH", headers: buildAdminHeaders(), body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error);
+    status.textContent = "✅ Salvo!"; status.style.color = "rgba(34,197,94,0.9)";
+  } catch (e) {
+    status.textContent = "❌ " + e.message; status.style.color = "rgba(239,68,68,0.9)";
+  }
+}
+
+async function salvarAdminOperacao() {
+  if (!adminSelectedRestaurant) return;
+  const status = document.getElementById("admin-status-operacao");
+  const toArray = (v) => v.split(",").map(s => s.trim()).filter(Boolean);
+  const body = {
+    telefone: document.getElementById("admin-f-telefone").value.trim(),
+    instagram: document.getElementById("admin-f-instagram").value.trim(),
+    endereco: document.getElementById("admin-f-endereco").value.trim(),
+    num_mesas: parseInt(document.getElementById("admin-f-mesas").value) || 0,
+    pedido_minimo: parseFloat(document.getElementById("admin-f-pedido-minimo").value) || 0,
+    tempo_entrega_min: document.getElementById("admin-f-entrega-min").value ? parseInt(document.getElementById("admin-f-entrega-min").value) : null,
+    tempo_entrega_max: document.getElementById("admin-f-entrega-max").value ? parseInt(document.getElementById("admin-f-entrega-max").value) : null,
+    pagamento_online: toArray(document.getElementById("admin-f-pagamento-online").value),
+    pagamento_entrega: toArray(document.getElementById("admin-f-pagamento-entrega").value)
+  };
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants/${adminSelectedRestaurant.id}/config`, {
+      method: "PATCH", headers: buildAdminHeaders(), body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error);
+    status.textContent = "✅ Salvo!"; status.style.color = "rgba(34,197,94,0.9)";
+  } catch (e) {
+    status.textContent = "❌ " + e.message; status.style.color = "rgba(239,68,68,0.9)";
+  }
+}
+
+async function salvarAdminHorarios() {
+  if (!adminSelectedRestaurant) return;
+  const status = document.getElementById("admin-status-horarios");
+  const aberturas = document.querySelectorAll(".admin-horario-abertura");
+  const horarios = [...aberturas].map(input => {
+    const dia = parseInt(input.dataset.dia);
+    const fechamento = document.querySelector(`.admin-horario-fechamento[data-dia="${dia}"]`)?.value;
+    return { dia_semana: dia, abertura: input.value, fechamento };
+  });
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants/${adminSelectedRestaurant.id}/horarios`, {
+      method: "PATCH", headers: buildAdminHeaders(), body: JSON.stringify({ horarios })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error);
+    status.textContent = "✅ Salvo!"; status.style.color = "rgba(34,197,94,0.9)";
+  } catch (e) {
+    status.textContent = "❌ " + e.message; status.style.color = "rgba(239,68,68,0.9)";
+  }
+}
+
+function openAdminCreateModal() {
+  const existing = document.getElementById("admin-create-modal");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "admin-create-modal";
+  modal.className = "modal-backdrop open";
+  modal.innerHTML = `
+    <div class="modal confirm-modal" style="max-width:420px;">
+      <div class="modal-header"><h3>+ Novo Restaurante</h3></div>
+      <div class="modal-body" style="gap:12px;">
+        <label style="color:rgba(252,228,228,0.8); font-size:13px;">Nome *
+          <input id="admin-new-name" style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
+        </label>
+        <label style="color:rgba(252,228,228,0.8); font-size:13px;">Email de login (Google) *
+          <input id="admin-new-email" type="email" style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
+        </label>
+        <label style="color:rgba(252,228,228,0.8); font-size:13px;">Plano
+          <select id="admin-new-plan" style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;">
+            <option value="essential">Essential</option>
+            <option value="advanced">Advanced</option>
+            <option value="executive">Executive</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <p id="admin-new-status" style="font-size:13px; min-height:18px; margin:0;"></p>
+      </div>
+      <div class="modal-actions">
+        <button class="ghost-button" id="admin-new-cancel">Cancelar</button>
+        <button class="primary-button" id="admin-new-save">Criar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+  document.getElementById("admin-new-cancel").addEventListener("click", () => modal.remove());
+  document.getElementById("admin-new-save").addEventListener("click", criarRestauranteAdmin);
+}
+
+async function criarRestauranteAdmin() {
+  const name = document.getElementById("admin-new-name").value.trim();
+  const email = document.getElementById("admin-new-email").value.trim();
+  const plan = document.getElementById("admin-new-plan").value;
+  const status = document.getElementById("admin-new-status");
+
+  if (!name || !email) { status.textContent = "❌ Preencha nome e email."; status.style.color = "rgba(239,68,68,0.9)"; return; }
+
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants`, {
+      method: "POST", headers: buildAdminHeaders(), body: JSON.stringify({ name, email, plan })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error);
+    document.getElementById("admin-create-modal")?.remove();
+    await fetchAdminRestaurants();
+    selecionarAdminRestaurante(data.restaurant.id);
+  } catch (e) {
+    status.textContent = "❌ " + e.message; status.style.color = "rgba(239,68,68,0.9)";
+  }
+}
+
+async function impersonarRestaurante(id) {
+  try {
+    const resp = await fetch(`${ADMIN_URL}/impersonate`, {
+      method: "POST", headers: buildAdminHeaders(), body: JSON.stringify({ restaurant_id: id })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error);
+
+    // Guarda o token/dados do admin ANTES de trocar, pra não perder o acesso
+    if (!localStorage.getItem("fluxon_admin_token")) {
+      localStorage.setItem("fluxon_admin_token", localStorage.getItem("fluxon_token"));
+      localStorage.setItem("fluxon_admin_restaurant_id", localStorage.getItem("restaurant_id"));
+      localStorage.setItem("fluxon_admin_restaurant_name", localStorage.getItem("restaurant_name"));
+      localStorage.setItem("fluxon_admin_restaurant_plan", localStorage.getItem("restaurant_plan"));
+    }
+
+    localStorage.setItem("fluxon_token", data.token);
+    localStorage.setItem("restaurant_id", data.restaurant.id);
+    localStorage.setItem("restaurant_name", data.restaurant.name);
+    localStorage.setItem("restaurant_plan", data.restaurant.plan || "essential");
+
+    location.reload();
+  } catch (e) {
+    alert("Erro ao impersonar: " + e.message);
+  }
+}
+
+function sairImpersonacao() {
+  const adminToken = localStorage.getItem("fluxon_admin_token");
+  if (!adminToken) return;
+
+  localStorage.setItem("fluxon_token", adminToken);
+  localStorage.setItem("restaurant_id", localStorage.getItem("fluxon_admin_restaurant_id"));
+  localStorage.setItem("restaurant_name", localStorage.getItem("fluxon_admin_restaurant_name"));
+  localStorage.setItem("restaurant_plan", localStorage.getItem("fluxon_admin_restaurant_plan"));
+
+  localStorage.removeItem("fluxon_admin_token");
+  localStorage.removeItem("fluxon_admin_restaurant_id");
+  localStorage.removeItem("fluxon_admin_restaurant_name");
+  localStorage.removeItem("fluxon_admin_restaurant_plan");
+
+  location.reload();
+}
+
 function showMesas() {
   board?.classList.add("hidden");
   crmView?.classList.add("hidden");
@@ -560,6 +929,7 @@ function showMesas() {
   document.getElementById("cardapio-view")?.classList.add("hidden");
   document.getElementById("fidelidade-view")?.classList.add("hidden");
   document.getElementById("home-view")?.classList.add("hidden"); // ← ADICIONAR
+  document.getElementById("admin-view")?.classList.add("hidden");
   document.getElementById("mesas-view")?.classList.remove("hidden");
   document.getElementById("tabs-bar")?.classList.add("hidden");
   document.getElementById("open-create")?.classList.add("hidden");
@@ -3694,6 +4064,33 @@ const autoatendimentoBtn = document.getElementById("drawer-autoatendimento");
 if (autoatendimentoBtn) autoatendimentoBtn.addEventListener("click", showAutoatendimento);
 const homeBtn = document.getElementById("drawer-home");
 if (homeBtn) homeBtn.addEventListener("click", showHome);
+
+const drawerAdminBtn = document.getElementById("drawer-admin");
+if (drawerAdminBtn) drawerAdminBtn.addEventListener("click", showAdmin);
+
+const adminBackBtn = document.getElementById("admin-back-btn");
+if (adminBackBtn) adminBackBtn.addEventListener("click", showBoard);
+
+document.getElementById("impersonate-banner-exit")?.addEventListener("click", sairImpersonacao);
+document.getElementById("admin-btn-novo")?.addEventListener("click", openAdminCreateModal);
+document.getElementById("admin-btn-impersonate")?.addEventListener("click", () => {
+  if (adminSelectedRestaurant) impersonarRestaurante(adminSelectedRestaurant.id);
+});
+document.getElementById("admin-btn-save-restaurante")?.addEventListener("click", salvarAdminRestauranteBasico);
+document.getElementById("admin-btn-save-aparencia")?.addEventListener("click", salvarAdminAparencia);
+document.getElementById("admin-btn-save-horarios")?.addEventListener("click", salvarAdminHorarios);
+document.getElementById("admin-btn-save-operacao")?.addEventListener("click", salvarAdminOperacao);
+
+const adminSearchInput = document.getElementById("admin-search-restaurant");
+if (adminSearchInput) {
+  adminSearchInput.addEventListener("input", () => renderAdminDropdown(adminSearchInput.value));
+  adminSearchInput.addEventListener("focus", () => renderAdminDropdown(adminSearchInput.value));
+}
+document.addEventListener("click", (e) => {
+  const dropdown = document.getElementById("admin-search-dropdown");
+  const input = document.getElementById("admin-search-restaurant");
+  if (dropdown && !dropdown.contains(e.target) && e.target !== input) dropdown.style.display = "none";
+});
   
   console.log("✅ Drawer totalmente configurado!");
 }
@@ -3758,6 +4155,18 @@ async function init() {
 
   restaurantPlan = localStorage.getItem("restaurant_plan") || "basic";
   applyAccessUI();
+
+  // ← ADMIN / IMPERSONATE
+  if (checkAdminAccess()) {
+    document.getElementById("drawer-admin")?.classList.remove("hidden");
+    document.getElementById("drawer-admin-label").style.display = "";
+  }
+  if (isImpersonating()) {
+    const banner = document.getElementById("impersonate-banner");
+    const nameEl = document.getElementById("impersonate-banner-name");
+    if (nameEl) nameEl.textContent = localStorage.getItem("restaurant_name") || "—";
+    if (banner) banner.classList.remove("hidden");
+  }
 
   if (userChip) {
     userChip.hidden = false;
