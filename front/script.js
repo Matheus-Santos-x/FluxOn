@@ -670,7 +670,8 @@ async function selecionarAdminRestaurante(id) {
     const cfg = await resp.json();
     document.getElementById("admin-f-nome-exibicao").value = cfg.nome_exibicao || "";
     document.getElementById("admin-f-subtitulo").value = cfg.subtitulo || "";
-    document.getElementById("admin-f-logo").value = cfg.logo_url || "";
+    _setAdminImagePreview("logo", cfg.logo_url || "");
+    _setAdminImagePreview("banner", cfg.banner_url || "");
     document.getElementById("admin-f-cor-primaria").value = cfg.cor_primaria || "#f97373";
     document.getElementById("admin-f-cor-secundaria").value = cfg.cor_secundaria || "#b91c1c";
     document.getElementById("admin-f-cor-fundo").value = cfg.cor_fundo || "#0c0a09";
@@ -743,13 +744,82 @@ async function salvarAdminRestauranteBasico() {
   }
 }
 
+// ===== UPLOAD DE LOGO / BANNER (painel admin) =====
+function _setAdminImagePreview(type, url) {
+  const hiddenId = type === "logo" ? "admin-f-logo" : "admin-f-banner";
+  const dropzoneId = `admin-${type}-dropzone`;
+  const fileInputId = `admin-${type}-file`;
+
+  const hidden = document.getElementById(hiddenId);
+  if (hidden) hidden.value = url || "";
+
+  const dropzone = document.getElementById(dropzoneId);
+  if (!dropzone) return;
+
+  if (url) {
+    dropzone.innerHTML = `
+      <img src="${url}" style="width:100%; height:70px; object-fit:cover; border-radius:8px;" />
+      <button type="button" onclick="removerAdminImagem('${type}')" style="
+        position:absolute; top:4px; right:4px; width:20px; height:20px;
+        border-radius:50%; border:none; background:rgba(239,68,68,0.9);
+        color:white; font-size:11px; cursor:pointer; line-height:1;
+      ">×</button>
+      <input type="file" id="${fileInputId}" accept="image/*" style="
+        position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
+      " />
+    `;
+  } else {
+    dropzone.innerHTML = `
+      <div style="font-size:22px;">📷</div>
+      <div style="color:rgba(252,228,228,0.4); font-size:10px;">${type === "logo" ? "Logo" : "Banner"}</div>
+      <input type="file" id="${fileInputId}" accept="image/*" style="
+        position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
+      " />
+    `;
+  }
+
+  document.getElementById(fileInputId)?.addEventListener("change", function () {
+    if (this.files[0]) handleAdminImageUpload(this.files[0], type);
+  });
+}
+
+async function handleAdminImageUpload(file, type) {
+  try {
+    const formData = new FormData();
+    formData.append("file", file, file.name || "foto.jpg");
+    formData.append("bucket", type === "logo" ? "restaurante-logos" : "restaurante-banners");
+
+    const resp = await fetch(`${API_BASE}/api/v1/upload-image`, { method: "POST", body: formData });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Erro no upload");
+
+    _setAdminImagePreview(type, data.url);
+  } catch (e) {
+    alert("Erro ao enviar imagem: " + e.message);
+  }
+}
+
+function removerAdminImagem(type) {
+  _setAdminImagePreview(type, "");
+}
+
+function setupAdminImageInputs() {
+  document.getElementById("admin-logo-file")?.addEventListener("change", function () {
+    if (this.files[0]) handleAdminImageUpload(this.files[0], "logo");
+  });
+  document.getElementById("admin-banner-file")?.addEventListener("change", function () {
+    if (this.files[0]) handleAdminImageUpload(this.files[0], "banner");
+  });
+}
+
 async function salvarAdminAparencia() {
   if (!adminSelectedRestaurant) return;
   const status = document.getElementById("admin-status-aparencia");
-  const body = {
+    const body = {
     nome_exibicao: document.getElementById("admin-f-nome-exibicao").value.trim(),
     subtitulo: document.getElementById("admin-f-subtitulo").value.trim(),
     logo_url: document.getElementById("admin-f-logo").value.trim(),
+    banner_url: document.getElementById("admin-f-banner").value.trim(),
     cor_primaria: document.getElementById("admin-f-cor-primaria").value,
     cor_secundaria: document.getElementById("admin-f-cor-secundaria").value,
     cor_fundo: document.getElementById("admin-f-cor-fundo").value,
@@ -4175,6 +4245,7 @@ async function init() {
   }
 // Configura o drawer
 setupDrawer();
+setupAdminImageInputs();
   ['click', 'touchstart', 'keydown'].forEach(evt => {
   document.addEventListener(evt, () => {
     if (!_audioCtx) {
