@@ -419,7 +419,7 @@ function normalizePhone(input) {
 }
 
 const pick = (obj = {}, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
-const CONFIG_CAMPOS = ["nome_exibicao","logo_url","banner_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega"];
+const CONFIG_CAMPOS = ["nome_exibicao","logo_url","logo_fisico_url","banner_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega"];
 
 
 /* ========================================
@@ -2668,7 +2668,8 @@ app.get("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
 
             return res.json({
       nome_exibicao: config?.nome_exibicao || "",
-      logo_url: config?.logo_url || null,
+            logo_url: config?.logo_url || null,
+      logo_fisico_url: config?.logo_fisico_url || null,
       banner_url: config?.banner_url || null,
       cor_primaria: config?.cor_primaria || "#f97373",
       cor_secundaria: config?.cor_secundaria || "#b91c1c",
