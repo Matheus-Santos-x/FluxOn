@@ -3949,15 +3949,88 @@ async function _dispararMensagemCRM(client, phoneNorm, mensagem) {
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(data.error || "Erro ao enviar");
 
-    _crmMsgRecentes.set(phoneNorm, Date.now());
-    const txt = document.getElementById("crm-msg-text");
-    if (txt) txt.value = "";
-    _crmMsgStatus("✅ Mensagem enviada!", true);
+      _crmMsgRecentes.set(phoneNorm, Date.now());
+    fecharCardMensagemCRM();
+    _crmToast("✅ Mensagem enviada!");
   } catch (e) {
     _crmMsgStatus("❌ " + e.message, false);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Enviar"; }
   }
+}
+
+function _crmToast(texto) {
+  const t = document.createElement("div");
+  t.textContent = texto;
+  t.style.cssText = "position:fixed; left:50%; bottom:32px; transform:translateX(-50%); z-index:100002; background:rgba(34,197,94,0.95); color:#04130a; font-weight:800; font-size:14px; padding:12px 20px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.5);";
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
+function fecharCardMensagemCRM() {
+  document.getElementById("crm-msg-card")?.remove();
+}
+
+function abrirCardMensagemCRM(client, phoneNorm, backdropEl) {
+  // clicar de novo no botão fecha o card
+  if (document.getElementById("crm-msg-card")) { fecharCardMensagemCRM(); return; }
+
+  const box = backdropEl?.querySelector(".client-details-modal-content");
+  if (!box) return;
+
+  const rect = box.getBoundingClientRect();
+  const W = 320, GAP = 16;
+  const cabeNaEsquerda = rect.left >= W + GAP + 12;
+
+  const card = document.createElement("div");
+  card.id = "crm-msg-card";
+  card.style.cssText = `position:fixed; width:${W}px; max-width:calc(100vw - 24px); box-sizing:border-box; z-index:100001;
+    background:#0d0d0d; border:1px solid rgba(255,255,255,0.18); border-radius:16px; padding:18px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.7); display:flex; flex-direction:column; gap:12px;
+    opacity:0; transition:opacity .18s ease, transform .18s ease;`;
+
+  if (cabeNaEsquerda) {
+    card.style.left = `${rect.left - W - GAP}px`;
+    card.style.bottom = `${window.innerHeight - rect.bottom}px`;
+    card.style.transform = "translateX(12px)";
+  } else {
+    card.style.left = "50%";
+    card.style.top = "50%";
+    card.style.transform = "translate(-50%, -50%) scale(.97)";
+  }
+
+  card.innerHTML = `
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
+      <div style="min-width:0;">
+        <div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.4); text-transform:uppercase; letter-spacing:1px;">Enviar mensagem</div>
+        <div style="font-size:15px; font-weight:800; color:rgba(252,228,228,0.95); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(client.client_name || "Cliente")}</div>
+        <div style="font-size:12px; color:rgba(252,228,228,0.4);">${escapeHtml(client.client_phone || "")}</div>
+      </div>
+      <button class="icon-button" id="crm-msg-close" title="Fechar">×</button>
+    </div>
+    <textarea id="crm-msg-text" rows="5" placeholder="Escreva a mensagem..."
+      style="width:100%; box-sizing:border-box; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); border-radius:10px; padding:10px 14px; color:rgba(252,228,228,0.95); font-size:13px; outline:none; resize:none; line-height:1.5; font-family:inherit;"></textarea>
+    <p id="crm-msg-status" style="font-size:12px; min-height:16px; margin:0;"></p>
+    <div style="display:flex; gap:8px;">
+      <button class="ghost-button" id="crm-msg-cancel" style="flex:1;">Cancelar</button>
+      <button class="primary-button" id="crm-msg-send" style="flex:2; background:rgba(34,197,94,0.9);">Enviar</button>
+    </div>
+  `;
+
+  backdropEl.appendChild(card);
+
+  requestAnimationFrame(() => {
+    card.style.opacity = "1";
+    card.style.transform = cabeNaEsquerda ? "translateX(0)" : "translate(-50%, -50%)";
+  });
+
+  document.getElementById("crm-msg-close")?.addEventListener("click", fecharCardMensagemCRM);
+  document.getElementById("crm-msg-cancel")?.addEventListener("click", fecharCardMensagemCRM);
+  document.getElementById("crm-msg-send")?.addEventListener("click", () => enviarMensagemCRM(client, phoneNorm));
+  document.getElementById("crm-msg-text")?.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") enviarMensagemCRM(client, phoneNorm);
+  });
+  setTimeout(() => document.getElementById("crm-msg-text")?.focus(), 50);
 }
 
 // 🔥 POPUP COM PEDIDOS DO CLIENTE
@@ -4039,14 +4112,6 @@ try {
           </div>
         </div>
         
-             <div id="crm-compose" style="display:none; flex-direction:column; gap:8px; padding:0 24px 16px;">
-          <textarea id="crm-msg-text" rows="3" placeholder="Escreva a mensagem para ${escapeHtml(client.client_name || "o cliente")}..."
-            style="width:100%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); border-radius:10px; padding:10px 14px; color:rgba(252,228,228,0.95); font-size:13px; outline:none; resize:none; line-height:1.5; font-family:inherit;"></textarea>
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-            <p id="crm-msg-status" style="font-size:12px; min-height:16px; margin:0;"></p>
-            <button class="primary-button" id="crm-msg-send" style="padding:8px 20px;">Enviar</button>
-          </div>
-        </div>
 
         <div class="modal-actions" style="justify-content:space-between;">
           ${phoneNorm ? `
@@ -4060,13 +4125,7 @@ try {
 
     document.body.appendChild(modal);
 
-    document.getElementById("crm-msg-open")?.addEventListener("click", () => {
-      const box = document.getElementById("crm-compose");
-      if (!box) return;
-      box.style.display = box.style.display === "none" ? "flex" : "none";
-      document.getElementById("crm-msg-text")?.focus();
-    });
-    document.getElementById("crm-msg-send")?.addEventListener("click", () => enviarMensagemCRM(client, phoneNorm));
+    document.getElementById("crm-msg-open")?.addEventListener("click", () => abrirCardMensagemCRM(client, phoneNorm, modal));
 
     document.getElementById("close-client-details")?.addEventListener("click", () => modal.remove());
     document.getElementById("close-client-details-2")?.addEventListener("click", () => modal.remove());
