@@ -274,7 +274,8 @@ app.use("/api/v1/metrics/:restaurant_id", requireAuth);
 app.use("/api/v1/caixa/:restaurant_id", requireAuth);
 app.use("/orders", requireAuth); // só login: aqui o :id pode ser de pedido, não de restaurante
 for (const p of ["integracao", "impressora", "fiscal", "marketplace", "mp", "tracking-url",
-  "webhook-satisfaction", "webhook-fechamento", "imprimir-pedido", "reimprimir-pedido"]) {
+  "webhook-satisfaction", "webhook-fechamento", "webhook-crm", "crm-mensagem",
+  "imprimir-pedido", "reimprimir-pedido"]) {
   app.use(`/api/v1/restaurante/:restaurant_id/${p}`, requireAuth);
 }
 
@@ -4618,6 +4619,78 @@ app.post("/api/v1/restaurante/:restaurant_id/webhook-fechamento", async (req, re
     return res.json({ success: true });
   } catch (err) {
     return sendError(res, 500, "Erro interno");
+  }
+});
+
+// ===== WEBHOOK DISPARO CRM =====
+app.get("/api/v1/restaurante/:restaurant_id/webhook-crm", async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const dados = await getIntegracao(restaurant_id, "webhook_crm");
+    return res.json({ success: true, webhook_url: dados?.webhook_url || "" });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+app.post("/api/v1/restaurante/:restaurant_id/webhook-crm", async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const webhook_url = String(req.body?.webhook_url || "").trim();
+    if (webhook_url && !/^https?:\/\//i.test(webhook_url))
+      return sendError(res, 400, "A URL deve começar com http:// ou https://");
+    await supabase.from("integracoes").upsert({
+      restaurant_id, tipo: "webhook_crm",
+      dados: { webhook_url: webhook_url || null }, ativo: true,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "restaurant_id,tipo" });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// POST - Envia a mensagem do CRM para o webhook (n8n) do restaurante
+app.post("/api/v1/restaurante/:restaurant_id/crm-mensagem", async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const { telefone, nome, mensagem } = req.body || {};
+
+    const phone = normalizePhone(telefone);
+    const texto = String(mensagem || "").trim();
+    if (!phone) return sendError(res, 400, "Telefone inválido");
+    if (!texto) return sendError(res, 400, "Mensagem vazia");
+    if (texto.length > 4000) return sendError(res, 400, "Mensagem muito longa");
+
+    const cfg = await getIntegracao(restaurant_id, "webhook_crm");
+    const webhookUrl = cfg?.webhook_url;
+    if (!webhookUrl)
+      return sendError(res, 400, "Webhook de disparo do CRM não configurado (Configurações)");
+
+    const { data: rest } = await supabase
+      .from("restaurants").select("name").eq("id", restaurant_id).single();
+
+    const r = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        restaurant_id,
+        restaurant_name: rest?.name || null,
+        client_name: nome || null,
+        client_phone: phone,
+        client_phone_whatsapp: phone.startsWith("55") && phone.length >= 12 ? phone : `55${phone}`,
+        message: texto,
+        sent_by: req.auth?.email || null,
+        sent_at: new Date().toISOString(),
+        source: "crm"
+      }),
+      signal: AbortSignal.timeout(10000)
+    });
+
+    if (!r.ok) return sendError(res, 502, `O webhook respondeu com erro (${r.status})`);
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 502, "Não foi possível enviar para o webhook: " + err.message);
   }
 });
 
