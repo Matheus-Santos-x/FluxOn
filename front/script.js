@@ -2106,6 +2106,16 @@ async function loadSettingsData() {
     console.error("Erro ao carregar webhook fechamento:", e);
   }
 
+  // Webhook disparo CRM
+  try {
+    const whCrmResp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/webhook-crm`);
+    const whCrmData = await whCrmResp.json();
+    if (whCrmData.webhook_url)
+      document.getElementById("settings-webhook-crm").value = whCrmData.webhook_url;
+  } catch (e) {
+    console.error("Erro ao carregar webhook CRM:", e);
+  }
+
   // Mesas & Automação — carrega do banco
   try {
     const respConfig = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/config`);
@@ -2216,6 +2226,25 @@ document.getElementById("btn-salvar-webhook-fechamento")?.addEventListener("clic
     });
     const data = await resp.json();
     if (status) status.textContent = data.success ? "✅ Webhook salvo!" : "❌ Erro ao salvar.";
+  } catch (e) {
+    if (status) status.textContent = "❌ Erro de conexão.";
+  }
+});
+
+// ===== SALVAR WEBHOOK DISPARO CRM =====
+document.getElementById("btn-salvar-webhook-crm")?.addEventListener("click", async () => {
+  const rid = getRestaurantId();
+  const url = document.getElementById("settings-webhook-crm")?.value?.trim();
+  const status = document.getElementById("settings-webhook-crm-status");
+  if (!url) { if (status) status.textContent = "❌ Informe a URL do webhook."; return; }
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/webhook-crm`, {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify({ webhook_url: url })
+    });
+    const data = await resp.json();
+    if (status) status.textContent = data.success ? "✅ Webhook salvo!" : `❌ ${data.error || "Erro ao salvar."}`;
   } catch (e) {
     if (status) status.textContent = "❌ Erro de conexão.";
   }
@@ -3872,6 +3901,58 @@ function renderCRM() {
   crmContent.appendChild(table);
 }
 
+// ===== ENVIO DE MENSAGEM PELO CRM =====
+const _crmMsgRecentes = new Map(); // telefone -> timestamp do último envio
+const CRM_MSG_JANELA_MS = 5 * 60 * 1000;
+
+function _crmMsgStatus(texto, ok) {
+  const el = document.getElementById("crm-msg-status");
+  if (!el) return;
+  el.textContent = texto;
+  el.style.color = ok ? "rgba(34,197,94,0.9)" : "rgba(239,68,68,0.9)";
+}
+
+function enviarMensagemCRM(client, phoneNorm) {
+  const mensagem = (document.getElementById("crm-msg-text")?.value || "").trim();
+  if (!mensagem) { _crmMsgStatus("❌ Escreva a mensagem.", false); return; }
+
+  const ultimo = _crmMsgRecentes.get(phoneNorm);
+  if (ultimo && Date.now() - ultimo < CRM_MSG_JANELA_MS) {
+    showConfirmModal(
+      "Você já enviou uma mensagem para esse número nos últimos 5 minutos. Quer realmente enviar outra?",
+      () => _dispararMensagemCRM(client, phoneNorm, mensagem)
+    );
+    return;
+  }
+  _dispararMensagemCRM(client, phoneNorm, mensagem);
+}
+
+async function _dispararMensagemCRM(client, phoneNorm, mensagem) {
+  const rid = getRestaurantId();
+  const btn = document.getElementById("crm-msg-send");
+  if (btn) { btn.disabled = true; btn.textContent = "Enviando..."; }
+  _crmMsgStatus("", true);
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/crm-mensagem`, {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify({ telefone: phoneNorm, nome: client.client_name, mensagem })
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || "Erro ao enviar");
+
+    _crmMsgRecentes.set(phoneNorm, Date.now());
+    const txt = document.getElementById("crm-msg-text");
+    if (txt) txt.value = "";
+    _crmMsgStatus("✅ Mensagem enviada!", true);
+  } catch (e) {
+    _crmMsgStatus("❌ " + e.message, false);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Enviar"; }
+  }
+}
+
 // 🔥 POPUP COM PEDIDOS DO CLIENTE
 async function openClientDetailsModal(client) {
   const rid = getRestaurantId();
@@ -3889,8 +3970,6 @@ try {
     const modal = document.createElement("div");
     modal.id = "client-details-modal";
     modal.className = "modal-backdrop open";
-
-    const whatsappUrl = phoneNorm ? `https://wa.me/55${phoneNorm}` : null;
 
     modal.innerHTML = `
       <div class="modal client-details-modal-content">
@@ -3953,17 +4032,34 @@ try {
           </div>
         </div>
         
+             <div id="crm-compose" style="display:none; flex-direction:column; gap:8px; padding:0 24px 16px;">
+          <textarea id="crm-msg-text" rows="3" placeholder="Escreva a mensagem para ${escapeHtml(client.client_name || "o cliente")}..."
+            style="width:100%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); border-radius:10px; padding:10px 14px; color:rgba(252,228,228,0.95); font-size:13px; outline:none; resize:none; line-height:1.5; font-family:inherit;"></textarea>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+            <p id="crm-msg-status" style="font-size:12px; min-height:16px; margin:0;"></p>
+            <button class="primary-button" id="crm-msg-send" style="padding:8px 20px;">Enviar</button>
+          </div>
+        </div>
+
         <div class="modal-actions" style="justify-content:space-between;">
-          ${whatsappUrl ? `
-          <a href="${whatsappUrl}" target="_blank" rel="noopener noreferrer" class="primary-button" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; background:rgba(34,197,94,0.9);">
-            💬 Chamar no WhatsApp
-          </a>` : `<span></span>`}
+          ${phoneNorm ? `
+          <button class="primary-button" id="crm-msg-open" style="background:rgba(34,197,94,0.9);">
+            💬 Enviar mensagem
+          </button>` : `<span></span>`}
           <button class="ghost-button" id="close-client-details-2">Fechar</button>
         </div>
       </div>
     `;
 
     document.body.appendChild(modal);
+
+    document.getElementById("crm-msg-open")?.addEventListener("click", () => {
+      const box = document.getElementById("crm-compose");
+      if (!box) return;
+      box.style.display = box.style.display === "none" ? "flex" : "none";
+      document.getElementById("crm-msg-text")?.focus();
+    });
+    document.getElementById("crm-msg-send")?.addEventListener("click", () => enviarMensagemCRM(client, phoneNorm));
 
     document.getElementById("close-client-details")?.addEventListener("click", () => modal.remove());
     document.getElementById("close-client-details-2")?.addEventListener("click", () => modal.remove());
