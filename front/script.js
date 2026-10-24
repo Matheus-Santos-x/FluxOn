@@ -449,9 +449,11 @@ function showCRM() {
   document.getElementById("mesas-view")?.classList.add("hidden");
   document.getElementById("home-view")?.classList.add("hidden");
   document.getElementById("admin-view")?.classList.add("hidden");
+  document.getElementById("open-create")?.classList.add("hidden");
   crmView?.classList.remove("hidden");
   hideTabsBar();
   closeDrawer();
+  setCrmFiltersOpen(false);
   fetchCRM();
 }
 
@@ -4344,16 +4346,32 @@ async function init() {
   }
 // Configura o drawer
 setupDrawer();
-  ["crm-f-busca", "crm-f-min-pedidos", "crm-f-min-gasto", "crm-f-desde"].forEach(id => {
+["crm-f-busca", "crm-f-min-pedidos", "crm-f-min-gasto", "crm-f-desde"].forEach(id => {
   document.getElementById(id)?.addEventListener("input", renderCRM);
 });
-document.getElementById("crm-f-limpar")?.addEventListener("click", () => {
-  document.getElementById("crm-f-busca").value = "";
-  document.getElementById("crm-f-min-pedidos").value = "";
-  document.getElementById("crm-f-min-gasto").value = "";
-  document.getElementById("crm-f-desde").value = "";
-  renderCRM();
+
+function setCrmFiltersOpen(open) {
+  const bar = document.getElementById("crm-filters-bar");
+  const toggleBtn = document.getElementById("crm-f-toggle");
+  if (bar) bar.style.display = open ? "flex" : "none";
+  if (toggleBtn) toggleBtn.textContent = open ? "Limpar filtros" : "Filtros";
+}
+
+document.getElementById("crm-f-toggle")?.addEventListener("click", () => {
+  const bar = document.getElementById("crm-filters-bar");
+  const isOpen = bar && bar.style.display === "flex";
+  if (!isOpen) {
+    setCrmFiltersOpen(true);
+  } else {
+    document.getElementById("crm-f-busca").value = "";
+    document.getElementById("crm-f-min-pedidos").value = "";
+    document.getElementById("crm-f-min-gasto").value = "";
+    document.getElementById("crm-f-desde").value = "";
+    renderCRM();
+  }
 });
+
+document.getElementById("crm-f-collapse")?.addEventListener("click", () => setCrmFiltersOpen(false));
 setupAdminImageInputs();
   ['click', 'touchstart', 'keydown'].forEach(evt => {
   document.addEventListener(evt, () => {
