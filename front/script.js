@@ -4357,6 +4357,8 @@ function setCrmFiltersOpen(open) {
   if (toggleBtn) toggleBtn.textContent = open ? "Limpar filtros" : "Filtros";
 }
 
+function showCRM() {
+
 document.getElementById("crm-f-toggle")?.addEventListener("click", () => {
   const bar = document.getElementById("crm-filters-bar");
   const isOpen = bar && bar.style.display === "flex";
