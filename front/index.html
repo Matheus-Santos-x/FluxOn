@@ -301,6 +301,27 @@ input:focus, textarea:focus, select:focus {
     <div class="crm-title">👥 CRM de Clientes</div>
     <button class="ghost-button" type="button" id="crm-back-btn">Voltar</button>
   </div>
+
+  <div class="crm-filters" style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; padding:0 0 20px; border-bottom:1px solid rgba(255,255,255,0.07); margin-bottom:20px;">
+    <label style="display:flex; flex-direction:column; gap:4px; flex:2; min-width:200px;">
+      <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Buscar</span>
+      <input id="crm-f-busca" type="text" placeholder="Nome ou telefone..." style="padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+    </label>
+    <label style="display:flex; flex-direction:column; gap:4px; width:120px;">
+      <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Mín. pedidos</span>
+      <input id="crm-f-min-pedidos" type="number" min="0" placeholder="0" style="padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+    </label>
+    <label style="display:flex; flex-direction:column; gap:4px; width:140px;">
+      <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Mín. gasto (R$)</span>
+      <input id="crm-f-min-gasto" type="number" min="0" step="0.01" placeholder="0,00" style="padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+    </label>
+    <label style="display:flex; flex-direction:column; gap:4px; width:160px;">
+      <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Comprou desde</span>
+      <input id="crm-f-desde" type="date" style="padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+    </label>
+    <button class="ghost-button" id="crm-f-limpar" type="button" style="white-space:nowrap;">Limpar filtros</button>
+  </div>
+
   <div class="crm-content"></div>
 </main>
   
