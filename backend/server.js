@@ -891,6 +891,38 @@ app.get("/crm/:restaurant_id", async (req, res) => {
   }
 });
 
+// PATCH - Edita nome/telefone de um cliente (atualiza em todos os pedidos dele)
+app.patch("/crm/:restaurant_id/cliente/:telefone", async (req, res) => {
+  try {
+    const { restaurant_id, telefone } = req.params;
+    const { novo_nome, novo_telefone } = req.body || {};
+
+    if (!novo_nome && !novo_telefone) {
+      return sendError(res, 400, "Informe novo_nome ou novo_telefone");
+    }
+
+    const updateData = {};
+    if (novo_nome) updateData.client_name = String(novo_nome).trim();
+    if (novo_telefone) updateData.client_phone = normalizePhone(novo_telefone);
+
+    const { error } = await supabase
+      .from("orders")
+      .update(updateData)
+      .eq("restaurant_id", restaurant_id)
+      .eq("client_phone", telefone);
+
+    if (error) {
+      console.error("❌ Erro ao editar cliente CRM:", error);
+      return sendError(res, 500, "Erro ao atualizar cliente");
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("❌ Erro em /crm/.../cliente:", err);
+    return sendError(res, 500, "Erro interno ao atualizar cliente");
+  }
+});
+
 /* ========================================
    ROTAS ORIGINAIS
 ======================================== */
