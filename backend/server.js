@@ -419,7 +419,7 @@ function normalizePhone(input) {
 }
 
 const pick = (obj = {}, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
-const CONFIG_CAMPOS = ["nome_exibicao","logo_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega"];
+const CONFIG_CAMPOS = ["nome_exibicao","logo_url","banner_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega"];
 
 
 /* ========================================
@@ -2559,7 +2559,7 @@ app.post("/api/v1/upload-image", upload.single("file"), async (req, res) => {
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${tipo.ext}`;
 
     const bucket = req.body.bucket || req.query.bucket || "cardapio-images";
-    const allowedBuckets = ["cardapio-images", "restaurante-logos", "premios-images"];
+    const allowedBuckets = ["cardapio-images", "restaurante-logos", "premios-images", "restaurante-banners"];
     if (!allowedBuckets.includes(bucket)) return sendError(res, 400, "Bucket inválido");
 
     const { data, error } = await supabase.storage
@@ -2666,9 +2666,10 @@ app.get("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
       .eq("restaurant_id", restaurant_id)
       .single();
 
-        return res.json({
+            return res.json({
       nome_exibicao: config?.nome_exibicao || "",
       logo_url: config?.logo_url || null,
+      banner_url: config?.banner_url || null,
       cor_primaria: config?.cor_primaria || "#f97373",
       cor_secundaria: config?.cor_secundaria || "#b91c1c",
       cor_fundo: config?.cor_fundo || "#0c0a09",
