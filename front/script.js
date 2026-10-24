@@ -435,6 +435,13 @@ function showBoard() {
   renderBoard();
 }
 
+function setCrmFiltersOpen(open) {
+  const bar = document.getElementById("crm-filters-bar");
+  const toggleBtn = document.getElementById("crm-f-toggle");
+  if (bar) bar.style.display = open ? "flex" : "none";
+  if (toggleBtn) toggleBtn.textContent = open ? "Limpar filtros" : "Filtros";
+}
+
 function showCRM() {
   if (!features.crm) {
     showUpgradeModal("advanced", "CRM de Clientes");
@@ -1606,7 +1613,7 @@ function editarPedidoMesa(key) {
               <input id="ep-busca" type="text" autocomplete="off" placeholder="Buscar item no cardápio..."
                 style="width:100%; background:rgba(255,255,255,0.06); border:0.5px solid rgba(255,255,255,0.12); border-radius:8px; padding:9px 12px; color:rgba(252,228,228,0.95); font-size:13px; box-sizing:border-box; outline:none; font-family:inherit; margin-bottom:8px;" />
               <div id="ep-dropdown" style="display:none; position:absolute; left:0; right:0; top:42px; z-index:9999;
-                background	rgba(20,20,22,0.98); border:1px solid rgba(255,255,255,0.18); border-radius:10px;
+                background:rgba(20,20,22,0.98); border:1px solid rgba(255,255,255,0.18); border-radius:10px;
                 max-height:200px; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,0.6);"></div>
             </div>
 
@@ -3241,7 +3248,7 @@ async function imprimirResumosSelecionados() {
               const isUltimo = idx === pagamentos.length - 1;
               const valorRestante = totalGeral - pagamentos.slice(0, idx).reduce((s, x) => s + (parseFloat(x.valor) || 0), 0);
               return `
-                <div style="margin-bottom:10px; padding:10px 0; ${idx > 0 ? 'border-top:1px solidrgba(255,255,255,0.07);' : ''}">
+                <div style="margin-bottom:10px; padding:10px 0; ${idx > 0 ? 'border-top:1px solid rgba(255,255,255,0.07);' : ''}">
                   <div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.4); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">
                     Pagamento ${idx + 1}
                     ${isUltimo && pagamentos.length > 1 ? `<span style="color:rgba(249,115,115,0.8); margin-left:6px;">Restante: ${formatCurrency(valorRestante)}</span>` : ''}
@@ -4446,15 +4453,6 @@ setupDrawer();
   document.getElementById(id)?.addEventListener("input", renderCRM);
 });
 
-function setCrmFiltersOpen(open) {
-  const bar = document.getElementById("crm-filters-bar");
-  const toggleBtn = document.getElementById("crm-f-toggle");
-  if (bar) bar.style.display = open ? "flex" : "none";
-  if (toggleBtn) toggleBtn.textContent = open ? "Limpar filtros" : "Filtros";
-}
-
-function showCRM() {
-
 document.getElementById("crm-f-toggle")?.addEventListener("click", () => {
   const bar = document.getElementById("crm-filters-bar");
   const isOpen = bar && bar.style.display === "flex";
@@ -4543,8 +4541,8 @@ if (modalCancelBtn) modalCancelBtn.addEventListener("click", () => {
 
 // Event listeners do modal de criação
 if (openCreateBtn) openCreateBtn.addEventListener("click", openCreateModal);
-if (closeCreateBtn) closeCreateBtn.addEventListener("click", closeCreateModal);
-if (cancelCreateBtn) cancelCreateBtn.addEventListener("click", closeCreateModal);
+if (closeCreateBtn) closeCreateBtn.addEventListener("click", () => closeCreateModal());
+if (cancelCreateBtn) cancelCreateBtn.addEventListener("click", () => closeCreateModal());
 if (saveCreateBtn) saveCreateBtn.addEventListener("click", saveNewOrder);
 if (newDelivery) newDelivery.addEventListener("change", updateCreateDeliveryVisibility);
 
@@ -5974,7 +5972,8 @@ function setupAutoatendimentoTabs() {
     painelMesas.classList.remove("hidden");
   });
 
-  document.getElementById("btn-gerar-qr")?.addEventListener("click", gerarQrCodes);
+  const btnQr = document.getElementById("btn-gerar-qr");
+  if (btnQr) btnQr.onclick = gerarQrCodes;
 }
 
 async function fetchCardapio() {
