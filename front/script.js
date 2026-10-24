@@ -3782,6 +3782,29 @@ async function fetchCRM() {
   }
 }
 
+function getFilteredCrmClients() {
+  const busca = (document.getElementById("crm-f-busca")?.value || "").trim().toLowerCase();
+  const minPedidos = parseInt(document.getElementById("crm-f-min-pedidos")?.value) || 0;
+  const minGasto = parseFloat(document.getElementById("crm-f-min-gasto")?.value) || 0;
+  const desdeStr = document.getElementById("crm-f-desde")?.value || "";
+  const desde = desdeStr ? new Date(desdeStr + "T00:00:00") : null;
+
+  return crmClients.filter(c => {
+    if (busca) {
+      const nome = (c.client_name || "").toLowerCase();
+      const tel = (c.client_phone || "").toLowerCase();
+      if (!nome.includes(busca) && !tel.includes(busca)) return false;
+    }
+    if ((c.orders || 0) < minPedidos) return false;
+    if ((c.total_spent || 0) < minGasto) return false;
+    if (desde) {
+      const last = c.last_order_at ? new Date(c.last_order_at) : null;
+      if (!last || last < desde) return false;
+    }
+    return true;
+  });
+}
+
 function renderCRM() {
   if (!crmContent) return;
 
@@ -3791,6 +3814,17 @@ function renderCRM() {
     crmContent.innerHTML = `
       <div class="empty-state">
         <p>Nenhum cliente cadastrado ainda.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const filtrados = getFilteredCrmClients();
+
+  if (filtrados.length === 0) {
+    crmContent.innerHTML = `
+      <div class="empty-state">
+        <p>Nenhum cliente encontrado com esses filtros.</p>
       </div>
     `;
     return;
@@ -3813,7 +3847,7 @@ function renderCRM() {
 
   const tbody = table.querySelector("tbody");
 
-  crmClients.forEach((c) => {
+  filtrados.forEach((c) => {
     const tr = document.createElement("tr");
     const phone = c.client_phone || "—";
     const totalSpent = c.total_spent || 0;
@@ -3853,15 +3887,31 @@ try {
     const modal = document.createElement("div");
     modal.id = "client-details-modal";
     modal.className = "modal-backdrop open";
-    
+
+    const whatsappUrl = phoneNorm ? `https://wa.me/55${phoneNorm}` : null;
+
     modal.innerHTML = `
       <div class="modal client-details-modal-content">
         <div class="modal-header">
-          <div>
-            <h3>${escapeHtml(client.client_name)}</h3>
-            <p class="muted">${client.client_phone}</p>
+          <div style="flex:1;">
+            <div id="crm-view-mode" style="display:flex; flex-direction:column; gap:2px;">
+              <h3 id="crm-client-name-display">${escapeHtml(client.client_name)}</h3>
+              <p class="muted" id="crm-client-phone-display">${escapeHtml(client.client_phone || "—")}</p>
+            </div>
+            <div id="crm-edit-mode" style="display:none; flex-direction:column; gap:8px; margin-top:4px;">
+              <input id="crm-edit-nome" type="text" value="${escapeHtml(client.client_name || "")}"
+                style="padding:8px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.6); color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+              <input id="crm-edit-telefone" type="text" value="${escapeHtml(client.client_phone || "")}"
+                style="padding:8px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.6); color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+              <div style="display:flex; gap:8px;">
+                <button class="ghost-button" id="crm-edit-cancel" style="flex:1; padding:8px; font-size:12px;">Cancelar</button>
+                <button class="primary-button" id="crm-edit-save" style="flex:1; padding:8px; font-size:12px;">Salvar</button>
+              </div>
+              <p id="crm-edit-status" style="font-size:12px; min-height:16px; margin:0;"></p>
+            </div>
           </div>
-          <button class="icon-button" id="close-client-details" style="margin-left: auto;">×</button>
+          ${phoneNorm ? `<button class="icon-button" id="crm-edit-toggle" title="Editar nome/telefone" style="margin-left:8px;">✏️</button>` : ""}
+          <button class="icon-button" id="close-client-details" style="margin-left: 8px;">×</button>
         </div>
         
         <div class="modal-body">
@@ -3901,7 +3951,11 @@ try {
           </div>
         </div>
         
-        <div class="modal-actions">
+        <div class="modal-actions" style="justify-content:space-between;">
+          ${whatsappUrl ? `
+          <a href="${whatsappUrl}" target="_blank" rel="noopener noreferrer" class="primary-button" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; background:rgba(34,197,94,0.9);">
+            💬 Chamar no WhatsApp
+          </a>` : `<span></span>`}
           <button class="ghost-button" id="close-client-details-2">Fechar</button>
         </div>
       </div>
@@ -3913,6 +3967,44 @@ try {
     document.getElementById("close-client-details-2")?.addEventListener("click", () => modal.remove());
     modal.addEventListener("click", (e) => {
       if (e.target === modal) modal.remove();
+    });
+
+    document.getElementById("crm-edit-toggle")?.addEventListener("click", () => {
+      document.getElementById("crm-view-mode").style.display = "none";
+      document.getElementById("crm-edit-mode").style.display = "flex";
+    });
+    document.getElementById("crm-edit-cancel")?.addEventListener("click", () => {
+      document.getElementById("crm-edit-mode").style.display = "none";
+      document.getElementById("crm-view-mode").style.display = "flex";
+    });
+    document.getElementById("crm-edit-save")?.addEventListener("click", async () => {
+      const novoNome = document.getElementById("crm-edit-nome").value.trim();
+      const novoTelefoneRaw = document.getElementById("crm-edit-telefone").value.trim();
+      const status = document.getElementById("crm-edit-status");
+      if (!novoNome) { status.textContent = "❌ Nome não pode ficar vazio."; status.style.color = "rgba(239,68,68,0.9)"; return; }
+
+      const btn = document.getElementById("crm-edit-save");
+      btn.disabled = true; btn.textContent = "Salvando...";
+      try {
+        const resp2 = await fetch(`${API_BASE}/crm/${rid}/cliente/${phoneNorm}`, {
+          method: "PATCH",
+          headers: buildHeaders(),
+          body: JSON.stringify({ novo_nome: novoNome, novo_telefone: novoTelefoneRaw || null })
+        });
+        const data = await resp2.json();
+        if (!resp2.ok) throw new Error(data.error || "Erro ao salvar");
+
+        document.getElementById("crm-client-name-display").textContent = novoNome;
+        document.getElementById("crm-client-phone-display").textContent = novoTelefoneRaw || "—";
+        document.getElementById("crm-edit-mode").style.display = "none";
+        document.getElementById("crm-view-mode").style.display = "flex";
+        await fetchCRM();
+      } catch (e) {
+        status.textContent = "❌ " + e.message;
+        status.style.color = "rgba(239,68,68,0.9)";
+      } finally {
+        btn.disabled = false; btn.textContent = "Salvar";
+      }
     });
 
   } catch (e) {
@@ -4252,6 +4344,16 @@ async function init() {
   }
 // Configura o drawer
 setupDrawer();
+  ["crm-f-busca", "crm-f-min-pedidos", "crm-f-min-gasto", "crm-f-desde"].forEach(id => {
+  document.getElementById(id)?.addEventListener("input", renderCRM);
+});
+document.getElementById("crm-f-limpar")?.addEventListener("click", () => {
+  document.getElementById("crm-f-busca").value = "";
+  document.getElementById("crm-f-min-pedidos").value = "";
+  document.getElementById("crm-f-min-gasto").value = "";
+  document.getElementById("crm-f-desde").value = "";
+  renderCRM();
+});
 setupAdminImageInputs();
   ['click', 'touchstart', 'keydown'].forEach(evt => {
   document.addEventListener(evt, () => {
