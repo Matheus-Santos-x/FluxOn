@@ -4992,6 +4992,604 @@ app.get("/api/v1/restaurante/:restaurant_id/notas-fiscais/contador", requireOwne
   }
 });
 
+/* ========================================================================
+   👑 FLUXON OWNER — login por CPF + WhatsApp, visão geral e dashboard
+   O middleware do Owner é SEMPRE estrito, não depende do AUTH_MODE.
+======================================================================== */
+
+const OWNER_JWT_SECRET = process.env.OWNER_JWT_SECRET || `${process.env.JWT_SECRET}:owner`;
+const OWNER_CPF_SECRET = process.env.OWNER_CPF_SECRET || "";
+const OWNER_OTP_WEBHOOK_URL = process.env.OWNER_OTP_WEBHOOK_URL || "";
+const OWNER_OTP_WEBHOOK_SECRET = process.env.OWNER_OTP_WEBHOOK_SECRET || "";
+const OWNER_TOKEN_TTL = "7d";
+const OWNER_OTP_MINUTOS = 5;
+const OWNER_OTP_MAX_TENTATIVAS = 5;
+const OWNER_PLAN_PRICE = { essential: 1200, advanced: 2500, executive: 4000, custom: 7000 };
+const SP_OFFSET_MS = 3 * 60 * 60 * 1000; // America/Sao_Paulo (UTC-3)
+
+const ownerLimitSolicitar = rateLimit({
+  windowMs: 60 * 1000, max: 5,
+  message: { error: "Muitas tentativas. Aguarde 1 minuto." },
+  standardHeaders: true, legacyHeaders: false
+});
+const ownerLimitVerificar = rateLimit({
+  windowMs: 60 * 1000, max: 10,
+  message: { error: "Muitas tentativas. Aguarde 1 minuto." },
+  standardHeaders: true, legacyHeaders: false
+});
+const ownerLimitDados = rateLimit({
+  windowMs: 60 * 1000, max: 120,
+  message: { error: "Muitas requisições. Aguarde um instante." },
+  standardHeaders: true, legacyHeaders: false
+});
+
+/* ---------- helpers ---------- */
+
+function ownerSomenteDigitos(v) {
+  return String(v ?? "").replace(/\D/g, "");
+}
+
+function cpfValido(raw) {
+  const c = ownerSomenteDigitos(raw);
+  if (c.length !== 11 || /^(\d)\1{10}$/.test(c)) return false;
+  for (const t of [9, 10]) {
+    let soma = 0;
+    for (let i = 0; i < t; i++) soma += Number(c[i]) * (t + 1 - i);
+    const dv = ((soma * 10) % 11) % 10;
+    if (dv !== Number(c[t])) return false;
+  }
+  return true;
+}
+
+function ownerTelefone(raw) {
+  let d = ownerSomenteDigitos(raw);
+  if (d.length === 10 || d.length === 11) d = "55" + d;
+  if ((d.length !== 12 && d.length !== 13) || !d.startsWith("55")) return null;
+  return d;
+}
+
+function ownerHmac(valor) {
+  return crypto.createHmac("sha256", OWNER_CPF_SECRET).update(String(valor)).digest("hex");
+}
+
+function ownerConfigOk(res) {
+  if (!OWNER_CPF_SECRET || !process.env.JWT_SECRET) {
+    console.error("❌ OWNER: defina OWNER_CPF_SECRET (e JWT_SECRET) nas variáveis do backend");
+    res.status(503).json({ error: "Owner indisponível no momento" });
+    return false;
+  }
+  return true;
+}
+
+async function ownerListarRestaurantes(ownerId) {
+  const { data: links } = await supabase
+    .from("owner_restaurants").select("restaurant_id").eq("owner_id", ownerId);
+  const ids = (links || []).map(l => l.restaurant_id);
+  if (ids.length === 0) return [];
+  const { data } = await supabase
+    .from("restaurants").select("id, name, plan").in("id", ids).order("name");
+  return (data || []).map(r => ({
+    id: r.id,
+    name: r.name || "Restaurante",
+    plan: String(r.plan || "essential").toLowerCase()
+  }));
+}
+
+/* ---------- middlewares (sempre estritos) ---------- */
+
+async function requireOwnerScope(req, res, next) {
+  try {
+    const h = req.headers.authorization || "";
+    if (!h.startsWith("Bearer ")) return res.status(401).json({ error: "Não autorizado" });
+
+    let p;
+    try {
+      p = jwt.verify(h.slice(7), OWNER_JWT_SECRET, { algorithms: ["HS256"] });
+    } catch {
+      return res.status(401).json({ error: "Sessão inválida ou expirada" });
+    }
+    if (p.scope !== "owner" || !p.sub) return res.status(401).json({ error: "Não autorizado" });
+
+    const { data: owner } = await supabase
+      .from("owners").select("id, nome, ativo, token_version").eq("id", p.sub).maybeSingle();
+    if (!owner || !owner.ativo || (owner.token_version || 0) !== (p.v || 0))
+      return res.status(401).json({ error: "Sessão inválida ou expirada" });
+
+    req.owner = owner;
+    return next();
+  } catch (err) {
+    console.error("❌ requireOwnerScope:", err.message);
+    return res.status(500).json({ error: "Erro interno" });
+  }
+}
+
+async function requireOwnerRestaurante(req, res, next) {
+  try {
+    const { data } = await supabase
+      .from("owner_restaurants").select("restaurant_id")
+      .eq("owner_id", req.owner.id).eq("restaurant_id", req.params.restaurant_id).maybeSingle();
+    if (!data) return res.status(403).json({ error: "Sem acesso a este restaurante" });
+    return next();
+  } catch (err) {
+    return res.status(403).json({ error: "Sem acesso a este restaurante" });
+  }
+}
+
+/* ---------- login: solicitar código ---------- */
+
+app.post("/owner/auth/solicitar", ownerLimitSolicitar, async (req, res) => {
+  const resposta = { success: true, message: "Se os dados estiverem corretos, você receberá um código no WhatsApp." };
+  try {
+    if (!ownerConfigOk(res)) return;
+
+    const cpf = ownerSomenteDigitos(req.body?.cpf);
+    const tel = ownerTelefone(req.body?.telefone);
+    if (!cpfValido(cpf) || !tel) return res.status(400).json({ error: "Informe um CPF e um telefone válidos" });
+
+    const { data: owner } = await supabase
+      .from("owners").select("id, nome, telefone, ativo").eq("cpf_hash", ownerHmac(cpf)).maybeSingle();
+    if (!owner || !owner.ativo || owner.telefone !== tel) return res.json(resposta);
+
+    const umaHora = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { data: recentes } = await supabase
+      .from("owner_otp").select("created_at")
+      .eq("owner_id", owner.id).gte("created_at", umaHora).order("created_at", { ascending: false });
+    if ((recentes || []).length >= 6) return res.json(resposta);
+    if (recentes?.[0] && Date.now() - new Date(recentes[0].created_at).getTime() < 45 * 1000) return res.json(resposta);
+
+    if (!OWNER_OTP_WEBHOOK_URL) {
+      console.error("❌ OWNER: OWNER_OTP_WEBHOOK_URL não configurada — código não enviado");
+      return res.json(resposta);
+    }
+
+    const codigo = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+
+    await supabase.from("owner_otp").update({ usado: true }).eq("owner_id", owner.id).eq("usado", false);
+    const { error: insErr } = await supabase.from("owner_otp").insert([{
+      owner_id: owner.id,
+      code_hash: ownerHmac(`${owner.id}:${codigo}`),
+      expires_at: new Date(Date.now() + OWNER_OTP_MINUTOS * 60 * 1000).toISOString()
+    }]);
+    if (insErr) {
+      console.error("❌ OWNER: erro ao salvar código:", insErr.message);
+      return res.json(resposta);
+    }
+
+    try {
+      const r = await fetch(OWNER_OTP_WEBHOOK_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(OWNER_OTP_WEBHOOK_SECRET ? { "x-fluxon-secret": OWNER_OTP_WEBHOOK_SECRET } : {})
+        },
+        body: JSON.stringify({
+          tipo: "owner_otp",
+          nome: owner.nome,
+          telefone: owner.telefone,
+          codigo,
+          expira_em_minutos: OWNER_OTP_MINUTOS,
+          mensagem: `Seu código de acesso ao FluxON Owner é *${codigo}*. Vale por ${OWNER_OTP_MINUTOS} minutos. Não compartilhe com ninguém.`
+        }),
+        signal: AbortSignal.timeout(10000)
+      });
+      if (!r.ok) console.error(`❌ OWNER: webhook do OTP respondeu ${r.status}`);
+    } catch (e) {
+      console.error("❌ OWNER: falha ao chamar o webhook do OTP:", e.message);
+    }
+
+    return res.json(resposta);
+  } catch (err) {
+    console.error("❌ /owner/auth/solicitar:", err.message);
+    return res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+/* ---------- login: verificar código ---------- */
+
+app.post("/owner/auth/verificar", ownerLimitVerificar, async (req, res) => {
+  const invalido = () => res.status(401).json({ error: "Código inválido ou expirado" });
+  try {
+    if (!ownerConfigOk(res)) return;
+
+    const cpf = ownerSomenteDigitos(req.body?.cpf);
+    const tel = ownerTelefone(req.body?.telefone);
+    const codigo = ownerSomenteDigitos(req.body?.codigo);
+    if (!cpfValido(cpf) || !tel || codigo.length !== 6) return invalido();
+
+    const { data: owner } = await supabase
+      .from("owners").select("id, nome, telefone, ativo, token_version").eq("cpf_hash", ownerHmac(cpf)).maybeSingle();
+    if (!owner || !owner.ativo || owner.telefone !== tel) return invalido();
+
+    const { data: otp } = await supabase
+      .from("owner_otp").select("id, code_hash, tentativas")
+      .eq("owner_id", owner.id).eq("usado", false).gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (!otp || otp.tentativas >= OWNER_OTP_MAX_TENTATIVAS) return invalido();
+
+    if (!safeEqual(ownerHmac(`${owner.id}:${codigo}`), otp.code_hash)) {
+      await supabase.from("owner_otp").update({ tentativas: otp.tentativas + 1 }).eq("id", otp.id);
+      return invalido();
+    }
+
+    const { data: consumido } = await supabase
+      .from("owner_otp").update({ usado: true }).eq("id", otp.id).eq("usado", false).select("id");
+    if (!consumido || consumido.length === 0) return invalido();
+
+    await supabase.from("owners").update({ ultimo_login: new Date().toISOString() }).eq("id", owner.id);
+
+    const token = jwt.sign(
+      { sub: owner.id, scope: "owner", v: owner.token_version || 0 },
+      OWNER_JWT_SECRET,
+      { expiresIn: OWNER_TOKEN_TTL }
+    );
+    return res.json({ success: true, token, owner: { id: owner.id, nome: owner.nome } });
+  } catch (err) {
+    console.error("❌ /owner/auth/verificar:", err.message);
+    return res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+app.post("/owner/auth/sair-todos", ownerLimitDados, requireOwnerScope, async (req, res) => {
+  const { error } = await supabase
+    .from("owners").update({ token_version: (req.owner.token_version || 0) + 1 }).eq("id", req.owner.id);
+  if (error) return res.status(500).json({ error: "Erro interno" });
+  return res.json({ success: true });
+});
+
+/* ---------- dados do dono ---------- */
+
+app.get("/owner/me", ownerLimitDados, requireOwnerScope, async (req, res) => {
+  try {
+    const restaurants = await ownerListarRestaurantes(req.owner.id);
+    return res.json({ owner: { id: req.owner.id, nome: req.owner.nome }, restaurants });
+  } catch (err) {
+    return res.status(500).json({ error: "Erro interno" });
+  }
+});
+
+/* ---------- período, busca de pedidos e resumo ---------- */
+
+function ownerPeriodo(query = {}) {
+  const invalido = () => { const e = new Error("Período inválido"); e.status = 400; return e; };
+  const addDias = (s, n) => {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+  };
+  const inicioDia = (s) => new Date(`${s}T00:00:00-03:00`);
+  const hojeStr = new Date(Date.now() - SP_OFFSET_MS).toISOString().slice(0, 10);
+
+  const p = String(query.period || "7d");
+  let fromStr, toStr;
+
+  if (p === "custom") {
+    const f = String(query.from || ""), t = String(query.to || "");
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    if (!re.test(f) || !re.test(t) || f > t || f > hojeStr) throw invalido();
+    fromStr = f;
+    toStr = t > hojeStr ? hojeStr : t;
+  } else {
+    const mapa = { today: 1, hoje: 1, "1d": 1, "3d": 3, "5d": 5, "7d": 7, "10d": 10, "30d": 30 };
+    const n = mapa[p];
+    if (!n) throw invalido();
+    toStr = hojeStr;
+    fromStr = addDias(hojeStr, -(n - 1));
+  }
+
+  const ms = (s) => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); };
+  const days = Math.round((ms(toStr) - ms(fromStr)) / 86400000) + 1;
+  if (days < 1 || days > 366) throw invalido();
+
+  return {
+    key: p, days, fromStr, toStr,
+    from: inicioDia(fromStr),
+    to: inicioDia(addDias(toStr, 1)),
+    prevFrom: inicioDia(addDias(fromStr, -days)),
+    prevTo: inicioDia(fromStr)
+  };
+}
+
+function ownerPeriodoJson(per) {
+  return { key: per.key, from: per.fromStr, to: per.toStr, days: per.days };
+}
+
+async function ownerBuscarPedidos(restaurantId, de, ate, colunas) {
+  const out = [];
+  const PAGINA = 1000;
+  for (let i = 0; i < 100; i++) {
+    const { data, error } = await supabase
+      .from("orders").select(colunas)
+      .eq("restaurant_id", restaurantId)
+      .gte("created_at", de.toISOString()).lt("created_at", ate.toISOString())
+      .order("created_at", { ascending: true }).order("id", { ascending: true })
+      .range(i * PAGINA, i * PAGINA + PAGINA - 1);
+    if (error) throw error;
+    out.push(...(data || []));
+    if (!data || data.length < PAGINA) break;
+  }
+  return out;
+}
+
+function ownerSeparar(orders, per) {
+  const corte = per.from.getTime();
+  const atual = [], anterior = [];
+  for (const o of orders) (Date.parse(o.created_at) >= corte ? atual : anterior).push(o);
+  return { atual, anterior };
+}
+
+function ownerCanal(o) {
+  if (String(o.service_type || "").toLowerCase() === "delivery") return "delivery";
+  return o.table_number ? "salao" : "balcao";
+}
+
+function ownerResumo(orders) {
+  const r = {
+    revenue: 0, orders: 0, cancelados: 0, ticket: 0,
+    canais: { salao: { orders: 0, revenue: 0 }, balcao: { orders: 0, revenue: 0 }, delivery: { orders: 0, revenue: 0 } }
+  };
+  for (const o of orders) {
+    if (o.origin === "fidelidade") continue;
+    if (o.status === "canceled" || o.status === "cancelled") { r.cancelados++; continue; }
+    if (o.status !== "finished") continue;
+    const v = parseFloat(o.total_price) || 0;
+    r.revenue += v;
+    r.orders++;
+    const c = ownerCanal(o);
+    r.canais[c].orders++;
+    r.canais[c].revenue += v;
+  }
+  const arred = (n) => Math.round(n * 100) / 100;
+  r.revenue = arred(r.revenue);
+  for (const c of Object.values(r.canais)) c.revenue = arred(c.revenue);
+  r.ticket = r.orders > 0 ? arred(r.revenue / r.orders) : 0;
+  return r;
+}
+
+function ownerCrescimento(atual, anterior) {
+  return anterior > 0 ? ((atual - anterior) / anterior) * 100 : null;
+}
+
+/* ---------- visão geral (ranking das unidades) ---------- */
+
+app.get("/owner/overview", ownerLimitDados, requireOwnerScope, async (req, res) => {
+  try {
+    const per = ownerPeriodo(req.query);
+    const restaurantes = await ownerListarRestaurantes(req.owner.id);
+
+    const linhas = await Promise.all(restaurantes.map(async (r) => {
+      const orders = await ownerBuscarPedidos(
+        r.id, per.prevFrom, per.to, "id, total_price, status, created_at, service_type, origin, table_number"
+      );
+      const { atual, anterior } = ownerSeparar(orders, per);
+      const a = ownerResumo(atual), b = ownerResumo(anterior);
+      return {
+        restaurant_id: r.id, name: r.name, plan: r.plan,
+        revenue: a.revenue, orders: a.orders, ticket: a.ticket, cancelados: a.cancelados,
+        growth_revenue: ownerCrescimento(a.revenue, b.revenue),
+        _prev: b
+      };
+    }));
+
+    linhas.sort((x, y) => (y.revenue - x.revenue) || (y.orders - x.orders) || x.name.localeCompare(y.name));
+
+    const totalRev = linhas.reduce((s, l) => s + l.revenue, 0);
+    const totalOrders = linhas.reduce((s, l) => s + l.orders, 0);
+    const totalCanc = linhas.reduce((s, l) => s + l.cancelados, 0);
+    const prevRev = linhas.reduce((s, l) => s + l._prev.revenue, 0);
+    const prevOrders = linhas.reduce((s, l) => s + l._prev.orders, 0);
+    const arred = (n) => Math.round(n * 100) / 100;
+
+    const ranking = linhas.map((l, i) => {
+      const { _prev, ...resto } = l;
+      return { position: i + 1, share: totalRev > 0 ? (l.revenue / totalRev) * 100 : 0, ...resto };
+    });
+
+    return res.json({
+      period: ownerPeriodoJson(per),
+      totals: {
+        revenue: arred(totalRev), orders: totalOrders, cancelados: totalCanc,
+        ticket: totalOrders > 0 ? arred(totalRev / totalOrders) : 0,
+        growth_revenue: ownerCrescimento(totalRev, prevRev),
+        growth_orders: ownerCrescimento(totalOrders, prevOrders),
+        units: ranking.length
+      },
+      ranking
+    });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    console.error("❌ /owner/overview:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar a visão geral" });
+  }
+});
+
+/* ---------- dashboard de um restaurante ---------- */
+
+app.get("/owner/restaurants/:restaurant_id/dashboard",
+  ownerLimitDados, requireOwnerScope, requireOwnerRestaurante, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const per = ownerPeriodo(req.query);
+
+    const { data: rest } = await supabase
+      .from("restaurants").select("id, name, plan").eq("id", restaurant_id).maybeSingle();
+    if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
+    const plan = String(rest.plan || "essential").toLowerCase();
+
+    const orders = await ownerBuscarPedidos(
+      restaurant_id, per.prevFrom, per.to,
+      "id, total_price, status, created_at, service_type, origin, table_number, itens"
+    );
+    const { atual, anterior } = ownerSeparar(orders, per);
+    const a = ownerResumo(atual), b = ownerResumo(anterior);
+
+    const mapaDia = {};
+    const chaveDia = (iso) => new Date(Date.parse(iso) - SP_OFFSET_MS).toISOString().slice(0, 10);
+    for (const o of atual) {
+      if (o.origin === "fidelidade" || o.status !== "finished") continue;
+      const k = chaveDia(o.created_at);
+      mapaDia[k] = mapaDia[k] || { revenue: 0, orders: 0 };
+      mapaDia[k].revenue += parseFloat(o.total_price) || 0;
+      mapaDia[k].orders++;
+    }
+    const timeline = [];
+    const [fy, fm, fd] = per.fromStr.split("-").map(Number);
+    for (let i = 0; i < per.days; i++) {
+      const k = new Date(Date.UTC(fy, fm - 1, fd + i)).toISOString().slice(0, 10);
+      const d = mapaDia[k] || { revenue: 0, orders: 0 };
+      timeline.push({ date: k, revenue: Math.round(d.revenue * 100) / 100, orders: d.orders });
+    }
+
+    const ranking = new Map();
+    for (const o of atual) {
+      if (o.origin === "fidelidade" || o.status !== "finished") continue;
+      for (const it of (Array.isArray(o.itens) ? o.itens : [])) {
+        const nomeOriginal = String(it.name || it.nome || "").trim();
+        if (!nomeOriginal) continue;
+        const chave = nomeOriginal.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+        const qty = Number(it.qty || it.quantidade || it.quantity || 1) || 1;
+        const atualItem = ranking.get(chave) || { nome: nomeOriginal, qty: 0 };
+        atualItem.qty += qty;
+        ranking.set(chave, atualItem);
+      }
+    }
+    const topProdutos = [...ranking.values()].sort((x, y) => y.qty - x.qty).slice(0, 8);
+
+    const planPrice = OWNER_PLAN_PRICE[plan] || OWNER_PLAN_PRICE.essential;
+    const roiLiberado = hasPlan(plan, "executive");
+    const roi = roiLiberado ? a.revenue / ((planPrice * per.days) / 30) : null;
+
+    return res.json({
+      restaurant: { id: rest.id, name: rest.name || "Restaurante", plan },
+      period: ownerPeriodoJson(per),
+      kpis: {
+        revenue: a.revenue, orders: a.orders, ticket: a.ticket, cancelados: a.cancelados,
+        growth: {
+          revenue: ownerCrescimento(a.revenue, b.revenue),
+          orders: ownerCrescimento(a.orders, b.orders),
+          ticket: ownerCrescimento(a.ticket, b.ticket)
+        },
+        roi, roi_locked: !roiLiberado, plan_price: planPrice
+      },
+      previous: { revenue: b.revenue, orders: b.orders, ticket: b.ticket },
+      timeline,
+      canais: a.canais,
+      top_produtos: topProdutos
+    });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    console.error("❌ /owner/restaurants/:id/dashboard:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar o dashboard" });
+  }
+});
+
+/* ---------- ADMIN: cadastrar donos (só quem está em ADMIN_EMAILS) ---------- */
+
+app.get("/admin/owners", requireAdmin, async (req, res) => {
+  try {
+    const { data: owners, error } = await supabase
+      .from("owners").select("id, nome, telefone, ativo, ultimo_login, created_at").order("nome");
+    if (error) return sendError(res, 500, "Erro ao listar donos");
+    const { data: links } = await supabase.from("owner_restaurants").select("owner_id, restaurant_id");
+    const porDono = {};
+    (links || []).forEach(l => { (porDono[l.owner_id] = porDono[l.owner_id] || []).push(l.restaurant_id); });
+    return res.json((owners || []).map(o => ({ ...o, restaurant_ids: porDono[o.id] || [] })));
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+app.post("/admin/owners", requireAdmin, async (req, res) => {
+  try {
+    if (!ownerConfigOk(res)) return;
+    const { nome, cpf, telefone, restaurant_ids } = req.body || {};
+    const tel = ownerTelefone(telefone);
+    const ids = Array.isArray(restaurant_ids) ? [...new Set(restaurant_ids)] : [];
+    if (!String(nome || "").trim()) return sendError(res, 400, "nome é obrigatório");
+    if (!cpfValido(cpf)) return sendError(res, 400, "CPF inválido");
+    if (!tel) return sendError(res, 400, "telefone inválido (use DDD + número)");
+    if (ids.length === 0) return sendError(res, 400, "informe ao menos um restaurant_id");
+
+    const { data: existentes } = await supabase.from("restaurants").select("id").in("id", ids);
+    if ((existentes || []).length !== ids.length) return sendError(res, 400, "algum restaurant_id não existe");
+
+    const { data: owner, error } = await supabase
+      .from("owners")
+      .insert([{ nome: String(nome).trim(), cpf_hash: ownerHmac(ownerSomenteDigitos(cpf)), telefone: tel }])
+      .select("id, nome, telefone, ativo").single();
+    if (error) {
+      if (error.code === "23505") return sendError(res, 409, "Já existe um dono com este CPF");
+      return sendError(res, 500, "Erro ao criar dono");
+    }
+
+    const { error: linkErr } = await supabase
+      .from("owner_restaurants").insert(ids.map(restaurant_id => ({ owner_id: owner.id, restaurant_id })));
+    if (linkErr) {
+      await supabase.from("owners").delete().eq("id", owner.id);
+      return sendError(res, 500, "Erro ao vincular restaurantes");
+    }
+
+    await logAdminAction(req.auth.email, "criar_owner", { owner_id: owner.id, nome: owner.nome, restaurant_ids: ids });
+    return res.status(201).json({ success: true, owner: { ...owner, restaurant_ids: ids } });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+app.put("/admin/owners/:id/restaurantes", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ids = Array.isArray(req.body?.restaurant_ids) ? [...new Set(req.body.restaurant_ids)] : [];
+    if (ids.length === 0) return sendError(res, 400, "informe ao menos um restaurant_id");
+
+    const { data: dono } = await supabase.from("owners").select("id").eq("id", id).maybeSingle();
+    if (!dono) return sendError(res, 404, "Dono não encontrado");
+    const { data: existentes } = await supabase.from("restaurants").select("id").in("id", ids);
+    if ((existentes || []).length !== ids.length) return sendError(res, 400, "algum restaurant_id não existe");
+
+    await supabase.from("owner_restaurants").delete().eq("owner_id", id);
+    const { error } = await supabase
+      .from("owner_restaurants").insert(ids.map(restaurant_id => ({ owner_id: id, restaurant_id })));
+    if (error) return sendError(res, 500, "Erro ao vincular restaurantes");
+
+    await logAdminAction(req.auth.email, "editar_owner_restaurantes", { owner_id: id, restaurant_ids: ids });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+app.patch("/admin/owners/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: dono } = await supabase
+      .from("owners").select("id, token_version").eq("id", id).maybeSingle();
+    if (!dono) return sendError(res, 404, "Dono não encontrado");
+
+    const campos = {};
+    if (typeof req.body?.ativo === "boolean") campos.ativo = req.body.ativo;
+    if (req.body?.nome !== undefined) {
+      if (!String(req.body.nome).trim()) return sendError(res, 400, "nome inválido");
+      campos.nome = String(req.body.nome).trim();
+    }
+    if (req.body?.telefone !== undefined) {
+      const tel = ownerTelefone(req.body.telefone);
+      if (!tel) return sendError(res, 400, "telefone inválido");
+      campos.telefone = tel;
+    }
+    if (Object.keys(campos).length === 0) return sendError(res, 400, "nada para atualizar");
+    if (campos.ativo === false || campos.telefone) campos.token_version = (dono.token_version || 0) + 1;
+
+    const { error } = await supabase.from("owners").update(campos).eq("id", id);
+    if (error) return sendError(res, 500, "Erro ao atualizar dono");
+
+    await logAdminAction(req.auth.email, "editar_owner", { owner_id: id, campos: Object.keys(campos) });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+/* ============ FIM DO BLOCO OWNER ============ */
+
 // ===== HEALTH CHECK =====
 app.get("/health", (req, res) => {
   res.json({
