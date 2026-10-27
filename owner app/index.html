@@ -6,14 +6,15 @@
 <title>FluxON Owner</title>
 <meta name="theme-color" content="#0b0d10">
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="pwa-icon.png" type="image/png">
+<link rel="apple-touch-icon" href="pwa-icon.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <main id="login-screen" class="login hidden">
   <div class="login-card">
-    <div class="brand"><span class="brand-mark">F</span><span>FluxON <b>Owner</b></span></div>
+    <div class="brand"><img class="brand-img" src="fenix-logo-png.png" alt=""><span>FluxON <b>Owner</b></span></div>
     <p class="muted" id="login-sub">Acesse os números dos seus restaurantes.</p>
 
     <form id="form-solicitar" autocomplete="on" novalidate>
@@ -42,7 +43,7 @@
 <div id="app" class="hidden">
   <header class="topbar">
     <div class="topbar-row">
-      <div class="brand small"><span class="brand-mark">F</span><span id="title">Visão geral</span></div>
+      <div class="brand small"><img class="brand-img" src="fenix-logo-png.png" alt=""><span id="title">Visão geral</span></div>
       <div class="avatar-wrap">
         <button id="avatar" class="avatar" aria-haspopup="true" aria-expanded="false" aria-label="Contas"></button>
         <div id="menu" class="menu hidden" role="menu"></div>
