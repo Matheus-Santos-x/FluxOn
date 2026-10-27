@@ -5438,6 +5438,15 @@ app.get("/owner/restaurants/:restaurant_id/dashboard",
       timeline.push({ date: k, revenue: Math.round(d.revenue * 100) / 100, orders: d.orders });
     }
 
+    const horas = Array.from({ length: 24 }, (_, h) => ({ h, revenue: 0, orders: 0 }));
+    for (const o of atual) {
+      if (o.origin === "fidelidade" || o.status !== "finished") continue;
+      const h = new Date(Date.parse(o.created_at) - SP_OFFSET_MS).getUTCHours();
+      horas[h].revenue += parseFloat(o.total_price) || 0;
+      horas[h].orders++;
+    }
+    horas.forEach((x) => { x.revenue = Math.round(x.revenue * 100) / 100; });
+
     const ranking = new Map();
     for (const o of atual) {
       if (o.origin === "fidelidade" || o.status !== "finished") continue;
@@ -5471,6 +5480,7 @@ app.get("/owner/restaurants/:restaurant_id/dashboard",
       },
       previous: { revenue: b.revenue, orders: b.orders, ticket: b.ticket },
       timeline,
+      horas,
       canais: a.canais,
       top_produtos: topProdutos
     });
