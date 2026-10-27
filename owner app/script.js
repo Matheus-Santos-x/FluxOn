@@ -33,7 +33,39 @@
   const iniciais = (nome) => String(nome || "?").trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "?";
   const fmtData = (iso) => { const [y, m, d] = iso.split("-"); return `${d}/${m}`; };
 
+  const DEMO = new URLSearchParams(location.search).has("demo");
+  function demoData(path) {
+    const m = /period=(\w+)/.exec(path), key = m ? m[1] : "7d";
+    const dias = { today: 1, "3d": 3, "5d": 5, "7d": 7, "10d": 10, "30d": 30, custom: 7 }[key] || 7;
+    const hoje = new Date(Date.now() - 3 * 3600e3);
+    const iso = (i) => new Date(hoje.getTime() - i * 864e5).toISOString().slice(0, 10);
+    const period = { key, from: iso(dias - 1), to: iso(0), days: dias };
+    const lojas = [
+      { id: "d1", name: "Burger Central", plan: "executive", f: 1.0 },
+      { id: "d2", name: "Burger Shopping", plan: "essential", f: 0.62 },
+      { id: "d3", name: "Burger Praia", plan: "custom", f: 0.35 }
+    ];
+    if (path.startsWith("/owner/me")) return { owner: { id: "demo", nome: "Dono Demo" }, restaurants: lojas.map(({ id, name, plan }) => ({ id, name, plan })) };
+    const tl = (f) => Array.from({ length: dias }, (_, i) => ({ date: iso(dias - 1 - i), revenue: Math.round((800 + ((i * 37) % 7) * 260) * f), orders: Math.round((12 + ((i * 5) % 9)) * f) }));
+    const soma = (t) => ({ rev: t.reduce((s, x) => s + x.revenue, 0), ped: t.reduce((s, x) => s + x.orders, 0) });
+    if (path.startsWith("/owner/overview")) {
+      const rows = lojas.map((l) => { const s = soma(tl(l.f)); return { restaurant_id: l.id, name: l.name, plan: l.plan, revenue: s.rev, orders: s.ped, ticket: s.rev / s.ped, cancelados: 2, growth_revenue: l.f === 0.62 ? -8.3 : 12.4 }; });
+      const total = rows.reduce((s, r) => s + r.revenue, 0), ped = rows.reduce((s, r) => s + r.orders, 0);
+      rows.sort((a, b) => b.revenue - a.revenue);
+      return { period, totals: { revenue: total, orders: ped, ticket: total / ped, growth_revenue: 6.1, growth_orders: null, units: 3 }, ranking: rows.map((r, i) => ({ position: i + 1, share: (r.revenue / total) * 100, ...r })) };
+    }
+    const id = decodeURIComponent((/restaurants\/([^/]+)/.exec(path) || [])[1] || "d1");
+    const l = lojas.find((x) => x.id === id) || lojas[0], t = tl(l.f), s = soma(t);
+    return {
+      restaurant: { id: l.id, name: l.name, plan: l.plan }, period,
+      kpis: { revenue: s.rev, orders: s.ped, ticket: s.rev / s.ped, cancelados: 3, growth: { revenue: 12.4, orders: -3.1, ticket: 8 }, roi: l.plan === "essential" ? null : 24.1, roi_locked: l.plan === "essential", plan_price: 4000 },
+      timeline: t,
+      canais: { salao: { orders: Math.round(s.ped * 0.4), revenue: s.rev * 0.42 }, balcao: { orders: Math.round(s.ped * 0.25), revenue: s.rev * 0.23 }, delivery: { orders: Math.round(s.ped * 0.35), revenue: s.rev * 0.35 } },
+      top_produtos: [{ nome: "X-Burger", qty: 41 }, { nome: "Batata Frita", qty: 33 }, { nome: "Coca 350ml", qty: 28 }, { nome: "Milkshake", qty: 17 }]
+    };
+  }
   async function api(path, opts = {}) {
+    if (DEMO) return demoData(path);
     const headers = { "Content-Type": "application/json" };
     if (st.token) headers.Authorization = "Bearer " + st.token;
     let res;
@@ -290,7 +322,7 @@
 
   /* ---------- início ---------- */
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
-  st.token = store.get(TOKEN_KEY);
+  st.token = DEMO ? "demo" : store.get(TOKEN_KEY);
   if (st.token) entrar().catch(() => { if (!st.token) return; loginView(); });
   else loginView();
 })();
