@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FluxON Owner</title>
+<meta name="theme-color" content="#0b0d10">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<main id="login-screen" class="login hidden">
+  <div class="login-card">
+    <div class="brand"><span class="brand-mark">F</span><span>FluxON <b>Owner</b></span></div>
+    <p class="muted" id="login-sub">Acesse os números dos seus restaurantes.</p>
+
+    <form id="form-solicitar" autocomplete="on" novalidate>
+      <label>CPF
+        <input id="in-cpf" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" maxlength="14">
+      </label>
+      <label>WhatsApp cadastrado
+        <input id="in-tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" maxlength="15">
+      </label>
+      <button class="btn primary" type="submit" id="btn-solicitar">Receber código no WhatsApp</button>
+    </form>
+
+    <form id="form-verificar" class="hidden" novalidate>
+      <label>Código de 6 dígitos
+        <input id="in-code" inputmode="numeric" autocomplete="one-time-code" placeholder="••••••" maxlength="6" class="code">
+      </label>
+      <button class="btn primary" type="submit" id="btn-verificar">Entrar</button>
+      <button class="btn ghost" type="button" id="btn-reenviar" disabled>Reenviar código</button>
+      <button class="btn link" type="button" id="btn-voltar">Trocar CPF ou telefone</button>
+    </form>
+
+    <p class="msg" id="login-msg" role="alert"></p>
+  </div>
+</main>
+
+<div id="app" class="hidden">
+  <header class="topbar">
+    <div class="topbar-row">
+      <div class="brand small"><span class="brand-mark">F</span><span id="title">Visão geral</span></div>
+      <div class="avatar-wrap">
+        <button id="avatar" class="avatar" aria-haspopup="true" aria-expanded="false" aria-label="Contas"></button>
+        <div id="menu" class="menu hidden" role="menu"></div>
+      </div>
+    </div>
+    <div class="periods" id="periods" role="tablist" aria-label="Período"></div>
+    <div class="custom hidden" id="custom">
+      <input type="date" id="c-from" aria-label="De">
+      <span class="muted">até</span>
+      <input type="date" id="c-to" aria-label="Até">
+      <button class="btn small primary" id="c-apply">Aplicar</button>
+    </div>
+  </header>
+
+  <main id="content" class="content" aria-live="polite"></main>
+</div>
+
+<div id="toast" class="toast hidden" role="status"></div>
+<script src="config.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
