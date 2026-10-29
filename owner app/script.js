@@ -442,7 +442,6 @@
         ${item("dre", "wallet", "Financeiro e DRE", "Receitas, CMV, despesas e resultado", exec, "Executive")}
         ${item("custos", "box", "Custos e estoque", "CMV, itens com estoque baixo", adv, "Advanced")}
         ${item("canais", "pie", "Rentabilidade por canal", "Salão, balcão e delivery", exec, "Executive")}
-        ${item("simulador", "calc", "Simulador de preços", "Impacto de mudar o preço de venda", exec, "Executive")}
         ${item("previsao", "trend", "Previsão de demanda", "Próximos dias, picos e produtos", exec, "Executive")}
         ${item("caixa", "file", "Relatórios do caixa", "Turnos abertos e fechados", true, "")}
         ${item("pdf", "print", "Exportar PDF", "Escolha o período e as seções", true, "")}
