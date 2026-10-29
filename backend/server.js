@@ -138,7 +138,9 @@ function emitOrderUpdate(restaurant_id, order) {
 
 const ALLOWED_ORIGINS_FIXED = [
   'https://fluxon.evoriseai.com.br',
-  'https://n8n-front.dahead.easypanel.host',
+    'https://n8n-front.dahead.easypanel.host',
+  'https://kds-owner-service.dahead.easypanel.host',
+  
 ];
 
 let _dominiosCache = null;
@@ -1048,6 +1050,27 @@ console.log(`🖨️ Job de impressão adicionado — Pedido #${pedidoAtualizado
   }
 });
 
+const FIDELIDADE_VALOR_MIN = 20; // só conta como selo pedido de R$ 20 ou mais
+
+async function estornarSeloFidelidade(order) {
+  try {
+    if (!order || order.origin === "fidelidade") return;
+    const phone = normalizePhone(order.client_phone);
+    if (!phone || (parseFloat(order.total_price) || 0) < FIDELIDADE_VALOR_MIN) return;
+
+    const { data: perfil } = await supabase
+      .from("base_clientes").select("id, pontos")
+      .eq("restaurant_id", order.restaurant_id).eq("numero", phone).single();
+    if (!perfil) return;
+
+    await supabase.from("base_clientes")
+      .update({ pontos: Math.max(0, (perfil.pontos || 0) - 1) }).eq("id", perfil.id);
+    console.log(`⭐ Selo estornado: ${phone} | pedido cancelado`);
+  } catch (e) {
+    console.error("⚠️ Erro ao estornar selo:", e.message);
+  }
+}
+
 app.patch("/orders/:id/status", requireRowOwner("orders"), async (req, res) => {
   try {
     const { id } = req.params;
@@ -1057,7 +1080,7 @@ app.patch("/orders/:id/status", requireRowOwner("orders"), async (req, res) => {
 
 // ✅ Busca ANTES do update para saber o estado original
 const { data: orderAntes } = await supabase
-  .from("orders").select("preparing_at, restaurant_id").eq("id", id).single();
+  .from("orders").select("preparing_at, restaurant_id, status, origin, client_phone, total_price").eq("id", id).single();
     
     const now = new Date().toISOString();
     
@@ -1088,6 +1111,9 @@ const { data: orderAntes } = await supabase
       .single();
     
     if (error || !data) return sendError(res, 500, "Erro ao atualizar pedido");
+    if ((status === "cancelled" || status === "canceled") && orderAntes && orderAntes.status !== "cancelled" && orderAntes.status !== "canceled") {
+      estornarSeloFidelidade({ ...orderAntes, restaurant_id: data.restaurant_id });
+    }
     emitOrderUpdate(data.restaurant_id, data);
     
 if (status === "finished") {
@@ -1357,7 +1383,7 @@ const trackingLink = baseUrl ? `${baseUrl}?code=${trackingCode}` : null;
 // ⭐ FIDELIZAÇÃO
 try {
   if (phone && !order_id && finalOrigin !== "fidelidade") {
-    const pontosGanhos = Math.floor((parseFloat(total_price) || 0) * 15);
+    const pontosGanhos = (parseFloat(total_price) || 0) >= FIDELIDADE_VALOR_MIN ? 1 : 0;
 
     if (pontosGanhos > 0) {
       const { data: perfil } = await supabase
@@ -4512,6 +4538,7 @@ const statusResp = await fetch(
       if (updated) {
         emitOrderUpdate(order.restaurant_id, updated);
         console.log(`❌ Pedido ${order.order_number} cancelado via MP`);
+        if (order.status !== "cancelled" && order.status !== "canceled") estornarSeloFidelidade(order);
       }
     }
 
