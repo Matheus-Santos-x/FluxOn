@@ -901,6 +901,191 @@ async function salvarAdminHorarios() {
   }
 }
 
+// ===== DONOS (FluxON Owner) =====
+const DONO_INPUT_STYLE = "width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;";
+let adminDonosCache = [];
+
+function donosCheckboxes(selecionados = [], cls = "dono-rest-check") {
+  if (!adminRestaurantsCache.length) return `<span style="font-size:13px; color:rgba(252,228,228,0.5);">Nenhum restaurante encontrado.</span>`;
+  return adminRestaurantsCache.map(r => `
+    <label style="display:flex; align-items:center; gap:10px; padding:6px 0; color:rgba(252,228,228,0.9); font-size:14px;">
+      <input type="checkbox" class="${cls}" value="${escapeHtml(r.id)}" ${selecionados.includes(r.id) ? "checked" : ""}>
+      <span>${escapeHtml(r.name)} <span style="color:rgba(252,228,228,0.4); font-size:12px;">· ${escapeHtml(r.plan || "")}</span></span>
+    </label>`).join("");
+}
+
+function donoFormatarTelefone(t) {
+  const d = String(t || "").replace(/\D/g, "").replace(/^55/, "");
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return t || "";
+}
+
+function donoStatus(id, texto, ok) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = texto;
+  el.style.color = ok ? "rgba(34,197,94,0.9)" : "rgba(239,68,68,0.9)";
+}
+
+async function openAdminDonosModal() {
+  document.getElementById("admin-donos-modal")?.remove();
+  if (!adminRestaurantsCache.length) await fetchAdminRestaurants();
+
+  const modal = document.createElement("div");
+  modal.id = "admin-donos-modal";
+  modal.className = "modal-backdrop open";
+  modal.innerHTML = `
+    <div class="modal confirm-modal" style="max-width:560px; max-height:88vh; overflow-y:auto;">
+      <div class="modal-header"><h3>👑 Donos do FluxON Owner</h3></div>
+      <div class="modal-body" style="gap:14px;">
+        <div id="donos-lista" style="display:flex; flex-direction:column; gap:10px;"></div>
+        <hr style="border:none; border-top:1px solid rgba(255,255,255,0.12); width:100%; margin:4px 0;">
+        <b style="color:rgba(252,228,228,0.9);">+ Novo dono</b>
+        <label style="color:rgba(252,228,228,0.8); font-size:13px;">Nome *
+          <input id="dono-novo-nome" style="${DONO_INPUT_STYLE}" /></label>
+        <label style="color:rgba(252,228,228,0.8); font-size:13px;">CPF *
+          <input id="dono-novo-cpf" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" style="${DONO_INPUT_STYLE}" /></label>
+        <label style="color:rgba(252,228,228,0.8); font-size:13px;">WhatsApp (com DDD) *
+          <input id="dono-novo-tel" inputmode="tel" placeholder="(11) 99999-9999" style="${DONO_INPUT_STYLE}" /></label>
+        <div style="color:rgba(252,228,228,0.8); font-size:13px;">Restaurantes pelos quais é responsável *
+          <div id="dono-novo-rests" style="margin-top:6px; max-height:180px; overflow-y:auto;">${donosCheckboxes()}</div>
+        </div>
+        <p id="donos-status" style="font-size:13px; min-height:18px; margin:0;"></p>
+      </div>
+      <div class="modal-actions">
+        <button class="ghost-button" id="donos-fechar">Fechar</button>
+        <button class="primary-button" id="donos-criar">Criar dono</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+  document.getElementById("donos-fechar").addEventListener("click", () => modal.remove());
+  document.getElementById("donos-criar").addEventListener("click", criarDonoAdmin);
+  document.getElementById("donos-lista").addEventListener("click", cliqueListaDonos);
+  await carregarDonosAdmin();
+}
+
+async function carregarDonosAdmin() {
+  const box = document.getElementById("donos-lista");
+  if (!box) return;
+  try {
+    const resp = await fetch(`${ADMIN_URL}/owners`, { headers: buildAdminHeaders() });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Erro ao listar donos");
+    adminDonosCache = data;
+    if (!data.length) {
+      box.innerHTML = `<span style="font-size:13px; color:rgba(252,228,228,0.5);">Nenhum dono cadastrado ainda.</span>`;
+      return;
+    }
+    box.innerHTML = data.map(o => {
+      const nomes = (o.restaurant_ids || []).map(id => adminRestaurantsCache.find(r => r.id === id)?.name || "—");
+      return `
+        <div style="border:1px solid rgba(255,255,255,0.14); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:8px; ${o.ativo ? "" : "opacity:0.55;"}">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+            <div>
+              <div style="font-weight:800; color:rgba(252,228,228,0.95);">${escapeHtml(o.nome)} ${o.ativo ? "" : "<span style='font-size:11px; color:rgba(239,68,68,0.9);'>(desativado)</span>"}</div>
+              <div style="font-size:12px; color:rgba(252,228,228,0.45); margin-top:2px;">${escapeHtml(donoFormatarTelefone(o.telefone))}</div>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+              <button class="ghost-button" data-act="rest" data-id="${escapeHtml(o.id)}">Restaurantes</button>
+              <button class="ghost-button" data-act="ativo" data-id="${escapeHtml(o.id)}">${o.ativo ? "Desativar" : "Ativar"}</button>
+            </div>
+          </div>
+          <div style="font-size:13px; color:rgba(252,228,228,0.7);">🏪 ${nomes.length ? nomes.map(escapeHtml).join(", ") : "Nenhum restaurante"}</div>
+        </div>`;
+    }).join("");
+  } catch (e) {
+    box.innerHTML = `<span style="font-size:13px; color:rgba(239,68,68,0.9);">❌ ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function cliqueListaDonos(e) {
+  const b = e.target.closest("button[data-act]");
+  if (!b) return;
+  const dono = adminDonosCache.find(o => o.id === b.dataset.id);
+  if (!dono) return;
+  if (b.dataset.act === "ativo") alternarDonoAtivo(dono);
+  if (b.dataset.act === "rest") abrirEditarRestaurantesDono(dono);
+}
+
+async function alternarDonoAtivo(dono) {
+  const acao = dono.ativo ? "desativar" : "ativar";
+  if (!confirm(`Deseja ${acao} ${dono.nome}?${dono.ativo ? " Ele será desconectado de todos os aparelhos." : ""}`)) return;
+  try {
+    const resp = await fetch(`${ADMIN_URL}/owners/${dono.id}`, {
+      method: "PATCH", headers: buildAdminHeaders(), body: JSON.stringify({ ativo: !dono.ativo })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error);
+    await carregarDonosAdmin();
+  } catch (e) { donoStatus("donos-status", "❌ " + e.message, false); }
+}
+
+function abrirEditarRestaurantesDono(dono) {
+  document.getElementById("admin-donos-rest-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.id = "admin-donos-rest-modal";
+  modal.className = "modal-backdrop open";
+  modal.style.zIndex = "10000";
+  modal.innerHTML = `
+    <div class="modal confirm-modal" style="max-width:420px; max-height:80vh; overflow-y:auto;">
+      <div class="modal-header"><h3>Restaurantes de ${escapeHtml(dono.nome)}</h3></div>
+      <div class="modal-body" style="gap:8px;">
+        <div>${donosCheckboxes(dono.restaurant_ids || [], "dono-edit-check")}</div>
+        <p id="donos-rest-status" style="font-size:13px; min-height:18px; margin:0;"></p>
+      </div>
+      <div class="modal-actions">
+        <button class="ghost-button" id="donos-rest-cancel">Cancelar</button>
+        <button class="primary-button" id="donos-rest-save">Salvar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+  document.getElementById("donos-rest-cancel").addEventListener("click", () => modal.remove());
+  document.getElementById("donos-rest-save").addEventListener("click", async () => {
+    const ids = [...document.querySelectorAll(".dono-edit-check:checked")].map(c => c.value);
+    if (!ids.length) { donoStatus("donos-rest-status", "❌ Marque ao menos um restaurante.", false); return; }
+    try {
+      const resp = await fetch(`${ADMIN_URL}/owners/${dono.id}/restaurantes`, {
+        method: "PUT", headers: buildAdminHeaders(), body: JSON.stringify({ restaurant_ids: ids })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error);
+      modal.remove();
+      await carregarDonosAdmin();
+    } catch (e) { donoStatus("donos-rest-status", "❌ " + e.message, false); }
+  });
+}
+
+async function criarDonoAdmin() {
+  const nome = document.getElementById("dono-novo-nome").value.trim();
+  const cpf = document.getElementById("dono-novo-cpf").value.replace(/\D/g, "");
+  const telefone = document.getElementById("dono-novo-tel").value.replace(/\D/g, "");
+  const ids = [...document.querySelectorAll(".dono-rest-check:checked")].map(c => c.value);
+
+  if (!nome || cpf.length !== 11 || telefone.length < 10 || !ids.length) {
+    donoStatus("donos-status", "❌ Preencha nome, CPF, telefone e marque ao menos um restaurante.", false);
+    return;
+  }
+  const btn = document.getElementById("donos-criar");
+  btn.disabled = true;
+  try {
+    const resp = await fetch(`${ADMIN_URL}/owners`, {
+      method: "POST", headers: buildAdminHeaders(),
+      body: JSON.stringify({ nome, cpf, telefone, restaurant_ids: ids })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error);
+    ["dono-novo-nome", "dono-novo-cpf", "dono-novo-tel"].forEach(id => { document.getElementById(id).value = ""; });
+    document.querySelectorAll(".dono-rest-check").forEach(c => { c.checked = false; });
+    donoStatus("donos-status", "✅ Dono criado! Ele já pode entrar no FluxON Owner.", true);
+    await carregarDonosAdmin();
+  } catch (e) {
+    donoStatus("donos-status", "❌ " + e.message, false);
+  } finally { btn.disabled = false; }
+}
+
 function openAdminCreateModal() {
   const existing = document.getElementById("admin-create-modal");
   if (existing) existing.remove();
@@ -4406,6 +4591,7 @@ if (adminBackBtn) adminBackBtn.addEventListener("click", showBoard);
 
 document.getElementById("impersonate-banner-exit")?.addEventListener("click", sairImpersonacao);
 document.getElementById("admin-btn-novo")?.addEventListener("click", openAdminCreateModal);
+document.getElementById("admin-btn-donos")?.addEventListener("click", openAdminDonosModal);
 document.getElementById("admin-btn-impersonate")?.addEventListener("click", () => {
   if (adminSelectedRestaurant) impersonarRestaurante(adminSelectedRestaurant.id);
 });
