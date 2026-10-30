@@ -262,7 +262,7 @@ $("back").addEventListener("click", () => { const de = st.screen; st.screen = PA
 
 const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos" };
   const SEM_PERIODO = ["custos", "cuing", "cufichas", "cudesp"];
-  const TITULOS = { dre: "Financeiro e DRE", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", clientes: "Clientes e origem", fidelidade: "Fidelidade", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Relatórios do caixa", pdf: "Exportar PDF" };
+  const TITULOS = { dre: "Financeiro e DRE", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", clientes: "Clientes e origem", fidelidade: "Fidelidade", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF" };
   function render() {
     const ov = st.view === "overview";
     $("back").classList.toggle("hidden", ov || st.screen === "home");
@@ -480,7 +480,7 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
         ${item("clientes", "users", "Clientes e origem dos pedidos", "Novos, recorrentes e de onde vêm", true, "")}
         ${item("fidelidade", "star", "Fidelidade", "Pontos ou selos e quanto cada um vale", true, "")}
         ${item("previsao", "trend", "Previsão de demanda", "Próximos dias, picos e produtos", exec, "Executive")}
-        ${item("caixa", "file", "Relatórios do caixa", "Turnos abertos e fechados", true, "")}
+        ${item("caixa", "file", "Vendas por dia", "Faturamento e pedidos de cada dia", true, "")}
         ${item("pdf", "print", "Exportar PDF", "Escolha o período e as seções", true, "")}
       </ul></section>
       ${secCanais(d)}${secProdutos(d)}
@@ -921,15 +921,6 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
   function telaPrevisao(d) {
     if (!temExec(d.restaurant.plan)) return lockCard("A previsão de demanda faz parte do plano Executive.");
     return nota(d.period) + secPrev(d);
-  }
-
-  function telaCaixa(d) {
-    const dias = d.timeline.filter((x) => x.revenue > 0).slice(-5).reverse();
-    const div = [0, -4.5, 0, 2, 0];
-    const lista = dias.map((x, i) => `<div class="shift"><div class="shift-h"><span>Turno de ${fmtData(x.date)}</span><span class="tag">${i === 0 && d.period.to === x.date ? "Fechado" : "Fechado"}</span></div>
-      <div class="shift-g"><span>Fundo inicial</span><b>${brl(100)}</b><span>Faturamento do turno</span><b>${brl(x.revenue)}</b><span>Pedidos</span><b>${int(x.orders)}</b><span>Conferência</span><b style="color:${div[i % 5] === 0 ? "var(--up)" : "var(--down)"}">${div[i % 5] === 0 ? "Sem diferença" : brl(div[i % 5])}</b></div></div>`).join("");
-    return nota(d.period) + `<section class="card"><h2>Turnos do caixa ${exemplo}</h2>${lista || `<div class="empty">Sem turnos no período.</div>`}
-      <p class="foot">Faturamento e pedidos vêm das vendas. A conferência do fechamento será ligada ao caixa do Operacional.</p></section>`;
   }
 
   function telaPdf(d) {
