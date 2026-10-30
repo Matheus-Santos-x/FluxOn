@@ -231,7 +231,7 @@
     st.view = v; st.screen = "home"; store.set("fluxon_owner_view", v);
     montarAvatar(); carregar(); window.scrollTo({ top: 0 });
   }
-  $("back").addEventListener("click", () => { st.screen = PAI[st.screen] || "home"; render(); window.scrollTo({ top: 0 }); });
+$("back").addEventListener("click", () => { const de = st.screen; st.screen = PAI[de] || "home"; window.scrollTo({ top: 0 }); if (de === "custos") carregar(); else render(); });
 
   /* ---------- carregamento ---------- */
   const qs = () => (st.period === "custom" ? `period=custom&from=${st.from}&to=${st.to}` : `period=${st.period}`);
@@ -612,25 +612,6 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
       ${cuLinha("cudesp", "wallet", "Despesas", "Folha, aluguel, impostos e outras contas")}
       ${cuLinha("cuver", "pie", "Ver meus custos", "Gráficos e porcentagens do período")}
     </ul></section>`;
-  }
-
-  /* ver meus custos: só leitura, com o filtro de período */
-  function telaVerCustos(d) {
-    const f = st.fin;
-    if (!finOk()) return nota(d.period) + `<section class="card lockcard"><span class="big">${ic("pie")}</span><b>Ainda não dá para mostrar seus custos</b><p>Registre as compras e monte a ficha dos pratos para ver o CMV e para onde vai o dinheiro.</p><button class="btn primary" data-go="cuing" style="margin-top:10px">Cadastrar ingredientes</button></section>`;
-    const saidas = f.cmv.valor + f.despesas.total;
-    const partes = [["Mercadoria (CMV)", f.cmv.valor], ...Object.entries(f.despesas.por_categoria).sort((a, b) => ORDEM_DESP.indexOf(a[0]) - ORDEM_DESP.indexOf(b[0])).map(([c, v]) => [CAT_DESP[c] || c, v])];
-    const barras = partes.map(([n, v], i) => `<div class="split-row"><div class="split-head"><span>${esc(n)}</span><span>${brl(v)} · ${pct(saidas ? (v / saidas) * 100 : 0, 0)}</span></div><div class="bar ${i ? "amber" : ""}"><i style="width:${saidas ? (v / saidas) * 100 : 0}%"></i></div></div>`).join("");
-    const avisos = [
-      f.cmv.cobertura_pct < 95 ? `CMV calculado com base em ${pct(f.cmv.cobertura_pct, 0)} das vendas (pratos com ficha pronta).` : "",
-      !f.despesas.cadastradas ? "Sem despesas cadastradas neste período." : ""
-    ].filter(Boolean).join(" ");
-    return nota(d.period) + `
-      <section class="grid2">
-        <div class="kpi"><span class="label">CMV</span><span class="value">${pct(f.cmv.pct)}</span><span class="sub">do faturamento vai para a mercadoria</span></div>
-        <div class="kpi"><span class="label">Custo total</span><span class="value">${brl(saidas)}</span><span class="sub">${f.receita > 0 ? pct((saidas / f.receita) * 100) + " do faturamento" : "mercadoria e despesas"}</span></div>
-      </section>
-      <section class="card"><h2>Para onde vai o dinheiro</h2><div class="split">${barras}</div>${avisos ? `<p class="foot" style="text-align:left">${avisos}</p>` : ""}</section>`;
   }
 
   /* ingredientes e mercadorias: registrar compra, produtos e últimas compras */
