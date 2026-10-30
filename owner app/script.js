@@ -930,6 +930,13 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
     return nota(d.period) + secPrev(d);
   }
 
+  function telaCaixa(d) {
+    const dias = d.timeline.filter((x) => x.orders > 0 || x.revenue > 0).slice().reverse();
+    const lista = dias.map((x) => `<div class="split-row"><div class="split-head"><span>${fmtData(x.date)}</span><span>${brl(x.revenue)} · ${int(x.orders)} ${x.orders === 1 ? "pedido" : "pedidos"}</span></div></div>`).join("");
+    return nota(d.period) + `<section class="card"><h2>Vendas por dia</h2>${lista ? `<div class="split">${lista}</div>` : `<div class="empty">Sem vendas no período.</div>`}
+      <p class="foot">Faturamento de pedidos finalizados. O fechamento do caixa (fundo, sangria e conferência) entra quando ligarmos ao caixa do Operacional.</p></section>`;
+  }
+  
   function telaPdf(d) {
     const exec = temExec(d.restaurant.plan);
     const secs = [["resumo", "Resumo e indicadores", true], ["grafico", "Gráfico de vendas", true], ["canais", "Vendas por canal", true], ["produtos", "Mais vendidos", true], ["dre", "DRE gerencial", exec], ["rent", "Rentabilidade por canal", exec], ["prev", "Previsão de demanda", exec]];
