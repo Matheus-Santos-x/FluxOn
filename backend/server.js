@@ -5702,6 +5702,235 @@ app.put("/owner/restaurants/:restaurant_id/fidelidade",
   }
 });
 
+/* ---------- custos e despesas (cadastro feito pelo dono) ---------- */
+
+const CUSTO_UNIDADES = ["kg", "l", "un"];
+const DESPESA_CATEGORIAS = ["folha", "aluguel", "energia", "manutencao", "outras"];
+const custoNum = (v) => Number(String(v ?? "").replace(",", "."));
+const custoArred = (n, c = 2) => Math.round(n * 10 ** c) / 10 ** c;
+const custoNorm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+const custoHoje = () => new Date(Date.now() - SP_OFFSET_MS).toISOString().slice(0, 10);
+const custoMes = (m) => (/^\d{4}-(0[1-9]|1[0-2])$/.test(String(m || "")) ? `${m}-01` : null);
+const custoMesAnterior = (comp) => {
+  const [y, m] = comp.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10);
+};
+const donoRota = [ownerLimitDados, requireOwnerScope, requireOwnerRestaurante];
+
+// o custo do insumo é o da compra mais recente (valor pago ÷ quantidade)
+async function custoRecalcularInsumo(restaurant_id, insumo_id) {
+  const { data: ultima } = await supabase
+    .from("compras").select("quantidade, valor_total")
+    .eq("restaurant_id", restaurant_id).eq("insumo_id", insumo_id)
+    .order("data_compra", { ascending: false }).order("created_at", { ascending: false })
+    .limit(1).maybeSingle();
+  const custo = ultima && Number(ultima.quantidade) > 0 ? Number(ultima.valor_total) / Number(ultima.quantidade) : 0;
+  await supabase.from("insumos").update({ custo_unitario: custoArred(custo, 4) })
+    .eq("id", insumo_id).eq("restaurant_id", restaurant_id);
+}
+
+async function custoListarInsumos(restaurant_id, soAtivos = true) {
+  let q = supabase.from("insumos").select("id, nome, unidade, custo_unitario, ativo").eq("restaurant_id", restaurant_id);
+  if (soAtivos) q = q.eq("ativo", true);
+  const { data, error } = await q.order("nome");
+  if (error) throw error;
+  return data || [];
+}
+
+/* insumos */
+app.get("/owner/restaurants/:restaurant_id/custos/insumos", donoRota, async (req, res) => {
+  try {
+    return res.json({ insumos: await custoListarInsumos(req.params.restaurant_id) });
+  } catch (err) {
+    console.error("❌ GET custos/insumos:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar os insumos" });
+  }
+});
+
+app.post("/owner/restaurants/:restaurant_id/custos/insumos", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const nome = String(req.body?.nome || "").trim().slice(0, 80);
+    const unidade = String(req.body?.unidade || "kg").toLowerCase();
+    if (!nome) return res.status(400).json({ error: "Informe o nome do produto" });
+    if (!CUSTO_UNIDADES.includes(unidade)) return res.status(400).json({ error: "Unidade inválida (use kg, l ou un)" });
+    const existentes = await custoListarInsumos(restaurant_id);
+    if (existentes.some((i) => custoNorm(i.nome) === custoNorm(nome))) return res.status(409).json({ error: "Esse produto já está cadastrado" });
+    const { data, error } = await supabase.from("insumos").insert([{ restaurant_id, nome, unidade }]).select().single();
+    if (error) throw error;
+    return res.status(201).json({ insumo: data });
+  } catch (err) {
+    console.error("❌ POST custos/insumos:", err.message);
+    return res.status(500).json({ error: "Erro ao cadastrar o produto" });
+  }
+});
+
+app.delete("/owner/restaurants/:restaurant_id/custos/insumos/:id", donoRota, async (req, res) => {
+  try {
+    const { error } = await supabase.from("insumos").update({ ativo: false })
+      .eq("id", req.params.id).eq("restaurant_id", req.params.restaurant_id);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("❌ DELETE custos/insumos:", err.message);
+    return res.status(500).json({ error: "Erro ao remover o produto" });
+  }
+});
+
+/* compras */
+app.get("/owner/restaurants/:restaurant_id/custos/compras", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const { data, error } = await supabase
+      .from("compras").select("id, insumo_id, quantidade, valor_total, fornecedor, origem, data_compra")
+      .eq("restaurant_id", restaurant_id)
+      .order("data_compra", { ascending: false }).order("created_at", { ascending: false }).limit(30);
+    if (error) throw error;
+    const nomes = Object.fromEntries((await custoListarInsumos(restaurant_id, false)).map((i) => [i.id, i]));
+    return res.json({
+      compras: (data || []).map((c) => ({ ...c, nome: nomes[c.insumo_id]?.nome || "—", unidade: nomes[c.insumo_id]?.unidade || "kg" }))
+    });
+  } catch (err) {
+    console.error("❌ GET custos/compras:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar as compras" });
+  }
+});
+
+app.post("/owner/restaurants/:restaurant_id/custos/compras", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const b = req.body || {};
+    const quantidade = custoNum(b.quantidade), valor = custoNum(b.valor_total);
+    if (!Number.isFinite(quantidade) || quantidade <= 0 || quantidade > 1e6) return res.status(400).json({ error: "Quantidade inválida" });
+    if (!Number.isFinite(valor) || valor < 0 || valor > 1e7) return res.status(400).json({ error: "Valor inválido" });
+    const data_compra = b.data_compra ? String(b.data_compra) : custoHoje();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data_compra) || data_compra > custoHoje()) return res.status(400).json({ error: "Data inválida" });
+
+    // o produto vem do cadastro (insumo_id) ou pelo nome (cria na hora se ainda não existir)
+    const lista = await custoListarInsumos(restaurant_id);
+    let insumo = null;
+    if (b.insumo_id) {
+      insumo = lista.find((i) => i.id === b.insumo_id);
+      if (!insumo) return res.status(404).json({ error: "Produto não encontrado" });
+    } else {
+      const nome = String(b.insumo_nome || "").trim().slice(0, 80);
+      if (!nome) return res.status(400).json({ error: "Informe o produto" });
+      insumo = lista.find((i) => custoNorm(i.nome) === custoNorm(nome));
+      if (!insumo) {
+        const unidade = CUSTO_UNIDADES.includes(String(b.unidade || "").toLowerCase()) ? String(b.unidade).toLowerCase() : "kg";
+        const { data: novo, error: e1 } = await supabase.from("insumos").insert([{ restaurant_id, nome, unidade }]).select().single();
+        if (e1) throw e1;
+        insumo = novo;
+      }
+    }
+
+    const { data: compra, error } = await supabase.from("compras").insert([{
+      restaurant_id, insumo_id: insumo.id, quantidade, valor_total: custoArred(valor),
+      fornecedor: String(b.fornecedor || "").trim().slice(0, 80) || null,
+      origem: b.origem === "nota" ? "nota" : "manual", data_compra
+    }]).select().single();
+    if (error) throw error;
+
+    await custoRecalcularInsumo(restaurant_id, insumo.id);
+    const atualizado = (await custoListarInsumos(restaurant_id)).find((i) => i.id === insumo.id);
+    return res.status(201).json({ compra, insumo: atualizado });
+  } catch (err) {
+    console.error("❌ POST custos/compras:", err.message);
+    return res.status(500).json({ error: "Erro ao registrar a compra" });
+  }
+});
+
+app.delete("/owner/restaurants/:restaurant_id/custos/compras/:id", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id, id } = req.params;
+    const { data: c } = await supabase.from("compras").select("insumo_id").eq("id", id).eq("restaurant_id", restaurant_id).maybeSingle();
+    if (!c) return res.status(404).json({ error: "Compra não encontrada" });
+    const { error } = await supabase.from("compras").delete().eq("id", id).eq("restaurant_id", restaurant_id);
+    if (error) throw error;
+    await custoRecalcularInsumo(restaurant_id, c.insumo_id);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("❌ DELETE custos/compras:", err.message);
+    return res.status(500).json({ error: "Erro ao remover a compra" });
+  }
+});
+
+/* despesas (folha, aluguel, energia...) — lançadas por mês */
+async function despesasDoMes(restaurant_id, competencia) {
+  const { data, error } = await supabase
+    .from("despesas").select("id, categoria, descricao, valor, competencia, recorrente")
+    .eq("restaurant_id", restaurant_id).eq("competencia", competencia).order("created_at");
+  if (error) throw error;
+  const lista = data || [];
+  const porCategoria = {};
+  let total = 0;
+  for (const d of lista) { porCategoria[d.categoria] = custoArred((porCategoria[d.categoria] || 0) + Number(d.valor)); total += Number(d.valor); }
+  return { competencia, despesas: lista, por_categoria: porCategoria, total: custoArred(total) };
+}
+
+app.get("/owner/restaurants/:restaurant_id/custos/despesas", donoRota, async (req, res) => {
+  try {
+    const comp = custoMes(req.query.mes) || `${custoHoje().slice(0, 7)}-01`;
+    return res.json(await despesasDoMes(req.params.restaurant_id, comp));
+  } catch (err) {
+    console.error("❌ GET custos/despesas:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar as despesas" });
+  }
+});
+
+app.post("/owner/restaurants/:restaurant_id/custos/despesas", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const b = req.body || {};
+    const comp = custoMes(b.mes);
+    const valor = custoNum(b.valor);
+    if (!comp) return res.status(400).json({ error: "Mês inválido" });
+    if (!DESPESA_CATEGORIAS.includes(b.categoria)) return res.status(400).json({ error: "Categoria inválida" });
+    if (!Number.isFinite(valor) || valor <= 0 || valor > 1e7) return res.status(400).json({ error: "Valor inválido" });
+    const { data, error } = await supabase.from("despesas").insert([{
+      restaurant_id, categoria: b.categoria, descricao: String(b.descricao || "").trim().slice(0, 80) || null,
+      valor: custoArred(valor), competencia: comp, recorrente: !!b.recorrente
+    }]).select().single();
+    if (error) throw error;
+    return res.status(201).json({ despesa: data });
+  } catch (err) {
+    console.error("❌ POST custos/despesas:", err.message);
+    return res.status(500).json({ error: "Erro ao salvar a despesa" });
+  }
+});
+
+app.delete("/owner/restaurants/:restaurant_id/custos/despesas/:id", donoRota, async (req, res) => {
+  try {
+    const { error } = await supabase.from("despesas").delete().eq("id", req.params.id).eq("restaurant_id", req.params.restaurant_id);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("❌ DELETE custos/despesas:", err.message);
+    return res.status(500).json({ error: "Erro ao remover a despesa" });
+  }
+});
+
+// copia as despesas do mês anterior (folha, aluguel...) para o mês escolhido, se ele ainda estiver vazio
+app.post("/owner/restaurants/:restaurant_id/custos/despesas/copiar", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const comp = custoMes(req.body?.mes);
+    if (!comp) return res.status(400).json({ error: "Mês inválido" });
+    const atual = await despesasDoMes(restaurant_id, comp);
+    if (atual.despesas.length) return res.status(409).json({ error: "Esse mês já tem despesas lançadas" });
+    const anterior = await despesasDoMes(restaurant_id, custoMesAnterior(comp));
+    if (!anterior.despesas.length) return res.status(404).json({ error: "O mês anterior não tem despesas para copiar" });
+    const { error } = await supabase.from("despesas").insert(anterior.despesas.map((d) => ({
+      restaurant_id, categoria: d.categoria, descricao: d.descricao, valor: d.valor, competencia: comp, recorrente: d.recorrente
+    })));
+    if (error) throw error;
+    return res.json(await despesasDoMes(restaurant_id, comp));
+  } catch (err) {
+    console.error("❌ POST custos/despesas/copiar:", err.message);
+    return res.status(500).json({ error: "Erro ao copiar as despesas" });
+  }
+});
+
 /* ---------- ADMIN: cadastrar donos (só quem está em ADMIN_EMAILS) ---------- */
 
 app.get("/admin/owners", requireAdmin, async (req, res) => {
