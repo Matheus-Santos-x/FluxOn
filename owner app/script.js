@@ -38,7 +38,8 @@
     trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
     print: '<path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="9" rx="2"/><path d="M7 15h10v6H7z"/>',
     lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
-    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>'
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>',
+    star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>'
   };
   const ic = (n) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
 
@@ -255,14 +256,14 @@
     const g = e.target.closest("[data-go]"); if (g) { st.screen = g.dataset.go; render(); window.scrollTo({ top: 0 }); }
   });
 
-  const TITULOS = { dre: "Financeiro e DRE", custos: "Custos e estoque", canais: "Rentabilidade por canal", clientes: "Clientes e origem", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Relatórios do caixa", pdf: "Exportar PDF" };
+  const TITULOS = { dre: "Financeiro e DRE", custos: "Custos e estoque", canais: "Rentabilidade por canal", clientes: "Clientes e origem", fidelidade: "Fidelidade", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Relatórios do caixa", pdf: "Exportar PDF" };
   function render() {
     const ov = st.view === "overview";
     $("back").classList.toggle("hidden", ov || st.screen === "home");
     if (ov) { $("title").textContent = "Visão geral"; $("content").innerHTML = telaOverview(st.ov); return; }
     const d = st.dash;
     $("title").textContent = st.screen === "home" ? d.restaurant.name : TITULOS[st.screen];
-    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, clientes: telaClientes, simulador: telaSimulador, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
+    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, clientes: telaClientes, fidelidade: telaFidelidade, simulador: telaSimulador, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
     $("content").innerHTML = T(d);
     if (st.screen === "simulador") bindSim(d);
     if (st.screen === "pdf") bindPdf(d);
@@ -441,6 +442,7 @@
         ${item("custos", "box", "Custos e estoque", "CMV, itens com estoque baixo", adv, "Advanced")}
         ${item("canais", "pie", "Rentabilidade por canal", "Salão, balcão e delivery", exec, "Executive")}
         ${item("clientes", "users", "Clientes e origem dos pedidos", "Novos, recorrentes e de onde vêm", true, "")}
+        ${item("fidelidade", "star", "Fidelidade", "Pontos ou selos e quanto cada um vale", true, "")}
         ${item("previsao", "trend", "Previsão de demanda", "Próximos dias, picos e produtos", exec, "Executive")}
         ${item("caixa", "file", "Relatórios do caixa", "Turnos abertos e fechados", true, "")}
         ${item("pdf", "print", "Exportar PDF", "Escolha o período e as seções", true, "")}
@@ -510,7 +512,7 @@
       <section class="card"><h2>Tipo de serviço</h2><div class="split">${c.origem.total ? linhas(c.servico, { local: "No local (salão e balcão)", delivery: "Delivery" }) : `<p class="foot">Sem pedidos no período.</p>`}</div></section>`;
   }
 
-  function telaSimulador(d) {
+
     if (!temExec(d.restaurant.plan)) return lockCard("O simulador de precificação faz parte do plano Executive.");
     return nota(d.period) + `<section class="card sim"><h2>Simular novo preço ${exemplo}</h2>
       <label for="sim-p"><span>Mudança no preço de venda</span><b id="sim-v">0%</b></label>
