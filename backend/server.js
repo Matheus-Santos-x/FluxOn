@@ -1050,22 +1050,54 @@ console.log(`🖨️ Job de impressão adicionado — Pedido #${pedidoAtualizado
   }
 });
 
-const FIDELIDADE_VALOR_MIN = 20; // só conta como selo pedido de R$ 20 ou mais
+const FIDELIDADE_VALOR_MIN = 20; // valor padrão, usado se o restaurante não configurou o dele
+
+// valor mínimo do pedido para ganhar 1 selo (configurável por restaurante no Owner)
+// regras de fidelidade do restaurante (configuráveis no Owner)
+async function configFidelidade(restaurant_id) {
+  const padrao = { modelo: "pontos", valorSelo: FIDELIDADE_VALOR_MIN, pontosPorReal: 1 };
+  try {
+    const { data } = await supabase
+      .from("restaurante_config")
+      .select("fidelidade_modelo, fidelidade_valor_selo, fidelidade_pontos_por_real")
+      .eq("restaurant_id", restaurant_id).maybeSingle();
+    if (!data) return padrao;
+    const valorSelo = parseFloat(data.fidelidade_valor_selo);
+    const ppr = parseFloat(data.fidelidade_pontos_por_real);
+    return {
+      modelo: data.fidelidade_modelo === "selos" ? "selos" : "pontos",
+      valorSelo: valorSelo > 0 ? valorSelo : padrao.valorSelo,
+      pontosPorReal: ppr > 0 ? ppr : padrao.pontosPorReal
+    };
+  } catch {
+    return padrao;
+  }
+}
+
+// quanto o pedido rende, e em qual coluna: pontos (por real gasto) ou selos (1 por pedido que atinge o valor)
+function fidelidadeGanho(cfg, total) {
+  const v = parseFloat(total) || 0;
+  if (cfg.modelo === "selos") return { coluna: "selos", qtd: v >= cfg.valorSelo ? 1 : 0 };
+  return { coluna: "pontos", qtd: Math.floor(v * cfg.pontosPorReal) };
+}
 
 async function estornarSeloFidelidade(order) {
   try {
     if (!order || order.origin === "fidelidade") return;
     const phone = normalizePhone(order.client_phone);
-    if (!phone || (parseFloat(order.total_price) || 0) < FIDELIDADE_VALOR_MIN) return;
+    if (!phone) return;
+    const cfg = await configFidelidade(order.restaurant_id);
+    const { coluna, qtd } = fidelidadeGanho(cfg, order.total_price);
+    if (qtd <= 0) return;
 
     const { data: perfil } = await supabase
-      .from("base_clientes").select("id, pontos")
+      .from("base_clientes").select(`id, ${coluna}`)
       .eq("restaurant_id", order.restaurant_id).eq("numero", phone).single();
     if (!perfil) return;
 
     await supabase.from("base_clientes")
-      .update({ pontos: Math.max(0, (perfil.pontos || 0) - 1) }).eq("id", perfil.id);
-    console.log(`⭐ Selo estornado: ${phone} | pedido cancelado`);
+      .update({ [coluna]: Math.max(0, (perfil[coluna] || 0) - qtd) }).eq("id", perfil.id);
+    console.log(`⭐ ${coluna} estornado(s): ${phone} | -${qtd} | pedido cancelado`);
   } catch (e) {
     console.error("⚠️ Erro ao estornar selo:", e.message);
   }
@@ -1383,7 +1415,9 @@ const trackingLink = baseUrl ? `${baseUrl}?code=${trackingCode}` : null;
 // ⭐ FIDELIZAÇÃO
 try {
   if (phone && !order_id && finalOrigin !== "fidelidade") {
-    const pontosGanhos = (parseFloat(total_price) || 0) >= FIDELIDADE_VALOR_MIN ? 1 : 0;
+    const cfgFid = await configFidelidade(restaurant_id);
+    const ganho = fidelidadeGanho(cfgFid, total_price);
+    const pontosGanhos = ganho.qtd;
 
     if (pontosGanhos > 0) {
       const { data: perfil } = await supabase
@@ -1396,7 +1430,7 @@ try {
       if (perfil) {
         await supabase
           .from("base_clientes")
-          .update({ pontos: (perfil.pontos || 0) + pontosGanhos })
+          .update({ [ganho.coluna]: (perfil[ganho.coluna] || 0) + pontosGanhos })
           .eq("id", perfil.id);
       } else {
         const token = (Math.random().toString(36).substring(2, 8) +
@@ -1407,7 +1441,8 @@ try {
             restaurant_id,
             nome: client_name || "",
             numero: phone,
-            pontos: pontosGanhos,
+            pontos: ganho.coluna === "pontos" ? pontosGanhos : 0,
+            selos: ganho.coluna === "selos" ? pontosGanhos : 0,
             pontos_resgatados: 0,
             token_fidelidade: token,
             Status: "ATIVO"
