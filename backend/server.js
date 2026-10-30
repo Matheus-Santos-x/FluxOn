@@ -5518,6 +5518,93 @@ app.get("/owner/restaurants/:restaurant_id/dashboard",
   }
 });
 
+/* ---------- clientes e origem dos pedidos (migrado do dashboard de ROI) ---------- */
+
+app.get("/owner/restaurants/:restaurant_id/clientes",
+  ownerLimitDados, requireOwnerScope, requireOwnerRestaurante, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const per = ownerPeriodo(req.query);
+    const DIA = 86400000;
+    const histDe = new Date(per.prevFrom.getTime() - 90 * DIA);
+
+    const orders = await ownerBuscarPedidos(
+      restaurant_id, histDe, per.to,
+      "id, client_phone, total_price, status, created_at, origin, service_type"
+    );
+
+    // só vendas finalizadas; resgate de fidelidade não é venda
+    const vendas = orders.filter(o => o.origin !== "fidelidade" && o.status === "finished");
+    const tel = (o) => normalizePhone(o.client_phone);
+    const ts = (o) => Date.parse(o.created_at);
+
+    // calcula as métricas de um intervalo [de, ate) olhando 90 dias para trás
+    const calc = (de, ate) => {
+      const dentro = vendas.filter(o => ts(o) >= de.getTime() && ts(o) < ate.getTime());
+      const antes = new Set(vendas
+        .filter(o => ts(o) < de.getTime() && ts(o) >= de.getTime() - 90 * DIA)
+        .map(tel).filter(Boolean));
+      const porCliente = {};
+      for (const o of dentro) { const t = tel(o); if (t) porCliente[t] = (porCliente[t] || 0) + 1; }
+      const clientes = Object.keys(porCliente);
+      let novos = 0, recorrentes = 0, retornaram = 0;
+      for (const t of clientes) {
+        if (antes.has(t)) retornaram++;
+        if (antes.has(t) || porCliente[t] >= 2) recorrentes++; else novos++;
+      }
+      let recRevenue = 0;
+      for (const o of dentro) {
+        const t = tel(o);
+        if (t && (antes.has(t) || porCliente[t] >= 2)) recRevenue += parseFloat(o.total_price) || 0;
+      }
+      const comTel = dentro.filter(o => tel(o)).length;
+      return {
+        unicos: clientes.length, novos, recorrentes,
+        taxa_retorno: clientes.length ? (retornaram / clientes.length) * 100 : 0,
+        frequencia: clientes.length ? comTel / clientes.length : 0,
+        faturamento_recorrente: Math.round(recRevenue * 100) / 100,
+        dentro
+      };
+    };
+
+    const a = calc(per.from, per.to);
+    const b = calc(per.prevFrom, per.prevTo);
+
+    // origem dos pedidos e tipo de serviço (período atual)
+    const origem = { ia_whatsapp: 0, cardapio: 0, pdv: 0, pedido_manual: 0, autoatendimento: 0, outros: 0 };
+    const servico = { delivery: 0, local: 0 };
+    for (const o of a.dentro) {
+      let og = String(o.origin || "outros").toLowerCase();
+      if (og === "balcao" || og === "balcao_delivery") og = "pedido_manual";
+      origem[origem[og] !== undefined ? og : "outros"]++;
+      servico[String(o.service_type || "").toLowerCase() === "delivery" ? "delivery" : "local"]++;
+    }
+    const total = a.dentro.length;
+    const pctOrigem = {};
+    for (const k of Object.keys(origem)) pctOrigem[k] = total ? (origem[k] / total) * 100 : 0;
+
+    return res.json({
+      period: ownerPeriodoJson(per),
+      clientes: {
+        unicos: a.unicos, novos: a.novos, recorrentes: a.recorrentes,
+        taxa_retorno: a.taxa_retorno, frequencia: a.frequencia,
+        faturamento_recorrente: a.faturamento_recorrente,
+        growth: {
+          taxa_retorno: ownerCrescimento(a.taxa_retorno, b.taxa_retorno),
+          frequencia: ownerCrescimento(a.frequencia, b.frequencia),
+          faturamento_recorrente: ownerCrescimento(a.faturamento_recorrente, b.faturamento_recorrente)
+        }
+      },
+      origem: { pedidos: origem, percentual: pctOrigem, total },
+      servico
+    });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    console.error("❌ /owner/restaurants/:id/clientes:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar os dados de clientes" });
+  }
+});
+
 /* ---------- ADMIN: cadastrar donos (só quem está em ADMIN_EMAILS) ---------- */
 
 app.get("/admin/owners", requireAdmin, async (req, res) => {
