@@ -423,10 +423,7 @@
     const item = (go, icone, t, s, ok, plan) => `<li><button class="row-btn" data-go="${go}"><span class="row-ic">${ic(icone)}</span><span class="row-t"><b>${t}</b><span>${s}</span></span>${ok ? "" : `<span class="tag red">${plan}</span>`}<span class="chev">›</span></button></li>`;
     return nota(d.period) + `
       <section class="hero"><span class="label">Faturamento</span><span class="value">${brl(k.revenue)}</span>${delta(k.growth.revenue)}${spark(serie)}</section>
-      <section class="grid2">
-        <div class="kpi"><span class="label">CMV ${exemplo}</span><span class="value">${pct(FIN.cmv * 100)}</span><span class="sub">custo da mercadoria vendida</span></div>
-        <div class="kpi"><span class="label">Resultado estimado ${exemplo}</span><span class="value">${brl(f.resultado)}</span><span class="sub">margem ${pct(m)}</span></div>
-      </section>
+            <section class="card lockcard"><span class="big">${ic("wallet")}</span><b>Descubra seu lucro real</b><p>Cadastre os custos das suas mercadorias para ver o CMV e o lucro líquido do seu restaurante.</p></section>
       <section class="grid4">
         <div class="kpi"><span class="label">Pedidos</span><span class="value">${int(k.orders)}</span>${delta(k.growth.orders, "")}</div>
         <div class="kpi"><span class="label">Ticket médio</span><span class="value">${brl(k.ticket)}</span>${delta(k.growth.ticket, "")}</div>
