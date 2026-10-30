@@ -5931,6 +5931,97 @@ app.post("/owner/restaurants/:restaurant_id/custos/despesas/copiar", donoRota, a
   }
 });
 
+/* ---------- ficha técnica: quanto de cada produto vai em cada prato ---------- */
+
+app.get("/owner/restaurants/:restaurant_id/custos/pratos", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const [{ data: cardapio, error: e1 }, { data: fichas, error: e2 }, insumos] = await Promise.all([
+      supabase.from("cardapio").select("id, nome, preco, categoria")
+        .eq("restaurant_id", restaurant_id).eq("ativo", true).order("categoria").order("nome"),
+      supabase.from("ficha_tecnica").select("cardapio_id, insumo_id, quantidade").eq("restaurant_id", restaurant_id),
+      custoListarInsumos(restaurant_id, false)
+    ]);
+    if (e1) throw e1;
+    if (e2) throw e2;
+
+    const porId = Object.fromEntries(insumos.map((i) => [i.id, i]));
+    const pratos = (cardapio || []).map((p) => {
+      const ingredientes = (fichas || []).filter((f) => String(f.cardapio_id) === String(p.id)).map((f) => {
+        const i = porId[f.insumo_id] || {};
+        const custoUn = Number(i.custo_unitario) || 0;
+        return {
+          insumo_id: f.insumo_id, nome: i.nome || "—", unidade: i.unidade || "kg",
+          quantidade: Number(f.quantidade), custo_unitario: custoUn, custo: custoArred(Number(f.quantidade) * custoUn, 4)
+        };
+      });
+      const custoTotal = custoArred(ingredientes.reduce((s, x) => s + x.custo, 0));
+      const preco = Number(p.preco) || 0;
+      const semCusto = ingredientes.some((x) => x.custo_unitario <= 0);
+      return {
+        id: String(p.id), nome: p.nome, categoria: p.categoria, preco, ingredientes,
+        custo_total: custoTotal,
+        margem_valor: custoArred(preco - custoTotal),
+        margem_pct: preco > 0 ? custoArred(((preco - custoTotal) / preco) * 100, 1) : null,
+        pronto: ingredientes.length > 0 && !semCusto,
+        sem_custo: semCusto
+      };
+    });
+    return res.json({ pratos, resumo: { total: pratos.length, prontos: pratos.filter((p) => p.pronto).length } });
+  } catch (err) {
+    console.error("❌ GET custos/pratos:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar os pratos" });
+  }
+});
+
+// salva a ficha inteira de um prato (substitui os ingredientes anteriores)
+app.put("/owner/restaurants/:restaurant_id/custos/pratos/:cardapio_id/ficha", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id, cardapio_id } = req.params;
+    const lista = req.body?.ingredientes;
+    if (!Array.isArray(lista) || lista.length > 40) return res.status(400).json({ error: "Lista de ingredientes inválida" });
+
+    // junta ingredientes repetidos somando as quantidades
+    const somado = new Map();
+    for (const it of lista) {
+      const q = custoNum(it?.quantidade);
+      if (!it?.insumo_id || !Number.isFinite(q) || q <= 0 || q > 1e6) return res.status(400).json({ error: "Confira os ingredientes e as quantidades" });
+      somado.set(it.insumo_id, (somado.get(it.insumo_id) || 0) + q);
+    }
+
+    const { data: prato } = await supabase.from("cardapio").select("id")
+      .eq("id", cardapio_id).eq("restaurant_id", restaurant_id).maybeSingle();
+    if (!prato) return res.status(404).json({ error: "Prato não encontrado" });
+
+    const validos = new Set((await custoListarInsumos(restaurant_id, false)).map((i) => i.id));
+    for (const id of somado.keys()) if (!validos.has(id)) return res.status(404).json({ error: "Produto não encontrado" });
+
+    const { data: anteriores } = await supabase.from("ficha_tecnica")
+      .select("insumo_id, quantidade").eq("restaurant_id", restaurant_id).eq("cardapio_id", String(cardapio_id));
+    const { error: eDel } = await supabase.from("ficha_tecnica").delete()
+      .eq("restaurant_id", restaurant_id).eq("cardapio_id", String(cardapio_id));
+    if (eDel) throw eDel;
+
+    const linhas = [...somado.entries()].map(([insumo_id, quantidade]) => ({
+      restaurant_id, cardapio_id: String(cardapio_id), insumo_id, quantidade: custoArred(quantidade, 4)
+    }));
+    if (linhas.length) {
+      const { error: eIns } = await supabase.from("ficha_tecnica").insert(linhas);
+      if (eIns) {
+        // não perde a ficha antiga se o novo salvamento falhar
+        if (anteriores?.length) {
+          await supabase.from("ficha_tecnica").insert(anteriores.map((a) => ({ restaurant_id, cardapio_id: String(cardapio_id), ...a })));
+        }
+        throw eIns;
+      }
+    }
+    return res.json({ ok: true, ingredientes: linhas.length });
+  } catch (err) {
+    console.error("❌ PUT custos/pratos/ficha:", err.message);
+    return res.status(500).json({ error: "Erro ao salvar a ficha do prato" });
+  }
+});
+
 /* ---------- ADMIN: cadastrar donos (só quem está em ADMIN_EMAILS) ---------- */
 
 app.get("/admin/owners", requireAdmin, async (req, res) => {
