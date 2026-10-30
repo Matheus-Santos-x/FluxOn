@@ -492,21 +492,6 @@
       `<section class="card"><h2>Despesas do período</h2>${barras ? `<div class="split">${barras}</div>` : `<div class="empty">Nenhuma despesa lançada neste período. Cadastre em Meus custos.</div>`}</section>`;
   }
 
-  function telaCustos(d) {
-    if (!temAdv(d.restaurant.plan)) return lockCard("A gestão de estoque e o acompanhamento de custos fazem parte do plano Advanced.", "Advanced");
-    const f = fin(d.kpis.revenue);
-    const est = [["Carne bovina 180g", 4.2, 10, "kg"], ["Pão brioche", 18, 40, "un"], ["Queijo cheddar", 22, 15, "kg"], ["Batata congelada", 0, 12, "kg"], ["Bacon", 7, 6, "kg"], ["Refrigerante lata", 96, 48, "un"]];
-    const sts = est.map(([n, q, mn, u]) => {
-      const s = q <= 0 ? ["out", "Esgotado"] : q < mn ? ["low", "Baixo"] : ["ok", "Normal"];
-      return `<div class="stock-row"><div class="stock-head"><span>${n}</span><span><b>${q} ${u}</b> <span class="st ${s[0]}">${s[1]}</span></span></div><div class="bar ${s[0] === "ok" ? "" : "amber"}"><i style="width:${Math.min(100, (q / (mn * 2)) * 100)}%"></i></div></div>`;
-    }).join("");
-    const grupos = [["Carnes", 0.42], ["Pães e massas", 0.18], ["Laticínios", 0.14], ["Bebidas", 0.12], ["Hortifrúti e outros", 0.14]];
-    return nota(d.period) + `
-      <section class="grid2"><div class="kpi"><span class="label">CMV ${exemplo}</span><span class="value">${pct(FIN.cmv * 100)}</span></div><div class="kpi"><span class="label">Custo das vendas ${exemplo}</span><span class="value">${brl(f.cmv)}</span></div></section>
-      <section class="card"><h2>Para onde vai o custo ${exemplo}</h2><div class="split">${grupos.map(([n, p]) => `<div class="split-row"><div class="split-head"><span>${n}</span><span>${brl(f.cmv * p)} · ${pct(p * 100, 0)}</span></div><div class="bar"><i style="width:${p * 100}%"></i></div></div>`).join("")}</div></section>
-      <section class="card"><h2>Estoque ${exemplo}</h2><div class="stock">${sts}</div><p class="foot">Estoque real vs. esperado e entradas por nota entram nas próximas etapas.</p></section>`;
-  }
-
   function telaCanais(d) {
     if (!temExec(d.restaurant.plan)) return lockCard("A análise de rentabilidade por canal faz parte do plano Executive.");
     return nota(d.period) + secCanais(d) + secRent(d);
