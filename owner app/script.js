@@ -243,7 +243,11 @@
     $("content").innerHTML = `<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>`;
     try {
       if (st.view === "overview") { const d = await api("/owner/overview?" + qs()); if (my !== st.reqId) return; st.ov = d; st.dash = null; }
-      else { const d = await api(`/owner/restaurants/${encodeURIComponent(st.view)}/dashboard?` + qs()); if (my !== st.reqId) return; st.dash = d; st.ov = null; }
+      else {
+        const base = `/owner/restaurants/${encodeURIComponent(st.view)}`;
+        const [d, f] = await Promise.all([api(`${base}/dashboard?` + qs()), api(`${base}/financeiro?` + qs()).catch(() => null)]);
+        if (my !== st.reqId) return; st.dash = d; st.fin = f; st.ov = null;
+      }
       render();
     } catch (e) {
       if (my !== st.reqId) return;
@@ -307,8 +311,8 @@
       <div class="kpi"><span class="label">Pedidos</span><span class="value">${int(k.orders)}</span></div>
       <div class="kpi"><span class="label">Ticket médio</span><span class="value">${brl(k.ticket)}</span></div>
       <div class="kpi"><span class="label">Cancelados</span><span class="value">${int(k.cancelados)}</span></div>
-      <div class="kpi"><span class="label">CMV ${exemplo}</span><span class="value">${pct(FIN.cmv * 100)}</span></div>
-      <div class="kpi"><span class="label">Resultado estimado ${exemplo}</span><span class="value">${brl(f.resultado)}</span><span class="sub">margem ${pct(m)}</span></div>
+            <div class="kpi"><span class="label">CMV</span><span class="value">${finOk() ? pct(st.fin.cmv.pct) : "—"}</span></div>
+      <div class="kpi"><span class="label">Resultado</span><span class="value">${finOk() ? brl(st.fin.lucro_liquido) : "—"}</span>${finOk() && st.fin.receita > 0 ? `<span class="sub">margem ${pct((st.fin.lucro_liquido / st.fin.receita) * 100)}</span>` : ""}</div>
     </section>`;
   }
   function secGrafico(d) {
@@ -344,18 +348,22 @@
     const tops = d.top_produtos.map((p) => `<li><div class="row"><span>${esc(p.nome)}</span><span>${int(p.qty)}×</span></div><div class="bar"><i style="width:${(p.qty / maxQ) * 100}%"></i></div></li>`).join("");
     return `<section class="card"><h2>Mais vendidos</h2>${tops ? `<ul class="tops">${tops}</ul>` : `<div class="empty">Sem vendas no período.</div>`}</section>`;
   }
-  function secDre(d) {
-    const f = fin(d.kpis.revenue), m = (v) => (f.rev > 0 ? pct((v / f.rev) * 100) : "—");
-    const linha = (n, v, cls = "") => `<tr class="${cls}"><td>${n}</td><td>${cls.includes("sub") ? "" : ""}${brl(v)} <span class="muted" style="font-size:12px">${m(v)}</span></td></tr>`;
-    return `<section class="card"><h2>DRE gerencial ${exemplo}</h2><table class="dre">
-      ${linha("Receita bruta", f.rev, "tot")}
-      ${linha("(−) Impostos", -f.imposto, "sub")}
-      ${linha("Receita líquida", f.liquida, "tot")}
-      ${linha("(−) CMV", -f.cmv, "sub")}
-      ${linha("Lucro bruto", f.bruto, "tot")}
-      ${f.despesas.map(([n, v]) => linha("(−) " + n, -v, "sub")).join("")}
-      ${linha("Resultado estimado", f.resultado, "tot res")}
-    </table></section>`;
+  function secDre() {
+    if (!finOk()) return `<section class="card"><h2>DRE gerencial</h2><div class="empty">Registre suas compras e monte a ficha técnica dos pratos em Meus custos para ver a DRE.</div></section>`;
+    const f = st.fin, m = (v) => (f.receita > 0 ? pct((v / f.receita) * 100) : "—");
+    const linha = (n, v, cls = "") => `<tr class="${cls}"><td>${n}</td><td>${brl(v)} <span class="muted" style="font-size:12px">${m(v)}</span></td></tr>`;
+    const cats = Object.entries(f.despesas.por_categoria).sort((a, b) => ORDEM_DESP.indexOf(a[0]) - ORDEM_DESP.indexOf(b[0]));
+    const notas = [
+      f.cmv.cobertura_pct < 95 ? `CMV calculado com base em ${pct(f.cmv.cobertura_pct, 0)} das vendas (pratos com ficha técnica pronta).` : "",
+      !f.despesas.cadastradas ? "Sem despesas cadastradas neste período." : ""
+    ].filter(Boolean).join(" ");
+    return `<section class="card"><h2>DRE gerencial</h2><table class="dre">
+      ${linha("Receita bruta", f.receita, "tot")}
+      ${linha("(−) CMV", -f.cmv.valor, "sub")}
+      ${linha("Lucro bruto", f.lucro_bruto, "tot")}
+      ${cats.map(([c, v]) => linha("(−) " + (CAT_DESP[c] || c), -v, "sub")).join("")}
+      ${linha("Resultado", f.lucro_liquido, "tot res")}
+    </table>${notas ? `<p class="foot" style="text-align:left">${notas}</p>` : ""}</section>`;
   }
   function secRent(d) {
     const nomes = { salao: "Salão", balcao: "Balcão", delivery: "Delivery" };
@@ -414,6 +422,33 @@
       <p class="foot">Toque em uma unidade para ver todas as métricas dela.</p>`;
   }
 
+  const ORDEM_DESP = ["impostos", "folha", "aluguel", "energia", "manutencao", "outras"];
+  function finOk() { return !!(st.fin && st.fin.cmv && st.fin.cmv.disponivel); }
+  function cardFluxo() {
+    if (!finOk()) return "";
+    const f = st.fin, saidas = f.cmv.valor + f.despesas.total, saldo = f.receita - saidas;
+    return `<section class="card"><h2>Fluxo de caixa</h2><div class="split">
+        <div class="split-row"><div class="split-head"><span>Entradas</span><span>${brl(f.receita)}</span></div><div class="bar"><i style="width:100%"></i></div></div>
+        <div class="split-row"><div class="split-head"><span>Saídas (mercadoria e despesas)</span><span>${brl(saidas)}</span></div><div class="bar amber"><i style="width:${f.receita > 0 ? Math.min(100, (saidas / f.receita) * 100) : 0}%"></i></div></div>
+        <div class="split-head"><b>Saldo do período</b><b style="color:${saldo >= 0 ? "var(--up)" : "var(--down)"}">${brl(saldo)}</b></div></div></section>`;
+  }
+
+  // CMV e lucro reais (vêm de Meus custos); sem dados suficientes, mostra um convite para cadastrar
+  function cardsLucro() {
+    const f = st.fin;
+    if (!f || !f.cmv || !f.cmv.disponivel) return `<section class="card lockcard"><span class="big">${ic("wallet")}</span><b>Descubra seu lucro real</b><p>Registre suas compras e monte a ficha técnica dos pratos em <b>Meus custos</b> para ver o CMV e o lucro.</p></section>`;
+    const semDesp = !f.despesas.cadastradas;
+    const valor = semDesp ? f.lucro_bruto : f.lucro_liquido, margem = f.receita > 0 ? (valor / f.receita) * 100 : 0;
+    const avisos = [
+      f.cmv.cobertura_pct < 95 ? `CMV calculado com base em ${pct(f.cmv.cobertura_pct, 0)} das vendas (pratos com ficha técnica pronta).` : "",
+      semDesp ? "Cadastre suas despesas (folha, aluguel...) em Meus custos para ver o lucro líquido." : ""
+    ].filter(Boolean).join(" ");
+    return `<section class="grid2">
+      <div class="kpi"><span class="label">${semDesp ? "Lucro bruto" : "Lucro líquido"}</span><span class="value" style="color:${valor >= 0 ? "var(--up)" : "var(--down)"}">${brl(valor)}</span><span class="sub">margem ${pct(margem)}</span></div>
+      <div class="kpi"><span class="label">CMV</span><span class="value">${pct(f.cmv.pct)}</span><span class="sub">do faturamento vai para a mercadoria</span></div>
+    </section>${avisos ? `<p class="foot" style="text-align:left;margin:-4px 0 8px">${avisos}</p>` : ""}`;
+  }
+
   function telaHome(d) {
     const k = d.kpis, f = fin(k.revenue), m = k.revenue > 0 ? (f.resultado / k.revenue) * 100 : 0;
     const serie = d.period.days === 1 && Array.isArray(d.horas) ? d.horas.map((x) => x.revenue) : d.timeline.map((x) => x.revenue);
@@ -425,7 +460,7 @@
     const item = (go, icone, t, s, ok, plan) => `<li><button class="row-btn" data-go="${go}"><span class="row-ic">${ic(icone)}</span><span class="row-t"><b>${t}</b><span>${s}</span></span>${ok ? "" : `<span class="tag red">${plan}</span>`}<span class="chev">›</span></button></li>`;
     return nota(d.period) + `
       <section class="hero"><span class="label">Faturamento</span><span class="value">${brl(k.revenue)}</span>${delta(k.growth.revenue)}${spark(serie)}</section>
-            <section class="card lockcard"><span class="big">${ic("wallet")}</span><b>Descubra seu lucro real</b><p>Cadastre os custos das suas mercadorias para ver o CMV e o lucro líquido do seu restaurante.</p></section>
+            ${cardsLucro()}
       <section class="grid4">
         <div class="kpi"><span class="label">Pedidos</span><span class="value">${int(k.orders)}</span>${delta(k.growth.orders, "")}</div>
         <div class="kpi"><span class="label">Ticket médio</span><span class="value">${brl(k.ticket)}</span>${delta(k.growth.ticket, "")}</div>
@@ -433,10 +468,7 @@
         ${roi}
       </section>
       ${secGrafico(d)}
-      <section class="card"><h2>Fluxo de caixa ${exemplo}</h2><div class="split">
-        <div class="split-row"><div class="split-head"><span>Entradas</span><span>${brl(k.revenue)}</span></div><div class="bar"><i style="width:100%"></i></div></div>
-        <div class="split-row"><div class="split-head"><span>Saídas estimadas</span><span>${brl(saidas)}</span></div><div class="bar amber"><i style="width:${k.revenue > 0 ? Math.min(100, (saidas / k.revenue) * 100) : 0}%"></i></div></div>
-        <div class="split-head"><b>Saldo do período</b><b style="color:${saldo >= 0 ? "var(--up)" : "var(--down)"}">${brl(saldo)}</b></div></div></section>
+      ${cardFluxo()}
       <section class="card"><h2>Visão geral</h2><ul class="list">
         ${item("dre", "wallet", "Financeiro e DRE", "Receitas, CMV, despesas e resultado", exec, "Executive")}
         ${item("custos", "box", "Custos e estoque", "CMV, itens com estoque baixo", adv, "Advanced")}
@@ -454,9 +486,10 @@
 
   function telaDre(d) {
     if (!temExec(d.restaurant.plan)) return lockCard("A DRE gerencial completa, com CMV, despesas e resultado, faz parte do plano Executive.");
+    const f = st.fin, cats = f ? Object.entries(f.despesas.por_categoria).sort((a, b) => b[1] - a[1]) : [];
+    const barras = cats.map(([c, v]) => `<div class="split-row"><div class="split-head"><span>${esc(CAT_DESP[c] || c)}</span><span>${brl(v)} · ${pct(f.despesas.total ? (v / f.despesas.total) * 100 : 0, 0)}</span></div><div class="bar amber"><i style="width:${f.despesas.total ? (v / f.despesas.total) * 100 : 0}%"></i></div></div>`).join("");
     return nota(d.period) + secResumo(d) + secDre(d) +
-      `<section class="card"><h2>Despesas ${exemplo}</h2><div class="split">${fin(d.kpis.revenue).despesas.map(([n, v]) => `<div class="split-row"><div class="split-head"><span>${n}</span><span>${brl(v)}</span></div><div class="bar amber"><i style="width:${d.kpis.revenue > 0 ? Math.min(100, (v / d.kpis.revenue) * 300) : 0}%"></i></div></div>`).join("")}</div>
-      <p class="foot">O cadastro de despesas pelo app (folha, aluguel, impostos, etc.) entra na próxima etapa.</p></section>`;
+      `<section class="card"><h2>Despesas do período</h2>${barras ? `<div class="split">${barras}</div>` : `<div class="empty">Nenhuma despesa lançada neste período. Cadastre em Meus custos.</div>`}</section>`;
   }
 
   function telaCustos(d) {
@@ -571,7 +604,7 @@
   }
 
   /* ---------- meus custos: compras, produtos e despesas ---------- */
-  const CAT_DESP = { folha: "Folha e funcionários", aluguel: "Aluguel", energia: "Água, luz e internet", manutencao: "Manutenção", outras: "Outras despesas" };
+  const CAT_DESP = { folha: "Folha e funcionários", aluguel: "Aluguel", energia: "Água, luz e internet", manutencao: "Manutenção", impostos: "Impostos", outras: "Outras despesas" };
   const cuBase = () => `/owner/restaurants/${encodeURIComponent(st.view)}/custos`;
   const cuPreco = (c, u) => `${brl(c)}/${u}` + (u === "un" ? "" : ` · ${brl(c / 10)} por 100 ${u === "kg" ? "g" : "ml"}`);
   const cuNorm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
