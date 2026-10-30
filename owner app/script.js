@@ -231,7 +231,7 @@
     st.view = v; st.screen = "home"; store.set("fluxon_owner_view", v);
     montarAvatar(); carregar(); window.scrollTo({ top: 0 });
   }
-  $("back").addEventListener("click", () => { st.screen = "home"; render(); window.scrollTo({ top: 0 }); });
+  $("back").addEventListener("click", () => { st.screen = PAI[st.screen] || "home"; render(); window.scrollTo({ top: 0 }); });
 
   /* ---------- carregamento ---------- */
   const qs = () => (st.period === "custom" ? `period=custom&from=${st.from}&to=${st.to}` : `period=${st.period}`);
@@ -260,14 +260,18 @@
     const g = e.target.closest("[data-go]"); if (g) { st.screen = g.dataset.go; render(); window.scrollTo({ top: 0 }); }
   });
 
-  const TITULOS = { dre: "Financeiro e DRE", custos: "Custos e estoque", canais: "Rentabilidade por canal", clientes: "Clientes e origem", fidelidade: "Fidelidade", meuscustos: "Meus custos", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Relatórios do caixa", pdf: "Exportar PDF" };
+const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos" };
+  const SEM_PERIODO = ["custos", "cuing", "cufichas", "cudesp"];
+  const TITULOS = { dre: "Financeiro e DRE", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", clientes: "Clientes e origem", fidelidade: "Fidelidade", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Relatórios do caixa", pdf: "Exportar PDF" };
   function render() {
     const ov = st.view === "overview";
     $("back").classList.toggle("hidden", ov || st.screen === "home");
+    $("periods").classList.toggle("hidden", SEM_PERIODO.includes(st.screen));
+    $("custom").classList.toggle("hidden", SEM_PERIODO.includes(st.screen) || st.period !== "custom");
     if (ov) { $("title").textContent = "Visão geral"; $("content").innerHTML = telaOverview(st.ov); return; }
     const d = st.dash;
     $("title").textContent = st.screen === "home" ? d.restaurant.name : TITULOS[st.screen];
-    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, clientes: telaClientes, fidelidade: telaFidelidade, meuscustos: telaMeusCustos, simulador: telaSimulador, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
+    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, clientes: telaClientes, fidelidade: telaFidelidade, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, simulador: telaSimulador, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
     $("content").innerHTML = T(d);
     if (st.screen === "simulador") bindSim(d);
     if (st.screen === "pdf") bindPdf(d);
@@ -436,7 +440,7 @@
   // CMV e lucro reais (vêm de Meus custos); sem dados suficientes, mostra um convite para cadastrar
   function cardsLucro() {
     const f = st.fin;
-    if (!f || !f.cmv || !f.cmv.disponivel) return `<section class="card lockcard"><span class="big">${ic("wallet")}</span><b>Descubra seu lucro real</b><p>Registre suas compras e monte a ficha técnica dos pratos em <b>Meus custos</b> para ver o CMV e o lucro.</p></section>`;
+    if (!f || !f.cmv || !f.cmv.disponivel) return `<section class="card lockcard"><span class="big">${ic("wallet")}</span><b>Descubra seu lucro real</b><p>Registre suas compras e monte a ficha técnica dos pratos em <b>Custos e estoque</b> para ver o CMV e o lucro.</p><button class="btn primary" data-go="custos" style="margin-top:10px">Cadastrar meus custos</button></section>`;
     const semDesp = !f.despesas.cadastradas;
     const valor = semDesp ? f.lucro_bruto : f.lucro_liquido, margem = f.receita > 0 ? (valor / f.receita) * 100 : 0;
     const avisos = [
@@ -471,11 +475,10 @@
       ${cardFluxo()}
       <section class="card"><h2>Visão geral</h2><ul class="list">
         ${item("dre", "wallet", "Financeiro e DRE", "Receitas, CMV, despesas e resultado", exec, "Executive")}
-        ${item("custos", "box", "Custos e estoque", "CMV, itens com estoque baixo", adv, "Advanced")}
+        ${item("custos", "box", "Custos e estoque", "Ingredientes, fichas dos pratos e despesas", true, "")}
         ${item("canais", "pie", "Rentabilidade por canal", "Salão, balcão e delivery", exec, "Executive")}
         ${item("clientes", "users", "Clientes e origem dos pedidos", "Novos, recorrentes e de onde vêm", true, "")}
         ${item("fidelidade", "star", "Fidelidade", "Pontos ou selos e quanto cada um vale", true, "")}
-        ${item("meuscustos", "box", "Meus custos", "Produtos, compras e despesas", true, "")}
         ${item("previsao", "trend", "Previsão de demanda", "Próximos dias, picos e produtos", exec, "Executive")}
         ${item("caixa", "file", "Relatórios do caixa", "Turnos abertos e fechados", true, "")}
         ${item("pdf", "print", "Exportar PDF", "Escolha o período e as seções", true, "")}
