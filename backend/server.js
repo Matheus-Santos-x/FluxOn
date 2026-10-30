@@ -3951,10 +3951,16 @@ app.get("/api/v1/fidelidade/cliente/:token", async (req, res) => {
       .order("created_at", { ascending: false })
       .limit(10);
 
+        // "pontos" devolve o saldo do modelo ativo (pontos ou selos), para o cardápio atual continuar funcionando
+    const cfgFid = await configFidelidade(cliente.restaurant_id);
+    const saldoAtivo = cfgFid.modelo === "selos" ? (cliente.selos || 0) : (cliente.pontos || 0);
+
     return res.json({
       cliente: {
         nome: cliente.nome,
-        pontos: cliente.pontos,
+        pontos: saldoAtivo,
+        modelo: cfgFid.modelo,
+        selos: cliente.selos || 0,
         pontos_resgatados: cliente.pontos_resgatados,
         token: cliente.token_fidelidade,
         restaurant_id: cliente.restaurant_id
@@ -3995,8 +4001,12 @@ app.post("/api/v1/fidelidade/resgatar", async (req, res) => {
       totalPontos += premio.pontos_necessarios * (item.quantidade || 1);
     }
 
-    if (cliente.pontos < totalPontos)
-      return sendError(res, 400, "Pontos insuficientes");
+        const cfgFid = await configFidelidade(cliente.restaurant_id);
+    const colunaSaldo = cfgFid.modelo === "selos" ? "selos" : "pontos";
+    const saldoAtual = cliente[colunaSaldo] || 0;
+
+    if (saldoAtual < totalPontos)
+      return sendError(res, 400, colunaSaldo === "selos" ? "Selos insuficientes" : "Pontos insuficientes");
 
   const { data: numData } = await supabase
   .rpc('get_next_order_number', { rid: cliente.restaurant_id });
@@ -4013,7 +4023,7 @@ const nextNumber = numData || 1;
         client_phone: cliente.numero,
         order_number: nextNumber,
         itens: premiosCarrinho.map(p => ({ name: p.nome, qty: p.quantidade, price: 0 })),
-        notes: `🎁 Resgate de fidelidade — ${totalPontos} pontos`,
+        notes: `🎁 Resgate de fidelidade — ${totalPontos} ${colunaSaldo}`,
         status: "pending",
         service_type: service_type || "local",
         address: address || null,
@@ -4028,9 +4038,9 @@ const nextNumber = numData || 1;
 
     await supabase
       .from("base_clientes")
-      .update({
-        pontos: cliente.pontos - totalPontos,
-        pontos_resgatados: (cliente.pontos_resgatados || 0) + totalPontos
+            .update({
+        [colunaSaldo]: saldoAtual - totalPontos,
+        ...(colunaSaldo === "pontos" ? { pontos_resgatados: (cliente.pontos_resgatados || 0) + totalPontos } : {})
       })
       .eq("id", cliente.id);
 
@@ -5637,6 +5647,58 @@ app.get("/owner/restaurants/:restaurant_id/clientes",
     if (err.status === 400) return res.status(400).json({ error: err.message });
     console.error("❌ /owner/restaurants/:id/clientes:", err.message);
     return res.status(500).json({ error: "Erro ao carregar os dados de clientes" });
+  }
+});
+
+/* ---------- fidelidade: o dono escolhe o modelo e os valores ---------- */
+
+app.get("/owner/restaurants/:restaurant_id/fidelidade",
+  ownerLimitDados, requireOwnerScope, requireOwnerRestaurante, async (req, res) => {
+  try {
+    const cfg = await configFidelidade(req.params.restaurant_id);
+    return res.json({ modelo: cfg.modelo, valor_selo: cfg.valorSelo, pontos_por_real: cfg.pontosPorReal });
+  } catch (err) {
+    console.error("❌ GET /owner/.../fidelidade:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar a fidelidade" });
+  }
+});
+
+app.put("/owner/restaurants/:restaurant_id/fidelidade",
+  ownerLimitDados, requireOwnerScope, requireOwnerRestaurante, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const { modelo, valor_selo, pontos_por_real } = req.body || {};
+    const campos = {};
+
+    if (modelo !== undefined) {
+      if (modelo !== "pontos" && modelo !== "selos") return res.status(400).json({ error: "Modelo inválido" });
+      campos.fidelidade_modelo = modelo;
+    }
+    if (valor_selo !== undefined) {
+      const v = Number(valor_selo);
+      if (!Number.isFinite(v) || v < 1 || v > 1000) return res.status(400).json({ error: "O valor por selo deve ficar entre R$ 1 e R$ 1.000" });
+      campos.fidelidade_valor_selo = Math.round(v * 100) / 100;
+    }
+    if (pontos_por_real !== undefined) {
+      const p = Number(pontos_por_real);
+      if (!Number.isFinite(p) || p < 0.1 || p > 100) return res.status(400).json({ error: "Os pontos por real devem ficar entre 0,1 e 100" });
+      campos.fidelidade_pontos_por_real = Math.round(p * 100) / 100;
+    }
+    if (!Object.keys(campos).length) return res.status(400).json({ error: "Nada para salvar" });
+
+    const { data: atualizado, error } = await supabase
+      .from("restaurante_config").update(campos).eq("restaurant_id", restaurant_id).select("restaurant_id");
+    if (error) throw error;
+    if (!atualizado || !atualizado.length) {
+      const { error: insErr } = await supabase.from("restaurante_config").insert([{ restaurant_id, ...campos }]);
+      if (insErr) throw insErr;
+    }
+
+    const cfg = await configFidelidade(restaurant_id);
+    return res.json({ ok: true, modelo: cfg.modelo, valor_selo: cfg.valorSelo, pontos_por_real: cfg.pontosPorReal });
+  } catch (err) {
+    console.error("❌ PUT /owner/.../fidelidade:", err.message);
+    return res.status(500).json({ error: "Erro ao salvar a fidelidade" });
   }
 });
 
