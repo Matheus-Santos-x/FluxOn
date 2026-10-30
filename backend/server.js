@@ -5765,15 +5765,51 @@ app.post("/owner/restaurants/:restaurant_id/custos/insumos", donoRota, async (re
   }
 });
 
+// pratos do cardápio que usam este produto na ficha técnica
+async function custoPratosDoInsumo(restaurant_id, insumo_id) {
+  const { data: usos } = await supabase.from("ficha_tecnica").select("cardapio_id")
+    .eq("restaurant_id", restaurant_id).eq("insumo_id", insumo_id);
+  const ids = [...new Set((usos || []).map((u) => String(u.cardapio_id)))];
+  if (!ids.length) return [];
+  const { data: pratos } = await supabase.from("cardapio").select("id, nome").eq("restaurant_id", restaurant_id);
+  return (pratos || []).filter((p) => ids.includes(String(p.id))).map((p) => p.nome);
+}
+
+// apaga de verdade: o produto e as compras dele (só se nenhum prato usar)
 app.delete("/owner/restaurants/:restaurant_id/custos/insumos/:id", donoRota, async (req, res) => {
   try {
-    const { error } = await supabase.from("insumos").update({ ativo: false })
-      .eq("id", req.params.id).eq("restaurant_id", req.params.restaurant_id);
+    const { restaurant_id, id } = req.params;
+    const usados = await custoPratosDoInsumo(restaurant_id, id);
+    if (usados.length) {
+      const lista = usados.slice(0, 3).join(", ") + (usados.length > 3 ? ` e mais ${usados.length - 3}` : "");
+      return res.status(409).json({ error: `Este produto está na ficha de: ${lista}. Tire dessas fichas antes de remover.` });
+    }
+    const { error: e1 } = await supabase.from("compras").delete().eq("insumo_id", id).eq("restaurant_id", restaurant_id);
+    if (e1) throw e1;
+    const { error } = await supabase.from("insumos").delete().eq("id", id).eq("restaurant_id", restaurant_id);
     if (error) throw error;
     return res.json({ ok: true });
   } catch (err) {
     console.error("❌ DELETE custos/insumos:", err.message);
     return res.status(500).json({ error: "Erro ao remover o produto" });
+  }
+});
+
+// renomeia o produto
+app.put("/owner/restaurants/:restaurant_id/custos/insumos/:id", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id, id } = req.params;
+    const nome = String(req.body?.nome || "").trim().slice(0, 80);
+    if (!nome) return res.status(400).json({ error: "Informe o nome do produto" });
+    const lista = await custoListarInsumos(restaurant_id);
+    if (!lista.some((i) => i.id === id)) return res.status(404).json({ error: "Produto não encontrado" });
+    if (lista.some((i) => i.id !== id && custoNorm(i.nome) === custoNorm(nome))) return res.status(409).json({ error: "Já existe outro produto com esse nome" });
+    const { error } = await supabase.from("insumos").update({ nome }).eq("id", id).eq("restaurant_id", restaurant_id);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("❌ PUT custos/insumos:", err.message);
+    return res.status(500).json({ error: "Erro ao salvar o produto" });
   }
 });
 
@@ -5848,10 +5884,42 @@ app.delete("/owner/restaurants/:restaurant_id/custos/compras/:id", donoRota, asy
     const { error } = await supabase.from("compras").delete().eq("id", id).eq("restaurant_id", restaurant_id);
     if (error) throw error;
     await custoRecalcularInsumo(restaurant_id, c.insumo_id);
-    return res.json({ ok: true });
+    // se era a única compra e nenhum prato usa o produto, ele some da lista também
+    let produto_removido = false;
+    const { data: resto } = await supabase.from("compras").select("id").eq("insumo_id", c.insumo_id).eq("restaurant_id", restaurant_id).limit(1);
+    if (!(resto || []).length && !(await custoPratosDoInsumo(restaurant_id, c.insumo_id)).length) {
+      await supabase.from("insumos").delete().eq("id", c.insumo_id).eq("restaurant_id", restaurant_id);
+      produto_removido = true;
+    }
+    return res.json({ ok: true, produto_removido });
   } catch (err) {
     console.error("❌ DELETE custos/compras:", err.message);
     return res.status(500).json({ error: "Erro ao remover a compra" });
+  }
+});
+
+// edita quantidade, valor, fornecedor e data de uma compra
+app.put("/owner/restaurants/:restaurant_id/custos/compras/:id", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id, id } = req.params;
+    const b = req.body || {};
+    const quantidade = custoNum(b.quantidade), valor = custoNum(b.valor_total);
+    if (!Number.isFinite(quantidade) || quantidade <= 0 || quantidade > 1e6) return res.status(400).json({ error: "Quantidade inválida" });
+    if (!Number.isFinite(valor) || valor < 0 || valor > 1e7) return res.status(400).json({ error: "Valor inválido" });
+    const { data: c } = await supabase.from("compras").select("insumo_id, data_compra").eq("id", id).eq("restaurant_id", restaurant_id).maybeSingle();
+    if (!c) return res.status(404).json({ error: "Compra não encontrada" });
+    const data_compra = b.data_compra ? String(b.data_compra) : c.data_compra;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data_compra) || data_compra > custoHoje()) return res.status(400).json({ error: "Data inválida" });
+    const { error } = await supabase.from("compras").update({
+      quantidade, valor_total: custoArred(valor), data_compra,
+      fornecedor: String(b.fornecedor || "").trim().slice(0, 80) || null
+    }).eq("id", id).eq("restaurant_id", restaurant_id);
+    if (error) throw error;
+    await custoRecalcularInsumo(restaurant_id, c.insumo_id);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("❌ PUT custos/compras:", err.message);
+    return res.status(500).json({ error: "Erro ao salvar a compra" });
   }
 });
 
@@ -5907,6 +5975,26 @@ app.delete("/owner/restaurants/:restaurant_id/custos/despesas/:id", donoRota, as
   } catch (err) {
     console.error("❌ DELETE custos/despesas:", err.message);
     return res.status(500).json({ error: "Erro ao remover a despesa" });
+  }
+});
+
+// edita categoria, descrição e valor de uma despesa
+app.put("/owner/restaurants/:restaurant_id/custos/despesas/:id", donoRota, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const valor = custoNum(b.valor);
+    if (!DESPESA_CATEGORIAS.includes(b.categoria)) return res.status(400).json({ error: "Categoria inválida" });
+    if (!Number.isFinite(valor) || valor <= 0 || valor > 1e7) return res.status(400).json({ error: "Valor inválido" });
+    const { data: d } = await supabase.from("despesas").select("id").eq("id", req.params.id).eq("restaurant_id", req.params.restaurant_id).maybeSingle();
+    if (!d) return res.status(404).json({ error: "Despesa não encontrada" });
+    const { error } = await supabase.from("despesas").update({
+      categoria: b.categoria, descricao: String(b.descricao || "").trim().slice(0, 80) || null, valor: custoArred(valor)
+    }).eq("id", req.params.id).eq("restaurant_id", req.params.restaurant_id);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("❌ PUT custos/despesas:", err.message);
+    return res.status(500).json({ error: "Erro ao salvar a despesa" });
   }
 });
 
