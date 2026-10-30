@@ -5705,7 +5705,7 @@ app.put("/owner/restaurants/:restaurant_id/fidelidade",
 /* ---------- custos e despesas (cadastro feito pelo dono) ---------- */
 
 const CUSTO_UNIDADES = ["kg", "l", "un"];
-const DESPESA_CATEGORIAS = ["folha", "aluguel", "energia", "manutencao", "outras"];
+const DESPESA_CATEGORIAS = ["folha", "aluguel", "energia", "manutencao", "impostos", "outras"];
 const custoNum = (v) => Number(String(v ?? "").replace(",", "."));
 const custoArred = (n, c = 2) => Math.round(n * 10 ** c) / 10 ** c;
 const custoNorm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
@@ -6019,6 +6019,86 @@ app.put("/owner/restaurants/:restaurant_id/custos/pratos/:cardapio_id/ficha", do
   } catch (err) {
     console.error("❌ PUT custos/pratos/ficha:", err.message);
     return res.status(500).json({ error: "Erro ao salvar a ficha do prato" });
+  }
+});
+
+/* ---------- financeiro real: CMV, lucro bruto e lucro líquido ---------- */
+
+app.get("/owner/restaurants/:restaurant_id/financeiro", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const per = ownerPeriodo(req.query);
+
+    const orders = await ownerBuscarPedidos(restaurant_id, per.from, per.to, "id, total_price, status, origin, itens, created_at");
+    const vendas = orders.filter((o) => o.origin !== "fidelidade" && o.status === "finished");
+    const receita = custoArred(vendas.reduce((s, o) => s + (parseFloat(o.total_price) || 0), 0));
+
+    // custo de cada prato, pela ficha técnica (só conta prato com ficha completa e todos os produtos com custo)
+    const [{ data: cardapio }, { data: fichas }, insumos] = await Promise.all([
+      supabase.from("cardapio").select("id, nome").eq("restaurant_id", restaurant_id),
+      supabase.from("ficha_tecnica").select("cardapio_id, insumo_id, quantidade").eq("restaurant_id", restaurant_id),
+      custoListarInsumos(restaurant_id, false)
+    ]);
+    const custoUn = Object.fromEntries(insumos.map((i) => [i.id, Number(i.custo_unitario) || 0]));
+    const custoPorNome = new Map();
+    for (const p of cardapio || []) {
+      const ing = (fichas || []).filter((f) => String(f.cardapio_id) === String(p.id));
+      if (!ing.length || ing.some((f) => !(custoUn[f.insumo_id] > 0))) continue;
+      custoPorNome.set(custoNorm(p.nome), ing.reduce((s, f) => s + Number(f.quantidade) * custoUn[f.insumo_id], 0));
+    }
+
+    // percorre os itens vendidos: quanto do faturamento tem custo conhecido
+    let valorTotal = 0, valorCoberto = 0, cmvCoberto = 0;
+    for (const o of vendas) {
+      for (const it of Array.isArray(o.itens) ? o.itens : []) {
+        const nome = custoNorm(it.name || it.nome);
+        const qty = Number(it.qty || it.quantidade || it.quantity || 1) || 1;
+        const valor = qty * (Number(it.price ?? it.preco) || 0);
+        valorTotal += valor;
+        if (custoPorNome.has(nome)) { valorCoberto += valor; cmvCoberto += qty * custoPorNome.get(nome); }
+      }
+    }
+    const cobertura = valorTotal > 0 ? (valorCoberto / valorTotal) * 100 : 0;
+    const temCmv = valorCoberto > 0;
+    const cmvPct = temCmv ? (cmvCoberto / valorCoberto) * 100 : null;
+    const cmv = temCmv ? custoArred(receita * (cmvPct / 100)) : null;
+
+    // despesas lançadas por mês, proporcionais aos dias do período
+    const diasPorMes = {};
+    const [fy, fm, fd] = per.fromStr.split("-").map(Number);
+    for (let i = 0; i < per.days; i++) {
+      const k = new Date(Date.UTC(fy, fm - 1, fd + i)).toISOString().slice(0, 7) + "-01";
+      diasPorMes[k] = (diasPorMes[k] || 0) + 1;
+    }
+    const { data: desp } = await supabase.from("despesas").select("categoria, valor, competencia")
+      .eq("restaurant_id", restaurant_id).in("competencia", Object.keys(diasPorMes));
+    const porCategoria = {};
+    let despTotal = 0;
+    for (const d of desp || []) {
+      const [y, m] = d.competencia.split("-").map(Number);
+      const diasDoMes = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      const parte = Number(d.valor) * (diasPorMes[d.competencia] / diasDoMes);
+      porCategoria[d.categoria] = custoArred((porCategoria[d.categoria] || 0) + parte);
+      despTotal += parte;
+    }
+    despTotal = custoArred(despTotal);
+
+    const lucroBruto = temCmv ? custoArred(receita - cmv) : null;
+    const lucroLiquido = temCmv ? custoArred(lucroBruto - despTotal) : null;
+
+    return res.json({
+      period: ownerPeriodoJson(per),
+      receita,
+      cmv: { valor: cmv, pct: cmvPct === null ? null : custoArred(cmvPct, 1), cobertura_pct: custoArred(cobertura, 1), disponivel: temCmv },
+      despesas: { total: despTotal, por_categoria: porCategoria, cadastradas: (desp || []).length > 0 },
+      lucro_bruto: lucroBruto,
+      lucro_liquido: lucroLiquido,
+      margem_liquida_pct: lucroLiquido !== null && receita > 0 ? custoArred((lucroLiquido / receita) * 100, 1) : null
+    });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    console.error("❌ GET /owner/.../financeiro:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar o financeiro" });
   }
 });
 
