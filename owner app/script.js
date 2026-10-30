@@ -37,7 +37,8 @@
     file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
     trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
     print: '<path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="9" rx="2"/><path d="M7 15h10v6H7z"/>',
-    lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'
+    lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>'
   };
   const ic = (n) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
 
@@ -254,14 +255,14 @@
     const g = e.target.closest("[data-go]"); if (g) { st.screen = g.dataset.go; render(); window.scrollTo({ top: 0 }); }
   });
 
-  const TITULOS = { dre: "Financeiro e DRE", custos: "Custos e estoque", canais: "Rentabilidade por canal", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Relatórios do caixa", pdf: "Exportar PDF" };
+  const TITULOS = { dre: "Financeiro e DRE", custos: "Custos e estoque", canais: "Rentabilidade por canal", clientes: "Clientes e origem", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Relatórios do caixa", pdf: "Exportar PDF" };
   function render() {
     const ov = st.view === "overview";
     $("back").classList.toggle("hidden", ov || st.screen === "home");
     if (ov) { $("title").textContent = "Visão geral"; $("content").innerHTML = telaOverview(st.ov); return; }
     const d = st.dash;
     $("title").textContent = st.screen === "home" ? d.restaurant.name : TITULOS[st.screen];
-    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, simulador: telaSimulador, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
+    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, clientes: telaClientes, simulador: telaSimulador, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
     $("content").innerHTML = T(d);
     if (st.screen === "simulador") bindSim(d);
     if (st.screen === "pdf") bindPdf(d);
@@ -439,6 +440,7 @@
         ${item("dre", "wallet", "Financeiro e DRE", "Receitas, CMV, despesas e resultado", exec, "Executive")}
         ${item("custos", "box", "Custos e estoque", "CMV, itens com estoque baixo", adv, "Advanced")}
         ${item("canais", "pie", "Rentabilidade por canal", "Salão, balcão e delivery", exec, "Executive")}
+        ${item("clientes", "users", "Clientes e origem dos pedidos", "Novos, recorrentes e de onde vêm", true, "")}
         ${item("previsao", "trend", "Previsão de demanda", "Próximos dias, picos e produtos", exec, "Executive")}
         ${item("caixa", "file", "Relatórios do caixa", "Turnos abertos e fechados", true, "")}
         ${item("pdf", "print", "Exportar PDF", "Escolha o período e as seções", true, "")}
@@ -472,6 +474,40 @@
   function telaCanais(d) {
     if (!temExec(d.restaurant.plan)) return lockCard("A análise de rentabilidade por canal faz parte do plano Executive.");
     return nota(d.period) + secCanais(d) + secRent(d);
+  }
+
+  const ORIGENS = { ia_whatsapp: "IA no WhatsApp", cardapio: "Cardápio digital", pdv: "PDV (caixa)", pedido_manual: "Pedido manual / balcão", autoatendimento: "Autoatendimento", outros: "Outros" };
+  function telaClientes() {
+    const my = ++st.reqId;
+    api(`/owner/restaurants/${encodeURIComponent(st.view)}/clientes?` + qs()).then((c) => {
+      if (my !== st.reqId || st.screen !== "clientes") return;
+      $("content").innerHTML = corpoClientes(c);
+    }).catch((e) => {
+      if (my !== st.reqId) return;
+      $("content").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`;
+    });
+    return `<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>`;
+  }
+  function corpoClientes(c) {
+    const k = c.clientes, g = k.growth, linhas = (obj, rot) => Object.entries(obj).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+      .map(([n, v]) => `<div class="split-row"><div class="split-head"><span>${rot[n] || n}</span><span>${int(v)} · ${pct(c.origem.total ? (v / c.origem.total) * 100 : 0, 0)}</span></div><div class="bar"><i style="width:${c.origem.total ? (v / c.origem.total) * 100 : 0}%"></i></div></div>`).join("");
+    const pn = k.unicos ? (k.novos / k.unicos) * 100 : 0, pr = k.unicos ? (k.recorrentes / k.unicos) * 100 : 0;
+    return nota(c.period) + `
+      <section class="grid4">
+        <div class="kpi"><span class="label">Clientes no período</span><span class="value">${int(k.unicos)}</span></div>
+        <div class="kpi"><span class="label">Novos</span><span class="value">${int(k.novos)}</span></div>
+        <div class="kpi"><span class="label">Recorrentes</span><span class="value">${int(k.recorrentes)}</span></div>
+        <div class="kpi"><span class="label">Taxa de retorno</span><span class="value">${pct(k.taxa_retorno)}</span>${delta(g.taxa_retorno, "")}</div>
+      </section>
+      <section class="grid2">
+        <div class="kpi"><span class="label">Frequência média</span><span class="value">${k.frequencia.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}x</span>${delta(g.frequencia, "")}<span class="sub">pedidos por cliente</span></div>
+        <div class="kpi"><span class="label">Faturamento recorrente</span><span class="value">${brl(k.faturamento_recorrente)}</span>${delta(g.faturamento_recorrente, "")}<span class="sub">de clientes que voltam</span></div>
+      </section>
+      <section class="card"><h2>Novos x recorrentes</h2><div class="split">
+        <div class="split-row"><div class="split-head"><span>Novos</span><span>${pct(pn, 0)}</span></div><div class="bar"><i style="width:${pn}%"></i></div></div>
+        <div class="split-row"><div class="split-head"><span>Recorrentes</span><span>${pct(pr, 0)}</span></div><div class="bar"><i style="width:${pr}%"></i></div></div></div></section>
+      <section class="card"><h2>Origem dos pedidos</h2><div class="split">${c.origem.total ? linhas(c.origem.pedidos, ORIGENS) : `<p class="foot">Sem pedidos no período.</p>`}</div></section>
+      <section class="card"><h2>Tipo de serviço</h2><div class="split">${c.origem.total ? linhas(c.servico, { local: "No local (salão e balcão)", delivery: "Delivery" }) : `<p class="foot">Sem pedidos no período.</p>`}</div></section>`;
   }
 
   function telaSimulador(d) {
