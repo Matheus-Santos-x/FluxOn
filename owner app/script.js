@@ -256,14 +256,14 @@
     const g = e.target.closest("[data-go]"); if (g) { st.screen = g.dataset.go; render(); window.scrollTo({ top: 0 }); }
   });
 
-  const TITULOS = { dre: "Financeiro e DRE", custos: "Custos e estoque", canais: "Rentabilidade por canal", clientes: "Clientes e origem", fidelidade: "Fidelidade", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Relatórios do caixa", pdf: "Exportar PDF" };
+  const TITULOS = { dre: "Financeiro e DRE", custos: "Custos e estoque", canais: "Rentabilidade por canal", clientes: "Clientes e origem", fidelidade: "Fidelidade", meuscustos: "Meus custos", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Relatórios do caixa", pdf: "Exportar PDF" };
   function render() {
     const ov = st.view === "overview";
     $("back").classList.toggle("hidden", ov || st.screen === "home");
     if (ov) { $("title").textContent = "Visão geral"; $("content").innerHTML = telaOverview(st.ov); return; }
     const d = st.dash;
     $("title").textContent = st.screen === "home" ? d.restaurant.name : TITULOS[st.screen];
-    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, clientes: telaClientes, fidelidade: telaFidelidade, simulador: telaSimulador, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
+    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, clientes: telaClientes, fidelidade: telaFidelidade, meuscustos: telaMeusCustos, simulador: telaSimulador, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
     $("content").innerHTML = T(d);
     if (st.screen === "simulador") bindSim(d);
     if (st.screen === "pdf") bindPdf(d);
@@ -443,6 +443,7 @@
         ${item("canais", "pie", "Rentabilidade por canal", "Salão, balcão e delivery", exec, "Executive")}
         ${item("clientes", "users", "Clientes e origem dos pedidos", "Novos, recorrentes e de onde vêm", true, "")}
         ${item("fidelidade", "star", "Fidelidade", "Pontos ou selos e quanto cada um vale", true, "")}
+        ${item("meuscustos", "box", "Meus custos", "Produtos, compras e despesas", true, "")}
         ${item("previsao", "trend", "Previsão de demanda", "Próximos dias, picos e produtos", exec, "Executive")}
         ${item("caixa", "file", "Relatórios do caixa", "Turnos abertos e fechados", true, "")}
         ${item("pdf", "print", "Exportar PDF", "Escolha o período e as seções", true, "")}
@@ -567,6 +568,120 @@
       $("content").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`;
     });
     return `<div class="skeleton"></div><div class="skeleton"></div>`;
+  }
+
+  /* ---------- meus custos: compras, produtos e despesas ---------- */
+  const CAT_DESP = { folha: "Folha e funcionários", aluguel: "Aluguel", energia: "Água, luz e internet", manutencao: "Manutenção", outras: "Outras despesas" };
+  const cuBase = () => `/owner/restaurants/${encodeURIComponent(st.view)}/custos`;
+  const cuPreco = (c, u) => `${brl(c)}/${u}` + (u === "un" ? "" : ` · ${brl(c / 10)} por 100 ${u === "kg" ? "g" : "ml"}`);
+  const cuNorm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+  const cuEstado = { aba: "compras", mes: "" };
+  const cuVivo = (aba) => st.screen === "meuscustos" && cuEstado.aba === aba && $("cu-corpo");
+
+  function telaMeusCustos() {
+    if (!cuEstado.mes) cuEstado.mes = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 7);
+    Promise.resolve().then(cuDesenhar);
+    return `<div class="skeleton"></div>`;
+  }
+  function cuDesenhar() {
+    if (st.screen !== "meuscustos") return;
+    const abas = [["compras", "Compras"], ["produtos", "Produtos"], ["despesas", "Despesas"]];
+    $("content").innerHTML = `<div style="display:flex;gap:8px;margin-bottom:12px">${abas.map(([k, n]) => `<button class="chip" data-cu="${k}" aria-selected="${cuEstado.aba === k}" style="flex:1">${n}</button>`).join("")}</div><div id="cu-corpo"><div class="skeleton"></div></div>`;
+    document.querySelectorAll("[data-cu]").forEach((b) => b.addEventListener("click", () => { cuEstado.aba = b.dataset.cu; cuDesenhar(); }));
+    ({ compras: cuCompras, produtos: cuProdutos, despesas: cuDespesas })[cuEstado.aba]();
+  }
+  const cuErro = (aba, e) => { if (cuVivo(aba)) $("cu-corpo").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`; };
+
+  async function cuCompras() {
+    try {
+      const [ins, com] = await Promise.all([api(cuBase() + "/insumos"), api(cuBase() + "/compras")]);
+      if (!cuVivo("compras")) return;
+      const lista = ins.insumos;
+      const itens = com.compras.map((c) => `<div class="split-row"><div class="split-head"><span>${esc(c.nome)} · ${Number(c.quantidade).toLocaleString("pt-BR")} ${esc(c.unidade)}</span><span>${brl(c.valor_total)} <button class="btn link small" data-del-compra="${esc(c.id)}" aria-label="Remover compra">✕</button></span></div><span class="muted" style="font-size:12px">${fmtData(c.data_compra)}${c.fornecedor ? " · " + esc(c.fornecedor) : ""} · ${brl(Number(c.valor_total) / Number(c.quantidade))}/${esc(c.unidade)}</span></div>`).join("");
+      $("cu-corpo").innerHTML = `
+        <section class="card"><h2>Registrar compra</h2>
+          <div style="display:grid;gap:10px">
+            <input id="cu-nome" list="cu-lista" placeholder="Produto (ex.: Alface)" autocomplete="off">
+            <datalist id="cu-lista">${lista.map((i) => `<option value="${esc(i.nome)}">`).join("")}</datalist>
+            <div style="display:grid;grid-template-columns:1fr 110px;gap:10px"><input id="cu-qtd" inputmode="decimal" placeholder="Quantidade"><select id="cu-un"><option value="kg">kg</option><option value="l">litros</option><option value="un">unidades</option></select></div>
+            <input id="cu-valor" inputmode="decimal" placeholder="Quanto pagou no total (R$)">
+            <input id="cu-forn" placeholder="Fornecedor (opcional)">
+            <button class="btn primary" id="cu-add">Registrar compra</button>
+          </div>
+          <p class="foot" style="text-align:left;margin-top:10px">O custo do produto passa a ser o da última compra.</p></section>
+        <section class="card"><h2>Últimas compras</h2>${itens ? `<div class="split">${itens}</div>` : `<div class="empty">Nenhuma compra registrada ainda.</div>`}</section>`;
+      const nome = $("cu-nome"), un = $("cu-un");
+      nome.addEventListener("input", () => {
+        const ach = lista.find((i) => cuNorm(i.nome) === cuNorm(nome.value));
+        if (ach) { un.value = ach.unidade; un.disabled = true; } else un.disabled = false;
+      });
+      $("cu-add").onclick = async () => {
+        const body = { insumo_nome: nome.value, unidade: un.value, quantidade: $("cu-qtd").value, valor_total: $("cu-valor").value, fornecedor: $("cu-forn").value };
+        if (!body.insumo_nome.trim() || !body.quantidade.trim() || !body.valor_total.trim()) { toast("Preencha produto, quantidade e valor."); return; }
+        const b = $("cu-add"); b.disabled = true;
+        try {
+          const r = await api(cuBase() + "/compras", { method: "POST", body: JSON.stringify(body) });
+          toast(`${r.insumo.nome}: ${cuPreco(Number(r.insumo.custo_unitario), r.insumo.unidade)}`);
+          if (cuVivo("compras")) cuCompras();
+        } catch (e) { toast(e.message); b.disabled = false; }
+      };
+      $("cu-corpo").onclick = async (e) => {
+        const d = e.target.closest("[data-del-compra]"); if (!d || !confirm("Remover esta compra?")) return;
+        try { await api(`${cuBase()}/compras/${encodeURIComponent(d.dataset.delCompra)}`, { method: "DELETE" }); if (cuVivo("compras")) cuCompras(); } catch (err) { toast(err.message); }
+      };
+    } catch (e) { cuErro("compras", e); }
+  }
+
+  async function cuProdutos() {
+    try {
+      const { insumos } = await api(cuBase() + "/insumos");
+      if (!cuVivo("produtos")) return;
+      const itens = insumos.map((i) => `<div class="split-row"><div class="split-head"><span>${esc(i.nome)}</span><span>${Number(i.custo_unitario) > 0 ? cuPreco(Number(i.custo_unitario), i.unidade) : "sem compra"} <button class="btn link small" data-del-prod="${esc(i.id)}" aria-label="Remover produto">✕</button></span></div></div>`).join("");
+      $("cu-corpo").innerHTML = `<section class="card"><h2>Meus produtos</h2>${itens ? `<div class="split">${itens}</div>` : `<div class="empty">Nenhum produto ainda. Registre a primeira compra na aba Compras.</div>`}
+        <p class="foot">O custo de cada produto vem da última compra registrada.</p></section>`;
+      $("cu-corpo").onclick = async (e) => {
+        const d = e.target.closest("[data-del-prod]"); if (!d || !confirm("Remover este produto da lista?")) return;
+        try { await api(`${cuBase()}/insumos/${encodeURIComponent(d.dataset.delProd)}`, { method: "DELETE" }); if (cuVivo("produtos")) cuProdutos(); } catch (err) { toast(err.message); }
+      };
+    } catch (e) { cuErro("produtos", e); }
+  }
+
+  async function cuDespesas() {
+    try {
+      const d = await api(`${cuBase()}/despesas?mes=${cuEstado.mes}`);
+      if (!cuVivo("despesas")) return;
+      const cats = Object.entries(d.por_categoria).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div class="split-row"><div class="split-head"><span>${esc(CAT_DESP[c] || c)}</span><span>${brl(v)} · ${pct(d.total ? (v / d.total) * 100 : 0, 0)}</span></div><div class="bar amber"><i style="width:${d.total ? (v / d.total) * 100 : 0}%"></i></div></div>`).join("");
+      const itens = d.despesas.map((x) => `<div class="split-row"><div class="split-head"><span>${esc(CAT_DESP[x.categoria] || x.categoria)}${x.descricao ? " · " + esc(x.descricao) : ""}</span><span>${brl(x.valor)} <button class="btn link small" data-del-desp="${esc(x.id)}" aria-label="Remover despesa">✕</button></span></div></div>`).join("");
+      $("cu-corpo").innerHTML = `
+        <section class="card"><h2>Mês</h2><input id="cu-mes" type="month" value="${esc(cuEstado.mes)}">
+          <div class="kpi" style="margin-top:12px"><span class="label">Total de despesas</span><span class="value">${brl(d.total)}</span></div>
+          ${cats ? `<div class="split" style="margin-top:12px">${cats}</div>` : ""}</section>
+        <section class="card"><h2>Lançamentos</h2>${itens ? `<div class="split">${itens}</div>` : `<div class="empty">Nenhuma despesa neste mês.</div><button class="btn" id="cu-copiar" style="width:100%;margin-top:10px">Copiar despesas do mês anterior</button>`}</section>
+        <section class="card"><h2>Adicionar despesa</h2><div style="display:grid;gap:10px">
+          <select id="cu-cat">${Object.entries(CAT_DESP).map(([k, n]) => `<option value="${k}">${n}</option>`).join("")}</select>
+          <input id="cu-desc" placeholder="Descrição (opcional)">
+          <input id="cu-dval" inputmode="decimal" placeholder="Valor (R$)">
+          <button class="btn primary" id="cu-dadd">Adicionar</button></div></section>`;
+      $("cu-mes").addEventListener("change", (e) => { if (e.target.value) { cuEstado.mes = e.target.value; cuDespesas(); } });
+      $("cu-dadd").onclick = async () => {
+        const valor = $("cu-dval").value; if (!valor.trim()) { toast("Informe o valor."); return; }
+        const b = $("cu-dadd"); b.disabled = true;
+        try {
+          await api(cuBase() + "/despesas", { method: "POST", body: JSON.stringify({ categoria: $("cu-cat").value, descricao: $("cu-desc").value, valor, mes: cuEstado.mes }) });
+          toast("Despesa adicionada."); if (cuVivo("despesas")) cuDespesas();
+        } catch (e) { toast(e.message); b.disabled = false; }
+      };
+      const cp = $("cu-copiar");
+      if (cp) cp.onclick = async () => {
+        cp.disabled = true;
+        try { await api(cuBase() + "/despesas/copiar", { method: "POST", body: JSON.stringify({ mes: cuEstado.mes }) }); if (cuVivo("despesas")) cuDespesas(); }
+        catch (e) { toast(e.message); cp.disabled = false; }
+      };
+      $("cu-corpo").onclick = async (e) => {
+        const x = e.target.closest("[data-del-desp]"); if (!x || !confirm("Remover esta despesa?")) return;
+        try { await api(`${cuBase()}/despesas/${encodeURIComponent(x.dataset.delDesp)}`, { method: "DELETE" }); if (cuVivo("despesas")) cuDespesas(); } catch (err) { toast(err.message); }
+      };
+    } catch (e) { cuErro("despesas", e); }
   }
 
   function telaSimulador(d) {
