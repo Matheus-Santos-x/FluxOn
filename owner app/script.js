@@ -513,6 +513,63 @@
   }
 
 
+  function telaFidelidade() {
+    const my = ++st.reqId, base = `/owner/restaurants/${encodeURIComponent(st.view)}/fidelidade`;
+    api(base).then((cfg) => {
+      if (my !== st.reqId || st.screen !== "fidelidade") return;
+      let modelo = cfg.modelo === "selos" ? "selos" : "pontos";
+      const num = (v) => Number(String(v).replace(",", "."));
+      const desenhar = () => {
+        const selos = modelo === "selos";
+        $("content").innerHTML = `
+          <section class="card"><h2>Como o cliente ganha recompensa</h2>
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <button class="chip" data-m="pontos" aria-selected="${!selos}" style="flex:1">Pontos</button>
+              <button class="chip" data-m="selos" aria-selected="${selos}" style="flex:1">Selos</button>
+            </div>
+            <p class="foot" style="text-align:left">${selos
+              ? "Selos: o cliente ganha 1 selo por pedido a partir de um valor mínimo. Bom para quem busca visitas no salão."
+              : "Pontos: o cliente ganha pontos por cada real gasto. Bom para delivery e pedidos de valores variados."}</p>
+          </section>
+          <section class="card"><h2>${selos ? "Valor mínimo para ganhar 1 selo" : "Pontos por real gasto"}</h2>
+            <input id="fid-valor" inputmode="decimal" autocomplete="off" value="${selos ? cfg.valor_selo : cfg.pontos_por_real}">
+            <p class="foot" id="fid-ex" style="text-align:left;margin-top:10px"></p>
+          </section>
+          <button class="btn primary" id="fid-save" style="width:100%">Salvar</button>
+          <p class="foot">Vale para novos pedidos. O saldo que os clientes já têm não muda.</p>`;
+        const inp = $("fid-valor"), ex = $("fid-ex");
+        const atualizar = () => {
+          const v = num(inp.value);
+          ex.textContent = !(v > 0) ? "" : selos
+            ? `Pedidos de ${brl(v)} ou mais ganham 1 selo.`
+            : `Um pedido de ${brl(50)} rende ${int(Math.floor(50 * v))} pontos.`;
+        };
+        inp.addEventListener("input", atualizar); atualizar();
+        document.querySelectorAll("[data-m]").forEach((b) => b.addEventListener("click", () => {
+          const v = num(inp.value); if (v > 0) cfg[selos ? "valor_selo" : "pontos_por_real"] = v;
+          modelo = b.dataset.m; desenhar();
+        }));
+        $("fid-save").addEventListener("click", async () => {
+          const v = num(inp.value); if (!(v > 0)) { toast("Informe um valor maior que zero."); return; }
+          if (selos) cfg.valor_selo = v; else cfg.pontos_por_real = v;
+          const b = $("fid-save"); b.disabled = true; b.textContent = "Salvando...";
+          try {
+            const r = await api(base, { method: "PUT", body: JSON.stringify({ modelo, valor_selo: cfg.valor_selo, pontos_por_real: cfg.pontos_por_real }) });
+            cfg.modelo = r.modelo; cfg.valor_selo = r.valor_selo; cfg.pontos_por_real = r.pontos_por_real;
+            toast("Fidelidade salva.");
+          } catch (e) { toast(e.message); }
+          b.disabled = false; b.textContent = "Salvar";
+        });
+      };
+      desenhar();
+    }).catch((e) => {
+      if (my !== st.reqId) return;
+      $("content").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`;
+    });
+    return `<div class="skeleton"></div><div class="skeleton"></div>`;
+  }
+
+  function telaSimulador(d) {
     if (!temExec(d.restaurant.plan)) return lockCard("O simulador de precificação faz parte do plano Executive.");
     return nota(d.period) + `<section class="card sim"><h2>Simular novo preço ${exemplo}</h2>
       <label for="sim-p"><span>Mudança no preço de venda</span><b id="sim-v">0%</b></label>
