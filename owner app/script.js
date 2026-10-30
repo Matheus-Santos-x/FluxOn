@@ -369,13 +369,16 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
       ${linha("Resultado", f.lucro_liquido, "tot res")}
     </table>${notas ? `<p class="foot" style="text-align:left">${notas}</p>` : ""}</section>`;
   }
-  function secRent(d) {
-    const nomes = { salao: "Salão", balcao: "Balcão", delivery: "Delivery" };
-    const rows = Object.keys(nomes).map((c) => {
-      const v = d.canais[c], mg = MARGEM_CANAL[c] * 100, res = v.revenue * MARGEM_CANAL[c];
-      return `<div class="split-row"><div class="split-head"><span>${nomes[c]}</span><span>${brl(res)} · margem ${pct(mg, 0)}</span></div><div class="bar"><i style="width:${Math.min(100, mg * 3)}%"></i></div><span class="muted" style="font-size:12px">Faturou ${brl(v.revenue)} em ${int(v.orders)} pedidos</span></div>`;
+  function secRent() {
+    const nomes = { salao: "Salão", balcao: "Balcão", delivery: "Delivery" }, cs = st.fin && st.fin.canais;
+    if (!cs || !finOk()) return `<section class="card"><h2>Rentabilidade por canal</h2><div class="empty">Cadastre suas compras e as fichas dos pratos em Custos e estoque para ver quanto sobra em cada canal.</div></section>`;
+    const maxL = Math.max(...Object.values(cs).map((c) => c.lucro_bruto || 0), 1);
+    const rows = Object.keys(nomes).filter((k) => cs[k].pedidos > 0).sort((a, b) => (cs[b].lucro_bruto || 0) - (cs[a].lucro_bruto || 0)).map((k) => {
+      const c = cs[k];
+      if (!c.disponivel) return `<div class="split-row"><div class="split-head"><span>${nomes[k]}</span><span>sem ficha dos pratos</span></div><span class="muted" style="font-size:12px">Faturou ${brl(c.receita)} em ${int(c.pedidos)} pedidos. Monte a ficha dos pratos vendidos neste canal.</span></div>`;
+      return `<div class="split-row"><div class="split-head"><span>${nomes[k]}</span><span>${brl(c.lucro_bruto)} · margem ${pct(c.margem_pct, 0)}</span></div><div class="bar"><i style="width:${Math.max(0, (c.lucro_bruto / maxL) * 100)}%"></i></div><span class="muted" style="font-size:12px">Faturou ${brl(c.receita)} em ${int(c.pedidos)} pedidos · mercadoria ${brl(c.cmv)}</span></div>`;
     }).join("");
-    return `<section class="card"><h2>Rentabilidade por canal ${exemplo}</h2><div class="split">${rows}</div><p class="foot">Custos e despesas por canal são estimativas até o cadastro de custos.</p></section>`;
+    return `<section class="card"><h2>Rentabilidade por canal</h2>${rows ? `<div class="split">${rows}</div>` : `<div class="empty">Sem vendas no período.</div>`}<p class="foot">Lucro bruto: faturamento menos o custo da mercadoria. Folha, aluguel e outras despesas não são divididas por canal.</p></section>`;
   }
   function previsao(d) {
     const dias = d.timeline.filter((x) => x.revenue > 0);
