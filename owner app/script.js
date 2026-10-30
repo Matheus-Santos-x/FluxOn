@@ -242,7 +242,10 @@ $("back").addEventListener("click", () => { const de = st.screen; st.screen = PA
     $("title").textContent = r ? r.name : "Visão geral";
     $("content").innerHTML = `<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>`;
     try {
-      if (st.view === "overview") { const d = await api("/owner/overview?" + qs()); if (my !== st.reqId) return; st.ov = d; st.dash = null; }
+if (st.view === "overview") {
+        const [d, fins] = await Promise.all([api("/owner/overview?" + qs()), Promise.all(st.restaurants.map((r) => api(`/owner/restaurants/${encodeURIComponent(r.id)}/financeiro?` + qs()).catch(() => null)))]);
+        if (my !== st.reqId) return; st.ov = d; st.dash = null; st.finOv = fins;
+      }
       else {
         const base = `/owner/restaurants/${encodeURIComponent(st.view)}`;
         const [d, f] = await Promise.all([api(`${base}/dashboard?` + qs()), api(`${base}/financeiro?` + qs()).catch(() => null)]);
@@ -408,7 +411,8 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
 
   /* ---------- telas ---------- */
   function telaOverview(d) {
-    const t = d.totals, res = fin(t.revenue).resultado;
+const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.cmv.disponivel);
+    const resultado = comCustos.reduce((x, f) => x + (f.lucro_liquido || 0), 0);
     const itens = d.ranking.map((r) => `
       <li><button data-open="${esc(r.restaurant_id)}">
         <div class="rank-top"><span class="pos ${r.position === 1 ? "p1" : ""}">${r.position}</span><span class="nm">${esc(r.name)}</span><span class="rv">${brl(r.revenue)}</span></div>
@@ -422,7 +426,7 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
         <div class="kpi"><span class="label">Pedidos</span><span class="value">${int(t.orders)}</span>${delta(t.growth_orders, "")}</div>
         <div class="kpi"><span class="label">Ticket médio</span><span class="value">${brl(t.ticket)}</span></div>
         <div class="kpi"><span class="label">Cancelados</span><span class="value">${int(t.cancelados || 0)}</span></div>
-        <div class="kpi"><span class="label">Resultado estimado ${exemplo}</span><span class="value">${brl(res)}</span></div>
+ <div class="kpi"><span class="label">Resultado</span><span class="value">${comCustos.length ? brl(resultado) : "—"}</span><span class="sub">${comCustos.length ? `${comCustos.length} de ${st.restaurants.length} unidades com custos` : "cadastre os custos de cada unidade"}</span></div>
       </section>
       <section class="card"><h2>Ranking por faturamento</h2>${d.ranking.length ? `<ul class="rank">${itens}</ul>` : `<div class="empty">Nenhuma unidade vinculada.</div>`}
         ${d.ranking.length > 1 ? `<p class="peak">Vendendo mais: <b>${esc(melhor.name)}</b> · Vendendo menos: <b>${esc(pior.name)}</b></p>` : ""}</section>
