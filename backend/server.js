@@ -6117,7 +6117,7 @@ app.get("/owner/restaurants/:restaurant_id/financeiro", donoRota, async (req, re
     const { restaurant_id } = req.params;
     const per = ownerPeriodo(req.query);
 
-    const orders = await ownerBuscarPedidos(restaurant_id, per.from, per.to, "id, total_price, status, origin, itens, created_at");
+    const orders = await ownerBuscarPedidos(restaurant_id, per.from, per.to, "id, total_price, status, origin, itens, created_at, service_type, table_number");
     const vendas = orders.filter((o) => o.origin !== "fidelidade" && o.status === "finished");
     const receita = custoArred(vendas.reduce((s, o) => s + (parseFloat(o.total_price) || 0), 0));
 
@@ -6135,21 +6135,40 @@ app.get("/owner/restaurants/:restaurant_id/financeiro", donoRota, async (req, re
       custoPorNome.set(custoNorm(p.nome), ing.reduce((s, f) => s + Number(f.quantidade) * custoUn[f.insumo_id], 0));
     }
 
-    // percorre os itens vendidos: quanto do faturamento tem custo conhecido
+     // percorre os itens vendidos: quanto do faturamento tem custo conhecido (total e por canal)
+    const canalDe = (o) => (String(o.service_type || "").toLowerCase() === "delivery" ? "delivery" : o.table_number ? "salao" : "balcao");
+    const novoCanal = () => ({ receita: 0, pedidos: 0, valorTotal: 0, valorCoberto: 0, cmvCoberto: 0 });
+    const por = { salao: novoCanal(), balcao: novoCanal(), delivery: novoCanal() };
     let valorTotal = 0, valorCoberto = 0, cmvCoberto = 0;
     for (const o of vendas) {
+      const c = por[canalDe(o)];
+      c.pedidos++; c.receita += parseFloat(o.total_price) || 0;
       for (const it of Array.isArray(o.itens) ? o.itens : []) {
         const nome = custoNorm(it.name || it.nome);
         const qty = Number(it.qty || it.quantidade || it.quantity || 1) || 1;
         const valor = qty * (Number(it.price ?? it.preco) || 0);
-        valorTotal += valor;
-        if (custoPorNome.has(nome)) { valorCoberto += valor; cmvCoberto += qty * custoPorNome.get(nome); }
+        valorTotal += valor; c.valorTotal += valor;
+        if (custoPorNome.has(nome)) {
+          const custo = qty * custoPorNome.get(nome);
+          valorCoberto += valor; cmvCoberto += custo; c.valorCoberto += valor; c.cmvCoberto += custo;
+        }
       }
     }
     const cobertura = valorTotal > 0 ? (valorCoberto / valorTotal) * 100 : 0;
     const temCmv = valorCoberto > 0;
     const cmvPct = temCmv ? (cmvCoberto / valorCoberto) * 100 : null;
     const cmv = temCmv ? custoArred(receita * (cmvPct / 100)) : null;
+    const canais = {};
+    for (const [k, c] of Object.entries(por)) {
+      const rec = custoArred(c.receita), ok = c.valorCoberto > 0;
+      const cmvC = ok ? custoArred(rec * (c.cmvCoberto / c.valorCoberto)) : null;
+      canais[k] = {
+        receita: rec, pedidos: c.pedidos, cmv: cmvC, disponivel: ok,
+        cobertura_pct: c.valorTotal > 0 ? custoArred((c.valorCoberto / c.valorTotal) * 100, 1) : 0,
+        lucro_bruto: ok ? custoArred(rec - cmvC) : null,
+        margem_pct: ok && rec > 0 ? custoArred(((rec - cmvC) / rec) * 100, 1) : null
+      };
+    }
 
     // despesas lançadas por mês, proporcionais aos dias do período
     const diasPorMes = {};
@@ -6179,6 +6198,7 @@ app.get("/owner/restaurants/:restaurant_id/financeiro", donoRota, async (req, re
       receita,
       cmv: { valor: cmv, pct: cmvPct === null ? null : custoArred(cmvPct, 1), cobertura_pct: custoArred(cobertura, 1), disponivel: temCmv },
       despesas: { total: despTotal, por_categoria: porCategoria, cadastradas: (desp || []).length > 0 },
+      canais,
       lucro_bruto: lucroBruto,
       lucro_liquido: lucroLiquido,
       margem_liquida_pct: lucroLiquido !== null && receita > 0 ? custoArred((lucroLiquido / receita) * 100, 1) : null
