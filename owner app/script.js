@@ -585,10 +585,10 @@
   }
   function cuDesenhar() {
     if (st.screen !== "meuscustos") return;
-    const abas = [["compras", "Compras"], ["produtos", "Produtos"], ["despesas", "Despesas"]];
+    const abas = [["compras", "Compras"], ["produtos", "Produtos"], ["fichas", "Fichas"], ["despesas", "Despesas"]];
     $("content").innerHTML = `<div style="display:flex;gap:8px;margin-bottom:12px">${abas.map(([k, n]) => `<button class="chip" data-cu="${k}" aria-selected="${cuEstado.aba === k}" style="flex:1">${n}</button>`).join("")}</div><div id="cu-corpo"><div class="skeleton"></div></div>`;
     document.querySelectorAll("[data-cu]").forEach((b) => b.addEventListener("click", () => { cuEstado.aba = b.dataset.cu; cuDesenhar(); }));
-    ({ compras: cuCompras, produtos: cuProdutos, despesas: cuDespesas })[cuEstado.aba]();
+    ({ compras: cuCompras, produtos: cuProdutos, fichas: cuFichas, despesas: cuDespesas })[cuEstado.aba]();
   }
   const cuErro = (aba, e) => { if (cuVivo(aba)) $("cu-corpo").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`; };
 
@@ -644,6 +644,108 @@
         try { await api(`${cuBase()}/insumos/${encodeURIComponent(d.dataset.delProd)}`, { method: "DELETE" }); if (cuVivo("produtos")) cuProdutos(); } catch (err) { toast(err.message); }
       };
     } catch (e) { cuErro("produtos", e); }
+  }
+
+  /* fichas técnicas: quanto de cada produto vai em cada prato */
+  const cuFicha = { aberto: null, linhas: [] };
+  const cuUn = (u) => (u === "kg" ? "g" : u === "l" ? "ml" : "un");
+  const cuFator = (u) => (u === "un" ? 1 : 1000);
+  const cuLinhasDe = (p) => p.ingredientes.map((g) => ({ insumo_id: g.insumo_id, q: String(Number((g.quantidade * cuFator(g.unidade)).toFixed(3))).replace(".", ",") }));
+
+  async function cuFichas() {
+    try {
+      const [pr, ins] = await Promise.all([api(cuBase() + "/pratos"), api(cuBase() + "/insumos")]);
+      if (!cuVivo("fichas")) return;
+      const aberto = pr.pratos.find((p) => p.id === cuFicha.aberto);
+      if (!aberto) { cuFicha.aberto = null; cuFichaLista(pr); } else cuFichaEditor(aberto, pr.pratos, ins.insumos);
+    } catch (e) { cuErro("fichas", e); }
+  }
+
+  function cuFichaLista(pr) {
+    const itens = pr.pratos.map((p) => {
+      const est = p.pronto ? `<span class="tag" style="color:var(--up);border-color:currentColor">Pronto</span>` : p.ingredientes.length ? `<span class="tag red">Falta custo</span>` : `<span class="tag red">Falta preencher</span>`;
+      const num = p.ingredientes.length ? `custo ${brl(p.custo_total)} · margem ${p.margem_pct === null ? "—" : pct(p.margem_pct, 0)}` : `vende por ${brl(p.preco)}`;
+      return `<li><button class="row-btn" data-ficha="${esc(p.id)}"><span class="row-t"><b>${esc(p.nome)}</b><span>${num}</span></span>${est}<span class="chev">›</span></button></li>`;
+    }).join("");
+    $("cu-corpo").innerHTML = `<section class="card"><h2>Fichas técnicas</h2>
+      <p class="foot" style="text-align:left;margin:0 0 8px">${pr.resumo.prontos} de ${pr.resumo.total} pratos com ficha pronta. Toque em um prato para dizer quanto de cada produto ele leva.</p>
+      ${itens ? `<ul class="list">${itens}</ul>` : `<div class="empty">Nenhum prato ativo no cardápio.</div>`}</section>`;
+    $("cu-corpo").onclick = (e) => {
+      const b = e.target.closest("[data-ficha]"); if (!b) return;
+      const p = pr.pratos.find((x) => x.id === b.dataset.ficha); if (!p) return;
+      cuFicha.aberto = p.id; cuFicha.linhas = cuLinhasDe(p); cuFichas();
+    };
+  }
+
+  function cuFichaEditor(prato, pratos, insumos) {
+    if (!insumos.length) {
+      $("cu-corpo").innerHTML = `<section class="card"><h2>${esc(prato.nome)}</h2><div class="empty">Cadastre seus produtos primeiro: registre uma compra na aba Compras.</div><button class="btn" id="fc-voltar" style="width:100%;margin-top:10px">← Pratos</button></section>`;
+      $("fc-voltar").onclick = () => { cuFicha.aberto = null; cuFichas(); };
+      return;
+    }
+    const mapa = Object.fromEntries(insumos.map((i) => [i.id, i]));
+    prato.ingredientes.forEach((g) => { if (!mapa[g.insumo_id]) mapa[g.insumo_id] = { id: g.insumo_id, nome: g.nome, unidade: g.unidade, custo_unitario: g.custo_unitario }; });
+    const todos = Object.values(mapa);
+    const num = (v) => Number(String(v).replace(",", "."));
+    const resumo = () => {
+      let c = 0; for (const l of cuFicha.linhas) { const i = mapa[l.insumo_id], q = num(l.q); if (i && q > 0) c += (q / cuFator(i.unidade)) * Number(i.custo_unitario || 0); }
+      const m = prato.preco - c, mp = prato.preco > 0 ? (m / prato.preco) * 100 : 0;
+      $("fc-res").innerHTML = `Custo do prato: <b>${brl(c)}</b> · vende por <b>${brl(prato.preco)}</b><br>Sobra <b style="color:${m >= 0 ? "var(--up)" : "var(--down)"}">${brl(m)}</b> (${pct(mp, 0)})`;
+    };
+    const copiaveis = pratos.filter((p) => p.id !== prato.id && p.ingredientes.length);
+    const linhasHtml = cuFicha.linhas.map((l, i) => {
+      const ins = mapa[l.insumo_id], semCusto = ins && !(Number(ins.custo_unitario) > 0);
+      return `<div class="split-row" style="display:grid;gap:8px">
+        <select data-i="${i}" data-f="insumo"><option value="">Escolha o produto</option>${todos.map((t) => `<option value="${esc(t.id)}" ${t.id === l.insumo_id ? "selected" : ""}>${esc(t.nome)}</option>`).join("")}</select>
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center">
+          <input data-i="${i}" data-f="q" inputmode="decimal" placeholder="Quantidade" value="${esc(l.q)}">
+          <span class="muted">${ins ? cuUn(ins.unidade) : ""}</span>
+          <button class="btn link small" data-rm="${i}" aria-label="Remover ingrediente">✕</button></div>
+        ${semCusto ? `<span class="muted" style="font-size:12px">Sem custo ainda. Registre uma compra deste produto.</span>` : ""}</div>`;
+    }).join("");
+    $("cu-corpo").innerHTML = `
+      <button class="btn link" id="fc-voltar" style="padding-left:0">← Pratos</button>
+      <section class="card"><h2>${esc(prato.nome)}</h2>
+        ${copiaveis.length ? `<select id="fc-copiar" style="margin-bottom:12px"><option value="">Copiar ingredientes de outro prato...</option>${copiaveis.map((p) => `<option value="${esc(p.id)}">${esc(p.nome)}</option>`).join("")}</select>` : ""}
+        ${linhasHtml ? `<div class="split">${linhasHtml}</div>` : `<div class="empty">Nenhum ingrediente ainda.</div>`}
+        <button class="btn" id="fc-add" style="width:100%;margin-top:12px">+ Adicionar ingrediente</button></section>
+      <section class="card"><p id="fc-res" style="margin:0;line-height:1.6"></p>
+        <button class="btn primary" id="fc-save" style="width:100%;margin-top:12px">Salvar ficha</button>
+        <p class="foot">Quantidade em gramas (g) ou mililitros (ml) para produtos de kg ou litro, e em unidades para os demais.</p></section>`;
+    resumo();
+    $("fc-voltar").onclick = () => { cuFicha.aberto = null; cuFichas(); };
+    $("fc-add").onclick = () => { cuFicha.linhas.push({ insumo_id: "", q: "" }); cuFichaEditor(prato, pratos, insumos); };
+    const cp = $("fc-copiar");
+    if (cp) cp.onchange = () => {
+      const o = pratos.find((p) => p.id === cp.value); if (!o) return;
+      cuFicha.linhas = cuLinhasDe(o); cuFichaEditor(prato, pratos, insumos);
+    };
+    $("cu-corpo").onchange = (e) => {
+      const el = e.target.closest("[data-f=insumo]"); if (!el) return;
+      cuFicha.linhas[Number(el.dataset.i)].insumo_id = el.value; cuFichaEditor(prato, pratos, insumos);
+    };
+    $("cu-corpo").oninput = (e) => {
+      const el = e.target.closest("[data-f=q]"); if (!el) return;
+      cuFicha.linhas[Number(el.dataset.i)].q = el.value; resumo();
+    };
+    $("cu-corpo").onclick = (e) => {
+      const r = e.target.closest("[data-rm]"); if (!r) return;
+      cuFicha.linhas.splice(Number(r.dataset.rm), 1); cuFichaEditor(prato, pratos, insumos);
+    };
+    $("fc-save").onclick = async () => {
+      const ingredientes = [];
+      for (const l of cuFicha.linhas) {
+        const q = num(l.q), vazio = !l.insumo_id && !String(l.q).trim();
+        if (vazio) continue;
+        if (!l.insumo_id || !(q > 0)) { toast("Confira os produtos e as quantidades."); return; }
+        ingredientes.push({ insumo_id: l.insumo_id, quantidade: q / cuFator(mapa[l.insumo_id].unidade) });
+      }
+      const b = $("fc-save"); b.disabled = true;
+      try {
+        await api(`${cuBase()}/pratos/${encodeURIComponent(prato.id)}/ficha`, { method: "PUT", body: JSON.stringify({ ingredientes }) });
+        toast("Ficha salva."); cuFicha.aberto = null; cuFichas();
+      } catch (e) { toast(e.message); b.disabled = false; }
+    };
   }
 
   async function cuDespesas() {
