@@ -5923,6 +5923,41 @@ app.put("/owner/restaurants/:restaurant_id/custos/compras/:id", donoRota, async 
   }
 });
 
+/* ---------- imposto sobre as vendas (percentual do faturamento) ---------- */
+async function custoImpostoPct(restaurant_id) {
+  const { data } = await supabase.from("restaurante_config").select("imposto_percentual").eq("restaurant_id", restaurant_id).maybeSingle();
+  const v = Number(data?.imposto_percentual);
+  return Number.isFinite(v) && v > 0 ? v : 0;
+}
+
+app.get("/owner/restaurants/:restaurant_id/custos/imposto", donoRota, async (req, res) => {
+  try {
+    return res.json({ percentual: await custoImpostoPct(req.params.restaurant_id) });
+  } catch (err) {
+    console.error("❌ GET custos/imposto:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar o imposto" });
+  }
+});
+
+app.put("/owner/restaurants/:restaurant_id/custos/imposto", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const p = custoNum(req.body?.percentual);
+    if (!Number.isFinite(p) || p < 0 || p > 60) return res.status(400).json({ error: "O imposto deve ficar entre 0% e 60%" });
+    const campos = { imposto_percentual: custoArred(p) };
+    const { data: atualizado, error } = await supabase.from("restaurante_config").update(campos).eq("restaurant_id", restaurant_id).select("restaurant_id");
+    if (error) throw error;
+    if (!atualizado || !atualizado.length) {
+      const { error: insErr } = await supabase.from("restaurante_config").insert([{ restaurant_id, ...campos }]);
+      if (insErr) throw insErr;
+    }
+    return res.json({ ok: true, percentual: campos.imposto_percentual });
+  } catch (err) {
+    console.error("❌ PUT custos/imposto:", err.message);
+    return res.status(500).json({ error: "Erro ao salvar o imposto" });
+  }
+});
+
 /* despesas (folha, aluguel, energia...) — lançadas por mês */
 async function despesasDoMes(restaurant_id, competencia) {
   const { data, error } = await supabase
@@ -6188,6 +6223,13 @@ app.get("/owner/restaurants/:restaurant_id/financeiro", donoRota, async (req, re
       porCategoria[d.categoria] = custoArred((porCategoria[d.categoria] || 0) + parte);
       despTotal += parte;
     }
+    // imposto sobre as vendas, calculado em % do faturamento
+    const impPct = await custoImpostoPct(restaurant_id);
+    if (impPct > 0 && receita > 0) {
+      const imp = receita * (impPct / 100);
+      porCategoria.impostos = custoArred((porCategoria.impostos || 0) + imp);
+      despTotal += imp;
+    }
     despTotal = custoArred(despTotal);
 
     const lucroBruto = temCmv ? custoArred(receita - cmv) : null;
@@ -6197,7 +6239,7 @@ app.get("/owner/restaurants/:restaurant_id/financeiro", donoRota, async (req, re
       period: ownerPeriodoJson(per),
       receita,
       cmv: { valor: cmv, pct: cmvPct === null ? null : custoArred(cmvPct, 1), cobertura_pct: custoArred(cobertura, 1), disponivel: temCmv },
-      despesas: { total: despTotal, por_categoria: porCategoria, cadastradas: (desp || []).length > 0 },
+      despesas: { total: despTotal, por_categoria: porCategoria, cadastradas: (desp || []).length > 0 || impPct > 0, imposto_percentual: impPct },
       canais,
       lucro_bruto: lucroBruto,
       lucro_liquido: lucroLiquido,
