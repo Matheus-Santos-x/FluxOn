@@ -614,6 +614,47 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
     </ul></section>`;
   }
 
+  function telaVerCustos() {
+    const my = ++st.reqId, base = `/owner/restaurants/${encodeURIComponent(st.view)}`;
+    Promise.all([api(`${base}/financeiro?` + qs()), api(`${base}/custos/pratos`).catch(() => null)]).then(([f, pr]) => {
+      if (my !== st.reqId || st.screen !== "cuver") return;
+      st.fin = f; $("content").innerHTML = corpoVerCustos(st.dash.period, f, pr);
+    }).catch((e) => {
+      if (my !== st.reqId) return;
+      $("content").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`;
+    });
+    return `<div class="skeleton"></div><div class="skeleton"></div>`;
+  }
+  const CORES_CUSTO = ["#ff5a36", "#ffb020", "#4cc38a", "#5b9dff", "#b78aff", "#ff7ab6", "#8a94a6"];
+  function pizzaCustos(partes, total) {
+    let acum = 0;
+    const fatias = partes.map(([, v], i) => {
+      const p = total ? (v / total) * 100 : 0, s = `<circle cx="21" cy="21" r="15.9155" fill="none" stroke="${CORES_CUSTO[i % CORES_CUSTO.length]}" stroke-width="6" stroke-dasharray="${p.toFixed(3)} ${(100 - p).toFixed(3)}" stroke-dashoffset="${(25 - acum).toFixed(3)}"/>`;
+      acum += p; return s;
+    }).join("");
+    return `<svg viewBox="0 0 42 42" style="width:190px;height:190px;display:block;margin:0 auto" role="img" aria-label="Divisão dos custos"><circle cx="21" cy="21" r="15.9155" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="6"/>${fatias}<text x="21" y="20" text-anchor="middle" style="font-size:3.2px;fill:currentColor;opacity:.65">Custo total</text><text x="21" y="25" text-anchor="middle" style="font-size:4.4px;font-weight:700;fill:currentColor">${brl(total)}</text></svg>`;
+  }
+  function corpoVerCustos(periodo, f, pr) {
+    const temCmv = !!(f.cmv && f.cmv.disponivel), desp = f.despesas.total;
+    if (!temCmv && !desp) return nota(periodo) + `<section class="card lockcard"><span class="big">${ic("pie")}</span><b>Ainda não dá para mostrar seus custos</b><p>Registre suas despesas e monte a ficha dos pratos para ver para onde vai o seu dinheiro.</p><button class="btn primary" data-go="custos" style="margin-top:10px">Cadastrar meus custos</button></section>`;
+    const total = (temCmv ? f.cmv.valor : 0) + desp;
+    const partes = [...(temCmv ? [["Ingredientes e mercadorias", f.cmv.valor]] : []), ...Object.entries(f.despesas.por_categoria).map(([c, v]) => [CAT_DESP[c] || c, v])].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    const maior = partes[0];
+    const legenda = partes.map(([n, v], i) => `<div class="split-row"><div class="split-head"><span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;background:${CORES_CUSTO[i % CORES_CUSTO.length]}"></i>${esc(n)}</span><span>${brl(v)} · ${pct(total ? (v / total) * 100 : 0, 0)}</span></div></div>`).join("");
+    const caros = ((pr && pr.pratos) || []).filter((p) => p.pronto).sort((a, b) => b.custo_total - a.custo_total).slice(0, 5);
+    const maxC = Math.max(...caros.map((p) => p.custo_total), 1);
+    const rank = caros.length ? `<section class="card"><h2>Pratos mais caros de produzir</h2><div class="split">${caros.map((p) => `<div class="split-row"><div class="split-head"><span>${esc(p.nome)}</span><span>${brl(p.custo_total)}</span></div><div class="bar amber"><i style="width:${(p.custo_total / maxC) * 100}%"></i></div></div>`).join("")}</div><p class="foot" style="text-align:left">Custo de ingredientes de uma unidade de cada prato.</p></section>` : "";
+    const avisos = [
+      temCmv && f.cmv.cobertura_pct < 95 ? `Ingredientes calculados com base em ${pct(f.cmv.cobertura_pct, 0)} das vendas (pratos com ficha pronta).` : "",
+      !temCmv ? "Monte a ficha dos pratos vendidos para incluir os ingredientes." : "",
+      desp ? "As despesas do mês entram proporcionais aos dias do período escolhido." : "Sem despesas cadastradas neste período."
+    ].filter(Boolean).join(" ");
+    return nota(periodo) + `
+      <section class="grid2" style="grid-template-columns:1fr"><div class="kpi"><span class="label">Custo total no período</span><span class="value">${brl(total)}</span><span class="sub">Maior gasto: ${esc(maior[0])}, ${pct((maior[1] / total) * 100, 0)} dos custos</span></div></section>
+      <section class="card"><h2>Para onde vai o dinheiro</h2>${pizzaCustos(partes, total)}<div class="split" style="margin-top:16px">${legenda}</div><p class="foot" style="text-align:left">${avisos}</p></section>
+      ${rank}`;
+  }
+  
   /* ingredientes e mercadorias: registrar compra, produtos e últimas compras */
   const telaIngredientes = () => cuIniciar("ing", cuIng);
   async function cuIng() {
