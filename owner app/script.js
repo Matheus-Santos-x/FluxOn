@@ -847,7 +847,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
   const telaDespesas = () => { if (!cuEstado.mes) cuEstado.mes = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 7); return cuIniciar("desp", cuDespesas); };
   async function cuDespesas() {
     try {
-      const d = await api(`${cuBase()}/despesas?mes=${cuEstado.mes}`);
+            const [d, imp] = await Promise.all([api(`${cuBase()}/despesas?mes=${cuEstado.mes}`), api(cuBase() + "/imposto")]);
       if (!cuVivo("desp")) return;
       const ed = cuEstado.edit, opcoes = (sel) => Object.entries(CAT_DESP).map(([k, n]) => `<option value="${k}" ${k === sel ? "selected" : ""}>${n}</option>`).join("");
       const cats = Object.entries(d.por_categoria).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div class="split-row"><div class="split-head"><span>${esc(CAT_DESP[c] || c)}</span><span>${brl(v)} · ${pct(d.total ? (v / d.total) * 100 : 0, 0)}</span></div><div class="bar amber"><i style="width:${d.total ? (v / d.total) * 100 : 0}%"></i></div></div>`).join("");
@@ -856,6 +856,10 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
             <div style="display:flex;gap:8px"><button class="btn primary" data-save-desp="${esc(x.id)}" style="flex:1">Salvar</button><button class="btn" data-cancel style="flex:1">Cancelar</button></div></div>`
         : `<div class="split-row"><div class="split-head"><span>${esc(CAT_DESP[x.categoria] || x.categoria)}${x.descricao ? " · " + esc(x.descricao) : ""}</span><span>${brl(x.valor)} ${cuBtnIc("data-edit-desp", x.id, "Editar despesa", "✎")} ${cuBtnIc("data-del-desp", x.id, "Remover despesa", "✕")}</span></div></div>`).join("");
       $("cu-corpo").innerHTML = `
+        <section class="card"><h2>Imposto sobre as vendas</h2>
+          <p class="foot" style="text-align:left;margin:0 0 10px">Quanto você paga de imposto sobre o faturamento (ex.: 6% no Simples). O sistema calcula sozinho em cada período.</p>
+          <div style="display:grid;grid-template-columns:1fr auto;gap:10px"><input id="cu-imp" inputmode="decimal" placeholder="Ex.: 6" value="${imp.percentual ? esc(String(imp.percentual).replace(".", ",")) : ""}" aria-label="Imposto em porcentagem"><button class="btn primary" id="cu-imp-save">Salvar %</button></div>
+          <p class="foot" style="text-align:left;margin-top:10px">Não lance de novo esse imposto como despesa, senão ele conta em dobro.</p></section>
         <section class="card"><h2>Mês</h2><input id="cu-mes" type="month" value="${esc(cuEstado.mes)}">
           <div class="kpi" style="margin-top:12px"><span class="label">Total de despesas</span><span class="value">${brl(d.total)}</span></div>
           ${cats ? `<div class="split" style="margin-top:12px">${cats}</div>` : ""}</section>
@@ -875,6 +879,14 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
           await api(cuBase() + "/despesas", { method: "POST", body: JSON.stringify({ categoria: $("cu-cat").value, descricao: $("cu-desc").value, valor, mes: cuEstado.mes }) });
           toast("Despesa adicionada."); refaz();
         } catch (e) { toast(e.message); b.disabled = false; }
+      };
+            $("cu-imp-save").onclick = async () => {
+        const b = $("cu-imp-save"); b.disabled = true;
+        try {
+          const r = await api(cuBase() + "/imposto", { method: "PUT", body: JSON.stringify({ percentual: $("cu-imp").value || "0" }) });
+          toast(r.percentual > 0 ? `Imposto de ${String(r.percentual).replace(".", ",")}% salvo.` : "Imposto removido.");
+        } catch (e) { toast(e.message); }
+        b.disabled = false;
       };
       const cp = $("cu-copiar");
       if (cp) cp.onclick = async () => {
