@@ -2513,6 +2513,16 @@ async function loadSettingsData() {
     console.error("Erro ao carregar webhook:", e);
   }
 
+  // Pix online (Mercado Pago)
+  try {
+    const pxResp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/integracao/pix_online`, { headers: buildHeaders() });
+    const pxData = await pxResp.json();
+    const pxEl = document.getElementById("settings-pix-token");
+    if (pxEl) pxEl.value = pxData.configurado && pxData.dados?.mp_access_token ? pxData.dados.mp_access_token : "";
+  } catch (e) {
+    console.error("Erro ao carregar Pix online:", e);
+  }
+  
   // Maquininha
   try {
     const mpResp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/integracao/maquininha`);
@@ -5535,6 +5545,32 @@ document.getElementById("btn-salvar-marketplace")?.addEventListener("click", sal
   } catch (e) {
     if (status) status.textContent = "❌ Erro de conexão.";
   }
+});
+  
+// Pix online (Mercado Pago)
+document.getElementById("btn-salvar-pix")?.addEventListener("click", async () => {
+  const rid = getRestaurantId();
+  const status = document.getElementById("settings-pix-status");
+  const token = document.getElementById("settings-pix-token")?.value?.trim();
+  if (!token) { if (status) status.textContent = "❌ Cole o Access Token."; return; }
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/integracao/pix_online`, {
+      method: "PATCH", headers: buildHeaders(),
+      body: JSON.stringify({ dados: { mp_access_token: token }, ativo: true })
+    });
+    const data = await resp.json();
+    if (status) status.textContent = data.success ? "✅ Pix online salvo!" : "❌ Erro ao salvar.";
+  } catch (e) { if (status) status.textContent = "❌ Erro de conexão."; }
+});
+
+document.getElementById("btn-remover-pix")?.addEventListener("click", async () => {
+  const rid = getRestaurantId();
+  const status = document.getElementById("settings-pix-status");
+  try {
+    await fetch(`${API_BASE}/api/v1/restaurante/${rid}/integracao/pix_online`, { method: "DELETE", headers: buildHeaders() });
+    const el = document.getElementById("settings-pix-token"); if (el) el.value = "";
+    if (status) status.textContent = "🗑️ Removido.";
+  } catch (e) { if (status) status.textContent = "❌ Erro de conexão."; }
 });
   
 // Logout
