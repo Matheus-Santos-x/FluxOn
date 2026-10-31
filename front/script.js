@@ -1675,7 +1675,6 @@ function abrirDrawerMesa(key) {
 
         <div style="height:1px; background:rgba(255,255,255,0.07); margin:0 24px;"></div>
 
-        ${!isBalcao ? `<div style="padding:16px 24px 0;"><button class="ghost-button" style="width:100%; font-size:12px;" onclick="document.getElementById('mesa-drawer-modal').remove(); ${pedRod ? `abrirListaRodizio('${key}')` : `abrirRodizioMesa('${key}')`}">${pedRod ? `🍣 Lista do rodízio (${pedRod.rodizio.pessoas.filter(p => p.checkin).length}/${pedRod.rodizio.pessoas.length})` : "🍣 Adicionar rodízio"}</button></div>` : ""}
         <div style="padding:20px 24px 24px; display:flex; gap:10px;">
           <button class="ghost-button" style="flex:1; font-size:12px; border-color:rgba(239,68,68,0.4); color:rgba(239,68,68,0.7);"
             onclick="document.getElementById('mesa-drawer-modal').remove(); cancelarPedidosMesa('${key}')">
