@@ -1832,6 +1832,7 @@ function rodRenderDetalhe() {
         <div><span class="stat-label">Arrecadado</span><b style="font-size:22px;color:#fbbf24;">${formatCurrency(total)}</b></div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="primary-button" id="rd-add">＋ Adicionar reserva</button>
         <button class="ghost-button" id="rd-toggle">${aberto ? "Fechar reservas" : "Reabrir reservas"}</button>
         <button class="danger-button" id="rd-del">Remover rodízio</button>
       </div>
@@ -1850,6 +1851,7 @@ function rodRenderDetalhe() {
     try { await rodizioApi(`/${r.id}`, { method: "DELETE" }); rodRenderLista(); }
     catch (e) { alert(e.message); }
   });
+  document.getElementById("rd-add").onclick = rodAdicionar;
   c.querySelectorAll("[data-res]").forEach(el => el.onclick = () => rodReserva(el.dataset.res));
 }
 
@@ -1865,6 +1867,7 @@ function rodReserva(id) {
       <div class="modal-row"><span class="muted">Situação</span>${rodPill(x.status === "pago" ? "Pago" : x.status === "resgatado" ? "Resgatado" : "Cancelado", x.status)}</div>
     </div>
     <div class="modal-actions">
+      ${x.status === "pago" || x.status === "resgatado" ? `<button class="ghost-button" id="rr-edit">Alterar pessoas</button>` : ""}
       ${x.status !== "cancelado" ? `<button class="danger-button" id="rr-cancel">Cancelar reserva</button>` : ""}
       ${x.status === "pago" ? `<button class="primary-button" id="rr-resg">Marcar resgatado</button>` : ""}
       ${x.status === "resgatado" ? `<button class="ghost-button" id="rr-desf">Desfazer resgate</button>` : ""}
@@ -1874,9 +1877,75 @@ function rodReserva(id) {
     try { await rodizioApi(`/reservas/${x.id}`, { method: "PATCH", body: JSON.stringify({ status }) }); m.remove(); rodRecarregar(); }
     catch (e) { alert(e.message); }
   };
+  m.querySelector("#rr-edit")?.addEventListener("click", () => { m.remove(); rodEditarPessoas(x); });
   m.querySelector("#rr-resg")?.addEventListener("click", () => muda("resgatado"));
   m.querySelector("#rr-desf")?.addEventListener("click", () => muda("pago"));
   m.querySelector("#rr-cancel")?.addEventListener("click", () => showConfirmModal("Cancelar esta reserva? As vagas voltam a ficar livres.", () => muda("cancelado")));
+}
+
+function rodAdicionar() {
+  const r = rodState.atual;
+  const pa = Number(r.preco), pc = r.preco_crianca == null ? pa : Number(r.preco_crianca);
+  const m = rodizioModal("rodizio-add-modal", `
+    <div class="modal-header"><h3>Adicionar reserva</h3><button class="icon-button" id="ra-x">×</button></div>
+    <div class="modal-body form-body">
+      <label>Nome <input id="ra-nome"></label>
+      <label>Telefone (opcional) <input id="ra-tel" type="tel"></label>
+      <label>Adultos <input id="ra-ad" type="number" min="0" value="1"></label>
+      <label>Crianças <input id="ra-cr" type="number" min="0" value="0"></label>
+      <div id="ra-total" style="font-weight:900;font-size:18px;color:#fbbf24;"></div>
+      <p class="muted" style="font-size:12px;">Entra como reserva paga. Use para quem pagou no balcão, em dinheiro ou por telefone.</p>
+    </div>
+    <div class="modal-actions"><button class="primary-button" id="ra-ok">Adicionar</button></div>`);
+  const calc = () => {
+    const ad = parseInt(m.querySelector("#ra-ad").value) || 0, cr = parseInt(m.querySelector("#ra-cr").value) || 0;
+    m.querySelector("#ra-total").textContent = "Total: " + formatCurrency(ad * pa + cr * pc);
+  };
+  ["#ra-ad", "#ra-cr"].forEach(s => m.querySelector(s).addEventListener("input", calc));
+  calc();
+  m.querySelector("#ra-x").onclick = () => m.remove();
+  const ok = m.querySelector("#ra-ok");
+  ok.onclick = async () => {
+    ok.disabled = true;
+    try {
+      await rodizioApi(`/${r.id}/reservas`, { method: "POST", body: JSON.stringify({
+        nome: m.querySelector("#ra-nome").value, telefone: m.querySelector("#ra-tel").value,
+        adultos: m.querySelector("#ra-ad").value, criancas: m.querySelector("#ra-cr").value, manual: true
+      }) });
+      m.remove(); rodRecarregar();
+    } catch (e) { alert(e.message); ok.disabled = false; }
+  };
+}
+
+function rodEditarPessoas(x) {
+  const r = rodState.atual;
+  const pa = Number(r.preco), pc = r.preco_crianca == null ? pa : Number(r.preco_crianca);
+  const m = rodizioModal("rodizio-edit-modal", `
+    <div class="modal-header"><h3>Alterar pessoas — ${escapeHtml(x.nome)}</h3><button class="icon-button" id="re-x">×</button></div>
+    <div class="modal-body form-body">
+      <label>Adultos <input id="re-ad" type="number" min="0" value="${x.adultos}"></label>
+      <label>Crianças <input id="re-cr" type="number" min="0" value="${x.criancas}"></label>
+      <div id="re-total" style="font-weight:900;font-size:18px;color:#fbbf24;"></div>
+      <p class="muted" style="font-size:12px;">Hoje a reserva está em ${formatCurrency(x.valor_pago)}. O valor é recalculado pelo preço do rodízio. Se for devolver dinheiro ao cliente, o estorno é por sua conta.</p>
+    </div>
+    <div class="modal-actions"><button class="primary-button" id="re-ok">Salvar</button></div>`);
+  const calc = () => {
+    const ad = parseInt(m.querySelector("#re-ad").value) || 0, cr = parseInt(m.querySelector("#re-cr").value) || 0;
+    m.querySelector("#re-total").textContent = "Novo valor: " + formatCurrency(ad * pa + cr * pc);
+  };
+  ["#re-ad", "#re-cr"].forEach(s => m.querySelector(s).addEventListener("input", calc));
+  calc();
+  m.querySelector("#re-x").onclick = () => m.remove();
+  const ok = m.querySelector("#re-ok");
+  ok.onclick = async () => {
+    ok.disabled = true;
+    try {
+      await rodizioApi(`/reservas/${x.id}/pessoas`, { method: "PATCH", body: JSON.stringify({
+        adultos: m.querySelector("#re-ad").value, criancas: m.querySelector("#re-cr").value
+      }) });
+      m.remove(); rodRecarregar();
+    } catch (e) { alert(e.message); ok.disabled = false; }
+  };
 }
 
 function cancelarPedidosMesa(key) {
