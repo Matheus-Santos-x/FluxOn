@@ -5076,7 +5076,31 @@ const OWNER_OTP_WEBHOOK_SECRET = process.env.OWNER_OTP_WEBHOOK_SECRET || "";
 const OWNER_TOKEN_TTL = "7d";
 const OWNER_OTP_MINUTOS = 5;
 const OWNER_OTP_MAX_TENTATIVAS = 5;
-const OWNER_PLAN_PRICE = { essential: 1200, advanced: 2500, executive: 4000, custom: 7000 };
+// Preço mensal de cada plano (usado no ROI do Owner)
+const OWNER_PLAN_PRICE = { essential: 890, advanced: 1490, executive: 2390, custom: 3798 };
+const OWNER_PLANO_NOME = { essential: "Essential", advanced: "Advanced", executive: "Executive", custom: "Custom" };
+
+// O QUE CADA PLANO LIBERA NO OWNER: cada recurso e o plano mínimo que o libera.
+// Para mudar a divisão dos planos, edite só este bloco (o backend e o app seguem sozinhos).
+const OWNER_RECURSOS = {
+  lucro_basico: "essential", // faturamento, pedidos, ticket, lucro e CMV
+  vendas: "essential",       // vendas por dia e mais vendidos
+  custos: "essential",       // custos e estoque (ingredientes, fichas, despesas)
+  clientes: "essential",     // clientes e origem dos pedidos
+  fidelidade: "essential",   // pontos ou selos
+  pdf: "essential",          // exportar PDF
+  dre_completa: "executive", // conta completa: impostos e despesas
+  canais: "executive",       // rentabilidade por canal
+  previsao: "executive",     // previsão de demanda
+  roi: "executive"           // ROI do FluxON
+};
+function ownerRecursos(plan) {
+  return Object.fromEntries(Object.entries(OWNER_RECURSOS).map(([r, min]) => [r, { ok: hasPlan(plan, min), plano: OWNER_PLANO_NOME[min] }]));
+}
+async function ownerRecursoOk(restaurant_id, recurso) {
+  const { data } = await supabase.from("restaurants").select("plan").eq("id", restaurant_id).maybeSingle();
+  return hasPlan(data?.plan, OWNER_RECURSOS[recurso]);
+}
 const SP_OFFSET_MS = 3 * 60 * 60 * 1000; // America/Sao_Paulo (UTC-3)
 
 const ownerLimitSolicitar = rateLimit({
