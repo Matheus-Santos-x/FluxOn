@@ -5504,10 +5504,10 @@ document.getElementById("btn-salvar-marketplace")?.addEventListener("click", sal
   let dados = { tipo };
 
   if (tipo === "mercadopago") {
-    dados.mp_access_token = document.getElementById("settings-mp-token")?.value?.trim();
-    dados.mp_device_id = document.getElementById("settings-mp-device")?.value?.trim();
-    if (!dados.mp_access_token || !dados.mp_device_id) {
-      if (status) status.textContent = "❌ Preencha Access Token e Device ID.";
+        dados.mp_access_token = document.getElementById("settings-mp-token")?.value?.trim();
+    dados.mp_device_id = document.getElementById("settings-mp-device")?.value?.trim() || "";
+    if (!dados.mp_access_token) {
+      if (status) status.textContent = "❌ Preencha o Access Token.";
       return;
     }
   } else if (tipo === "cielo") {
