@@ -1060,9 +1060,11 @@ app.patch("/api/v1/rodizio/:restaurant_id/:id", async (req, res) => {
 app.delete("/api/v1/rodizio/:restaurant_id/:id", async (req, res) => {
   try {
     const { restaurant_id, id } = req.params;
+    const agora = new Date().toISOString();
     const { count } = await supabase.from("rodizio_reservas").select("id", { count: "exact", head: true })
-      .eq("restaurant_id", restaurant_id).eq("rodizio_id", id);
-    if (count > 0) return sendError(res, 409, "Este rodízio já tem reservas. Feche-o em vez de remover.");
+      .eq("restaurant_id", restaurant_id).eq("rodizio_id", id)
+      .or(`status.in.(pago,resgatado),and(status.eq.aguardando,expira_em.gt.${agora})`);
+    if (count > 0) return sendError(res, 409, "Este rodízio tem reservas pagas ou em andamento. Feche-o em vez de remover.");
     const { error } = await supabase.from("rodizios").delete().eq("id", id).eq("restaurant_id", restaurant_id);
     if (error) throw error;
     return res.json({ ok: true });
