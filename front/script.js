@@ -1606,6 +1606,7 @@ function abrirDrawerMesa(key) {
   );
 
   const ocupada = pedidosAtivos.length > 0;
+  const pedRod = pedidosAtivos.find(o => o.rodizio);
 
   const todosItens = [];
   pedidosAtivos.forEach(o => {
@@ -1674,6 +1675,7 @@ function abrirDrawerMesa(key) {
 
         <div style="height:1px; background:rgba(255,255,255,0.07); margin:0 24px;"></div>
 
+        ${!isBalcao ? `<div style="padding:16px 24px 0;"><button class="ghost-button" style="width:100%; font-size:12px;" onclick="document.getElementById('mesa-drawer-modal').remove(); ${pedRod ? `abrirListaRodizio('${key}')` : `abrirRodizioMesa('${key}')`}">${pedRod ? `🍣 Lista do rodízio (${pedRod.rodizio.pessoas.filter(p => p.checkin).length}/${pedRod.rodizio.pessoas.length})` : "🍣 Adicionar rodízio"}</button></div>` : ""}
         <div style="padding:20px 24px 24px; display:flex; gap:10px;">
           <button class="ghost-button" style="flex:1; font-size:12px; border-color:rgba(239,68,68,0.4); color:rgba(239,68,68,0.7);"
             onclick="document.getElementById('mesa-drawer-modal').remove(); cancelarPedidosMesa('${key}')">
@@ -1693,10 +1695,11 @@ function abrirDrawerMesa(key) {
         <div style="padding:32px 24px; text-align:center; color:rgba(252,228,228,0.4); font-size:14px;">
           ${label} está livre
         </div>
-        <div style="padding:0 24px 24px;">
+                <div style="padding:0 24px 24px;">
           <button class="primary-button" style="width:100%;" onclick="document.getElementById('mesa-drawer-modal').remove(); abrirCriarPedidoMesa('${key}')">
             Abrir Mesa
           </button>
+          ${!isBalcao ? `<button class="ghost-button" style="width:100%; margin-top:10px;" onclick="document.getElementById('mesa-drawer-modal').remove(); abrirRodizioMesa('${key}')">🍣 Abrir com rodízio</button>` : ""}
         </div>
       `}
 
@@ -1705,6 +1708,139 @@ function abrirDrawerMesa(key) {
 
   document.body.appendChild(modal);
   modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+}
+
+// ===== RODÍZIO =====
+async function rodizioApi(path, opts = {}) {
+  const r = await fetch(`${API_BASE}/api/v1/rodizio/${getRestaurantId()}${path}`, { ...opts, headers: buildHeaders() });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d?.error || "Erro no rodízio");
+  return d;
+}
+
+function rodizioAtualizaPedido(o) {
+  if (!o || !o.id) return;
+  const novo = { ...o, _frontStatus: toFrontStatus(o.status) };
+  const i = orders.findIndex(x => x.id === o.id);
+  if (i !== -1) orders[i] = novo; else orders.push(novo);
+}
+
+function rodizioModal(id, html) {
+  document.getElementById(id)?.remove();
+  const m = document.createElement("div");
+  m.id = id; m.className = "modal-backdrop open";
+  m.innerHTML = `<div class="modal" style="max-width:420px;">${html}</div>`;
+  document.body.appendChild(m);
+  m.addEventListener("click", e => { if (e.target === m) m.remove(); });
+  return m;
+}
+
+async function abrirRodizioMesa(key) {
+  let tipos = [];
+  try { tipos = await rodizioApi(""); } catch (e) { alert(e.message); return; }
+  const m = rodizioModal("rodizio-modal", `
+    <div class="modal-header"><h3>🍣 Rodízio — Mesa ${escapeHtml(key)}</h3>
+      <button class="icon-button" id="rod-x">×</button></div>
+    <div class="modal-body form-body">
+      ${tipos.length ? `
+      <label>Tipo de rodízio
+        <select id="rod-tipo">${tipos.map(t => `<option value="${t.id}" data-p="${t.preco}" data-c="${t.preco_crianca ?? t.preco}">${escapeHtml(t.nome)} — ${formatCurrency(t.preco)}</option>`).join("")}</select>
+      </label>
+      <label>Adultos <input id="rod-ad" type="number" min="0" value="2"></label>
+      <label>Crianças <input id="rod-cr" type="number" min="0" value="0"></label>
+      <div id="rod-total" style="font-weight:900;font-size:18px;color:rgba(251,191,36,1);"></div>`
+      : `<p class="muted">Nenhum rodízio cadastrado ainda. Toque em "Gerenciar rodízios".</p>`}
+    </div>
+    <div class="modal-actions">
+      <button class="ghost-button" id="rod-ger">Gerenciar rodízios</button>
+      ${tipos.length ? `<button class="primary-button" id="rod-ok">Abrir rodízio</button>` : ""}
+    </div>`);
+  m.querySelector("#rod-x").onclick = () => m.remove();
+  m.querySelector("#rod-ger").onclick = () => { m.remove(); gerenciarRodizios(key); };
+  if (!tipos.length) return;
+  const calc = () => {
+    const o = m.querySelector("#rod-tipo").selectedOptions[0];
+    const ad = parseInt(m.querySelector("#rod-ad").value) || 0, cr = parseInt(m.querySelector("#rod-cr").value) || 0;
+    m.querySelector("#rod-total").textContent = "Total: " + formatCurrency(ad * Number(o.dataset.p) + cr * Number(o.dataset.c));
+  };
+  ["#rod-tipo", "#rod-ad", "#rod-cr"].forEach(s => m.querySelector(s).addEventListener("input", calc));
+  calc();
+  const ok = m.querySelector("#rod-ok");
+  ok.onclick = async () => {
+    ok.disabled = true;
+    try {
+      const d = await rodizioApi(`/mesa/${encodeURIComponent(key)}/abrir`, {
+        method: "POST",
+        body: JSON.stringify({
+          rodizio_id: m.querySelector("#rod-tipo").value,
+          adultos: m.querySelector("#rod-ad").value,
+          criancas: m.querySelector("#rod-cr").value
+        })
+      });
+      rodizioAtualizaPedido(d.order);
+      m.remove(); renderMesas(); abrirListaRodizio(key);
+    } catch (e) { alert(e.message); ok.disabled = false; }
+  };
+}
+
+async function gerenciarRodizios(key) {
+  let tipos = [];
+  try { tipos = await rodizioApi(""); } catch (e) { alert(e.message); return; }
+  const m = rodizioModal("rodizio-ger-modal", `
+    <div class="modal-header"><h3>Meus rodízios</h3><button class="icon-button" id="rg-x">×</button></div>
+    <div class="modal-body form-body">
+      ${tipos.map(t => `
+        <div class="modal-row"><span>${escapeHtml(t.nome)} — ${formatCurrency(t.preco)}${t.preco_crianca != null ? ` · criança ${formatCurrency(t.preco_crianca)}` : ""}</span>
+          <button class="ghost-button small" data-del="${t.id}">remover</button></div>`).join("") || `<p class="muted">Nenhum cadastrado.</p>`}
+      <label>Nome <input id="rg-nome" placeholder="Ex.: Rodízio Premium"></label>
+      <label>Preço por pessoa <input id="rg-preco" type="number" step="0.01" min="0"></label>
+      <label>Preço criança (opcional) <input id="rg-cr" type="number" step="0.01" min="0"></label>
+    </div>
+    <div class="modal-actions"><button class="primary-button" id="rg-add">Adicionar rodízio</button></div>`);
+  m.querySelector("#rg-x").onclick = () => { m.remove(); abrirRodizioMesa(key); };
+  m.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    try { await rodizioApi(`/${b.dataset.del}`, { method: "DELETE" }); m.remove(); gerenciarRodizios(key); }
+    catch (e) { alert(e.message); }
+  });
+  m.querySelector("#rg-add").onclick = async () => {
+    try {
+      await rodizioApi("", { method: "POST", body: JSON.stringify({
+        nome: m.querySelector("#rg-nome").value,
+        preco: m.querySelector("#rg-preco").value,
+        preco_crianca: m.querySelector("#rg-cr").value
+      }) });
+      m.remove(); gerenciarRodizios(key);
+    } catch (e) { alert(e.message); }
+  };
+}
+
+function abrirListaRodizio(key) {
+  const ped = orders.find(o => o.rodizio && o.destino === "mesas" &&
+    ["recebido", "preparo", "pronto"].includes(o._frontStatus) && String(o.table_number) === String(key));
+  if (!ped) { alert("Esta mesa não tem rodízio aberto."); return; }
+  const pessoas = ped.rodizio.pessoas || [];
+  const dentro = pessoas.filter(p => p.checkin).length;
+  const m = rodizioModal("rodizio-lista-modal", `
+    <div class="modal-header"><h3>🍣 ${escapeHtml(ped.rodizio.nome)} — Mesa ${escapeHtml(key)}</h3>
+      <button class="icon-button" id="rl-x">×</button></div>
+    <div class="modal-body">
+      <p class="muted">${dentro} de ${pessoas.length} fizeram check-in</p>
+      ${pessoas.map((p, i) => `
+        <label class="modal-row-inline" style="cursor:pointer;">
+          <input type="checkbox" data-i="${i}" ${p.checkin ? "checked" : ""}>
+          <span>${p.tipo === "crianca" ? "Criança" : "Adulto"} ${i + 1}</span>
+        </label>`).join("")}
+    </div>`);
+  m.querySelector("#rl-x").onclick = () => { m.remove(); renderMesas(); };
+  m.querySelectorAll("[data-i]").forEach(c => c.onchange = async () => {
+    try {
+      const d = await rodizioApi(`/pedido/${ped.id}/checkin`, {
+        method: "PATCH", body: JSON.stringify({ indice: Number(c.dataset.i), checkin: c.checked })
+      });
+      rodizioAtualizaPedido(d.order);
+      m.remove(); abrirListaRodizio(key);
+    } catch (e) { alert(e.message); c.checked = !c.checked; }
+  });
 }
 
 function cancelarPedidosMesa(key) {
