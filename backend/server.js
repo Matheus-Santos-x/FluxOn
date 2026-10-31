@@ -1188,6 +1188,14 @@ app.patch("/api/v1/rodizio/:restaurant_id/reservas/:res_id/pessoas", async (req,
   }
 });
 
+// token do Mercado Pago para Pix online (usa a seção "Pix online"; se faltar, cai na da maquininha)
+async function mpTokenPix(restaurant_id) {
+  const a = await getIntegracao(restaurant_id, "pix_online");
+  if (a?.mp_access_token) return a.mp_access_token;
+  const b = await getIntegracao(restaurant_id, "maquininha");
+  return b?.mp_access_token || null;
+}
+
 // cria a cobrança Pix de uma reserva (o Food Tree vai chamar esta rota)
 app.post("/api/v1/rodizio/:restaurant_id/:id/pix", async (req, res) => {
   let reservaId = null;
@@ -1205,8 +1213,8 @@ app.post("/api/v1/rodizio/:restaurant_id/:id/pix", async (req, res) => {
     if (!rod) return sendError(res, 404, "Rodízio não encontrado");
     if (rod.status !== "aberto") return sendError(res, 409, "Este rodízio não está aberto para reservas");
 
-    const config = await getIntegracao(restaurant_id, "maquininha");
-    if (!config?.mp_access_token) return sendError(res, 400, "Mercado Pago não configurado neste restaurante");
+        const mpToken = await mpTokenPix(restaurant_id);
+    if (!mpToken) return sendError(res, 400, "Mercado Pago não configurado neste restaurante");
 
     const ocupadas = (await rodizioOcupadas(restaurant_id, [id]))[id] || 0;
     if (ocupadas + ad + cr > (rod.vagas || 0)) return sendError(res, 409, "Vagas insuficientes");
@@ -1235,7 +1243,7 @@ app.post("/api/v1/rodizio/:restaurant_id/:id/pix", async (req, res) => {
     const mpResp = await fetch("https://api.mercadopago.com/v1/payments", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.mp_access_token}`,
+                Authorization: `Bearer ${mpToken}`,
         "Content-Type": "application/json",
         "X-Idempotency-Key": reservaId
       },
@@ -1294,11 +1302,11 @@ app.post("/api/v1/mp/webhook-rodizio", async (req, res) => {
     const paymentId = req.body?.data?.id || req.query?.["data.id"] || req.query?.id;
     if (!rid || !paymentId || (tipo && tipo !== "payment")) return res.sendStatus(200);
 
-    const config = await getIntegracao(rid, "maquininha");
-    if (!config?.mp_access_token) return res.sendStatus(200);
+        const mpToken = await mpTokenPix(rid);
+    if (!mpToken) return res.sendStatus(200);
 
     const r = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-      headers: { Authorization: `Bearer ${config.mp_access_token}` }
+      headers: { Authorization: `Bearer ${mpToken}` }
     });
     const p = await r.json();
     if (!r.ok || p.status !== "approved" || !p.external_reference) return res.sendStatus(200);
