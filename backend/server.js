@@ -6264,7 +6264,7 @@ app.get("/owner/restaurants/:restaurant_id/financeiro", donoRota, async (req, re
       receita,
       cmv: { valor: cmv, pct: cmvPct === null ? null : custoArred(cmvPct, 1), cobertura_pct: custoArred(cobertura, 1), disponivel: temCmv },
       despesas: { total: despTotal, por_categoria: porCategoria, cadastradas: (desp || []).length > 0 || impPct > 0, imposto_percentual: impPct },
-      canais,
+      canais: (await ownerRecursoOk(restaurant_id, "canais")) ? canais : null,
       lucro_bruto: lucroBruto,
       lucro_liquido: lucroLiquido,
       margem_liquida_pct: lucroLiquido !== null && receita > 0 ? custoArred((lucroLiquido / receita) * 100, 1) : null
