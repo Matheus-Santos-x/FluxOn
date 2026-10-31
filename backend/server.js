@@ -274,6 +274,7 @@ function requireAdmin(req, res, next) {
 app.use("/crm/:restaurant_id", requireAuth);
 app.use("/api/v1/metrics/:restaurant_id", requireAuth);
 app.use("/api/v1/caixa/:restaurant_id", requireAuth);
+app.use("/api/v1/rodizio/:restaurant_id", requireAuth);
 app.use("/orders", requireAuth); // só login: aqui o :id pode ser de pedido, não de restaurante
 for (const p of ["integracao", "impressora", "fiscal", "marketplace", "mp", "tracking-url",
   "webhook-satisfaction", "webhook-fechamento", "webhook-crm", "crm-mensagem",
@@ -973,6 +974,146 @@ app.get("/api/v1/pedidos-mesa", async (req, res) => {
     return res.json({ pedido: data });
   } catch (err) {
     return res.json({ pedido: null });
+  }
+});
+
+/* ================= RODÍZIO (Operacional) ================= */
+
+app.get("/api/v1/rodizio/:restaurant_id", async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("rodizios").select("*")
+      .eq("restaurant_id", req.params.restaurant_id).eq("ativo", true).order("preco", { ascending: true });
+    if (error) throw error;
+    return res.json(data || []);
+  } catch (err) {
+    return sendError(res, 500, "Erro ao listar rodízios");
+  }
+});
+
+app.post("/api/v1/rodizio/:restaurant_id", async (req, res) => {
+  try {
+    const { nome, preco, preco_crianca } = req.body || {};
+    const p = Number(preco), pc = preco_crianca === "" || preco_crianca == null ? null : Number(preco_crianca);
+    if (!String(nome || "").trim() || !(p > 0)) return sendError(res, 400, "Informe o nome e o preço do rodízio");
+    if (pc !== null && !(pc >= 0)) return sendError(res, 400, "Preço de criança inválido");
+    const { data, error } = await supabase.from("rodizios")
+      .insert([{ restaurant_id: req.params.restaurant_id, nome: String(nome).trim(), preco: p, preco_crianca: pc }])
+      .select().single();
+    if (error) throw error;
+    return res.status(201).json(data);
+  } catch (err) {
+    return sendError(res, 500, "Erro ao criar rodízio");
+  }
+});
+
+app.patch("/api/v1/rodizio/:restaurant_id/:id", async (req, res) => {
+  try {
+    const { nome, preco, preco_crianca, ativo } = req.body || {};
+    const upd = {};
+    if (nome !== undefined) upd.nome = String(nome).trim();
+    if (preco !== undefined) { upd.preco = Number(preco); if (!(upd.preco > 0)) return sendError(res, 400, "Preço inválido"); }
+    if (preco_crianca !== undefined) upd.preco_crianca = preco_crianca === "" || preco_crianca === null ? null : Number(preco_crianca);
+    if (ativo !== undefined) upd.ativo = !!ativo;
+    const { data, error } = await supabase.from("rodizios").update(upd)
+      .eq("id", req.params.id).eq("restaurant_id", req.params.restaurant_id).select().single();
+    if (error || !data) return sendError(res, 404, "Rodízio não encontrado");
+    return res.json(data);
+  } catch (err) {
+    return sendError(res, 500, "Erro ao editar rodízio");
+  }
+});
+
+app.delete("/api/v1/rodizio/:restaurant_id/:id", async (req, res) => {
+  try {
+    const { error } = await supabase.from("rodizios").delete()
+      .eq("id", req.params.id).eq("restaurant_id", req.params.restaurant_id);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao remover rodízio");
+  }
+});
+
+// abre o rodízio numa mesa: lança o valor na comanda e guarda a lista de pessoas
+app.post("/api/v1/rodizio/:restaurant_id/mesa/:mesa/abrir", async (req, res) => {
+  try {
+    const { restaurant_id, mesa } = req.params;
+    const { rodizio_id, adultos, criancas, client_name } = req.body || {};
+    const ad = Math.max(0, parseInt(adultos) || 0), cr = Math.max(0, parseInt(criancas) || 0);
+    if (ad + cr < 1 || ad + cr > 60) return sendError(res, 400, "Informe quantas pessoas");
+
+    const { data: tipo } = await supabase.from("rodizios").select("*")
+      .eq("id", rodizio_id).eq("restaurant_id", restaurant_id).eq("ativo", true).maybeSingle();
+    if (!tipo) return sendError(res, 404, "Rodízio não encontrado");
+
+    const precoAd = Number(tipo.preco) || 0;
+    const precoCr = tipo.preco_crianca == null ? precoAd : Number(tipo.preco_crianca) || 0;
+    const itens = [];
+    if (ad) itens.push({ name: `${tipo.nome} (adulto)`, qty: ad, price: precoAd, rodizio: true });
+    if (cr) itens.push({ name: `${tipo.nome} (criança)`, qty: cr, price: precoCr, rodizio: true });
+    const valor = ad * precoAd + cr * precoCr;
+    const pessoas = [
+      ...Array.from({ length: ad }, () => ({ tipo: "adulto", checkin: false })),
+      ...Array.from({ length: cr }, () => ({ tipo: "crianca", checkin: false }))
+    ];
+    const rodizio = { tipo_id: tipo.id, nome: tipo.nome, preco: precoAd, preco_crianca: precoCr, pessoas };
+    const now = new Date().toISOString();
+
+    const { data: aberto } = await supabase.from("orders").select("*")
+      .eq("restaurant_id", restaurant_id).eq("table_number", String(mesa))
+      .in("status", ["pending", "preparing", "mounting"])
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+
+    let pedido;
+    if (aberto) {
+      if (aberto.rodizio) return sendError(res, 409, "Esta mesa já tem um rodízio aberto");
+      const { data, error } = await supabase.from("orders").update({
+        itens: [...(Array.isArray(aberto.itens) ? aberto.itens : []), ...itens],
+        total_price: (parseFloat(aberto.total_price) || 0) + valor,
+        rodizio, update_at: now
+      }).eq("id", aberto.id).select().single();
+      if (error) throw error;
+      pedido = data;
+    } else {
+      const { data: numData } = await supabase.rpc("get_next_order_number", { rid: restaurant_id });
+      const { data, error } = await supabase.from("orders").insert([{
+        restaurant_id, client_name: String(client_name || "").trim() || `Mesa ${mesa}`,
+        order_number: numData || 1, itens, notes: "", status: "pending",
+        service_type: "local", total_price: valor, origin: "balcao", destino: "mesas",
+        table_number: String(mesa), rodizio,
+        tracking_token: crypto.randomBytes(10).toString("hex"), created_at: now, update_at: now
+      }]).select().single();
+      if (error) throw error;
+      pedido = data;
+    }
+    emitOrderUpdate(restaurant_id, pedido);
+    return res.status(201).json({ success: true, order: pedido });
+  } catch (err) {
+    console.error("❌ rodizio/abrir:", err.message);
+    return sendError(res, 500, "Erro ao abrir o rodízio");
+  }
+});
+
+// check-in de uma pessoa da lista
+app.patch("/api/v1/rodizio/:restaurant_id/pedido/:order_id/checkin", async (req, res) => {
+  try {
+    const { restaurant_id, order_id } = req.params;
+    const { indice, checkin } = req.body || {};
+    const { data: o } = await supabase.from("orders").select("id, restaurant_id, rodizio")
+      .eq("id", order_id).eq("restaurant_id", restaurant_id).maybeSingle();
+    if (!o || !o.rodizio) return sendError(res, 404, "Rodízio não encontrado nesta mesa");
+    const pessoas = Array.isArray(o.rodizio.pessoas) ? o.rodizio.pessoas : [];
+    const i = parseInt(indice);
+    if (!(i >= 0 && i < pessoas.length)) return sendError(res, 400, "Pessoa inválida");
+    pessoas[i] = { ...pessoas[i], checkin: checkin === undefined ? !pessoas[i].checkin : !!checkin };
+    const { data, error } = await supabase.from("orders")
+      .update({ rodizio: { ...o.rodizio, pessoas }, update_at: new Date().toISOString() })
+      .eq("id", order_id).select().single();
+    if (error) throw error;
+    emitOrderUpdate(restaurant_id, data);
+    return res.json({ success: true, order: data });
+  } catch (err) {
+    return sendError(res, 500, "Erro no check-in");
   }
 });
 
