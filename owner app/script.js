@@ -39,6 +39,7 @@
     print: '<path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="9" rx="2"/><path d="M7 15h10v6H7z"/>',
     lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>',
+    bolt: '<path d="M13 3L4 14h7l-1 7 9-11h-7z"/>',
     star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>'
   };
   const ic = (n) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
@@ -268,7 +269,7 @@ if (st.view === "overview") {
 
 const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos" };
   const SEM_PERIODO = ["home", "custos", "cuing", "cufichas", "cudesp"];
-  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", clientes: "Clientes e origem", fidelidade: "Fidelidade", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF" };
+  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF" };
   function render() {
     const ov = st.view === "overview";
     $("back").classList.toggle("hidden", ov || st.screen === "home");
@@ -277,7 +278,7 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
     if (ov) { $("title").textContent = "Visão geral"; $("content").innerHTML = telaOverview(st.ov); return; }
     const d = st.dash;
     $("title").textContent = st.screen === "home" ? d.restaurant.name : TITULOS[st.screen];
-    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, clientes: telaClientes, fidelidade: telaFidelidade, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, simulador: telaSimulador, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
+    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, simulador: telaSimulador, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
     $("content").innerHTML = T(d);
     if (st.screen === "simulador") bindSim(d);
     if (st.screen === "pdf") bindPdf(d);
@@ -468,7 +469,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
     const grupo = (t, itens) => `<section class="grp"><h2>${t}</h2><ul class="tiles">${itens.join("")}</ul></section>`;
     return grupo("Dinheiro", [card("dre", "wallet", "Lucro e operação"), card("custos", "box", "Custos e estoque", "custos"), card("canais", "pie", "Rentabilidade por canal", "canais"), card("caixa", "file", "Vendas por dia", "vendas")]) +
       grupo("Clientes", [card("clientes", "users", "Clientes e origem", "clientes"), card("fidelidade", "star", "Fidelidade", "fidelidade")]) +
-      grupo("Mais", [card("previsao", "trend", "Previsão de demanda", "previsao"), card("pdf", "print", "Exportar PDF", "pdf")]);
+      grupo("Mais", [card("operacao", "bolt", "Operação e IA", "operacao"), card("previsao", "trend", "Previsão de demanda", "previsao"), card("pdf", "print", "Exportar PDF", "pdf")]);
   }
 
   function contaDre() {
@@ -488,7 +489,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
   }
 
   function telaDre(d) {
-    const const k = d.kpis, exec = pode(d, "dre_completa");
+   const k = d.kpis, exec = pode(d, "dre_completa");
     const serie = d.period.days === 1 && Array.isArray(d.horas) ? d.horas.map((x) => x.revenue) : d.timeline.map((x) => x.revenue);
     const roi = k.roi_locked
       ? `<div class="kpi"><span class="label">ROI do FluxON</span><span class="value">—</span><span class="lock">Plano ${planoDe(d, "roi")}</span></div>`
@@ -508,6 +509,42 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
       ${completo ? "" : cardFluxo()}`;
   }
 
+/* ---------- operação e IA ---------- */
+  function telaOperacao(d) {
+    if (!pode(d, "operacao")) return lockCard(`O painel de operação e IA faz parte do plano ${planoDe(d, "operacao")}.`, planoDe(d, "operacao"));
+    const my = ++st.reqId;
+    api(`/owner/restaurants/${encodeURIComponent(st.view)}/operacao?` + qs()).then((o) => {
+      if (my !== st.reqId || st.screen !== "operacao") return;
+      $("content").innerHTML = nota(d.period) + corpoOperacao(o);
+    }).catch((e) => {
+      if (my !== st.reqId) return;
+      $("content").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`;
+    });
+    return `<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>`;
+  }
+  function corpoOperacao(o) {
+    const ia = o.ia, ST = { pending: "Pendentes", preparing: "Em preparo", mounting: "Em montagem", delivering: "Em entrega", finished: "Finalizados", canceled: "Cancelados" };
+    const totSt = Object.values(o.status).reduce((a, b) => a + b, 0);
+    const linhasSt = Object.entries(ST).map(([k, n]) => `<div class="split-row"><div class="split-head"><span>${n}</span><span>${int(o.status[k])}${totSt ? " · " + pct((o.status[k] / totSt) * 100, 0) : ""}</span></div><div class="bar ${k === "canceled" ? "amber" : ""}"><i style="width:${totSt ? (o.status[k] / totSt) * 100 : 0}%"></i></div></div>`).join("");
+    const maxH = Math.max(...o.horas.map((x) => x.orders), 0), picoI = maxH > 0 ? o.horas.findIndex((x) => x.orders === maxH) : -1;
+    const grafH = maxH > 0 ? barras(o.horas.map((x) => ({ l: x.h + "h", v: x.orders, t: `${x.h}h: ${x.orders} ${x.orders === 1 ? "pedido" : "pedidos"} · ${brl(x.revenue)}` })), picoI) + `<p class="peak">Horário de pico: <b>${picoI}h</b> (${int(maxH)} ${maxH === 1 ? "pedido" : "pedidos"}). Reforce a equipe e o estoque antes dele.</p>` : `<div class="empty">Sem vendas no período.</div>`;
+    const ET = { confirmacao: "Confirmação", preparo: "Preparo", montagem: "Montagem", entrega: "Entrega" };
+    const linhasEt = Object.entries(ET).map(([k, n]) => {
+      const m = o.etapas.medias[k], meta = o.etapas.metas[k], gar = o.etapas.gargalos.includes(k);
+      if (m === null) return `<div class="split-row"><div class="split-head"><span>${n}</span><span class="muted">sem dados</span></div></div>`;
+      return `<div class="split-row"><div class="split-head"><span>${n} ${gar ? `<span class="tag red">Acima da meta</span>` : ""}</span><span>${String(m).replace(".", ",")} min · meta ${meta} min</span></div><div class="bar ${gar ? "amber" : ""}"><i style="width:${Math.min(100, (m / (meta * 2)) * 100)}%"></i></div></div>`;
+    }).join("");
+    return `
+      <section class="card"><h2>Performance da IA</h2>
+        <div class="grid2" style="margin-bottom:0">
+          <div class="kpi"><span class="label">Pedidos pela IA</span><span class="value">${int(ia.pedidos)}</span><span class="sub">${pct(ia.pct_pedidos, 0)} dos pedidos</span></div>
+          <div class="kpi"><span class="label">Faturamento da IA</span><span class="value" style="font-size:22px">${brl(ia.receita)}</span><span class="sub">${pct(ia.pct_receita, 0)} do faturamento</span></div>
+        </div></section>
+      <section class="card"><h2>Pico de vendas por horário</h2>${grafH}</section>
+      <section class="card"><h2>Tempo médio por etapa</h2><div class="split">${linhasEt}</div><p class="foot" style="text-align:left">Considera os pedidos finalizados no período. Entrega só conta pedidos de delivery.</p></section>
+      <section class="card"><h2>Status dos pedidos</h2><div class="split">${linhasSt}</div></section>`;
+  }
+  
   function telaCanais(d) {
     if (!pode(d, "canais")) return lockCard(`A análise de rentabilidade por canal faz parte do plano ${planoDe(d, "canais")}.`, planoDe(d, "canais"));
     return nota(d.period) + secCanais(d) + secRent(d);
