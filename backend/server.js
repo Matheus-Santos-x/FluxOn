@@ -5559,11 +5559,11 @@ app.get("/owner/restaurants/:restaurant_id/dashboard",
     const topProdutos = [...ranking.values()].sort((x, y) => y.qty - x.qty).slice(0, 8);
 
     const planPrice = OWNER_PLAN_PRICE[plan] || OWNER_PLAN_PRICE.essential;
-    const roiLiberado = hasPlan(plan, "executive");
+    const roiLiberado = hasPlan(plan, OWNER_RECURSOS.roi);
     const roi = roiLiberado ? a.revenue / ((planPrice * per.days) / 30) : null;
 
     return res.json({
-      restaurant: { id: rest.id, name: rest.name || "Restaurante", plan },
+      restaurant: { id: rest.id, name: rest.name || "Restaurante", plan, recursos: ownerRecursos(plan) },
       period: ownerPeriodoJson(per),
       kpis: {
         revenue: a.revenue, orders: a.orders, ticket: a.ticket, cancelados: a.cancelados,
