@@ -6277,6 +6277,79 @@ app.get("/owner/restaurants/:restaurant_id/financeiro", donoRota, async (req, re
   }
 });
 
+/* ---------- operação e IA: o que o dashboard de ROI do Operacional mostrava ---------- */
+
+app.get("/owner/restaurants/:restaurant_id/operacao", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    if (!(await ownerRecursoOk(restaurant_id, "operacao"))) return res.status(403).json({ error: "Recurso disponível em um plano superior" });
+    const per = ownerPeriodo(req.query);
+    const orders = await ownerBuscarPedidos(
+      restaurant_id, per.from, per.to,
+      "id, total_price, status, origin, created_at, preparing_at, mounting_at, delivering_at, delivered_at, service_type"
+    );
+    const reais = orders.filter((o) => o.origin !== "fidelidade");
+    const vendas = reais.filter((o) => o.status === "finished");
+    const valor = (o) => parseFloat(o.total_price) || 0;
+    const receita = custoArred(vendas.reduce((s, o) => s + valor(o), 0));
+
+    // pedidos que entraram pela IA no WhatsApp
+    const ia = vendas.filter((o) => o.origin === "ia_whatsapp");
+    const iaReceita = custoArred(ia.reduce((s, o) => s + valor(o), 0));
+
+    // pedidos por situação
+    const status = { pending: 0, preparing: 0, mounting: 0, delivering: 0, finished: 0, canceled: 0 };
+    for (const o of reais) {
+      const k = o.status === "cancelled" ? "canceled" : o.status;
+      if (status[k] !== undefined) status[k]++;
+    }
+
+    // pico de vendas por horário (horário de Brasília)
+    const horas = Array.from({ length: 24 }, (_, h) => ({ h, orders: 0, revenue: 0 }));
+    for (const o of vendas) {
+      const h = new Date(Date.parse(o.created_at) - SP_OFFSET_MS).getUTCHours();
+      horas[h].orders++; horas[h].revenue += valor(o);
+    }
+    horas.forEach((x) => { x.revenue = custoArred(x.revenue); });
+
+    // tempo médio de cada etapa, em minutos
+    const diffMin = (a, b) => {
+      if (!a || !b) return null;
+      const d = (new Date(b) - new Date(a)) / 60000;
+      return d > 0 && d < 300 ? d : null;
+    };
+    const soma = { confirmacao: 0, preparo: 0, montagem: 0, entrega: 0 }, qtd = { confirmacao: 0, preparo: 0, montagem: 0, entrega: 0 };
+    for (const o of vendas) {
+      if (!o.preparing_at) continue;
+      const delivery = String(o.service_type || "").toLowerCase() === "delivery";
+      const passos = {
+        confirmacao: diffMin(o.created_at, o.preparing_at),
+        preparo: diffMin(o.preparing_at, o.mounting_at),
+        montagem: diffMin(o.mounting_at, delivery ? o.delivering_at : o.delivered_at),
+        entrega: delivery ? diffMin(o.delivering_at, o.delivered_at) : null
+      };
+      for (const k of Object.keys(passos)) if (passos[k]) { soma[k] += passos[k]; qtd[k]++; }
+    }
+    const METAS = { confirmacao: 5, preparo: 15, montagem: 8, entrega: 20 };
+    const medias = Object.fromEntries(Object.keys(soma).map((k) => [k, qtd[k] ? custoArred(soma[k] / qtd[k], 1) : null]));
+
+    return res.json({
+      period: ownerPeriodoJson(per),
+      ia: {
+        pedidos: ia.length, receita: iaReceita,
+        pct_pedidos: vendas.length ? custoArred((ia.length / vendas.length) * 100, 1) : 0,
+        pct_receita: receita > 0 ? custoArred((iaReceita / receita) * 100, 1) : 0
+      },
+      status, horas,
+      etapas: { medias, metas: METAS, gargalos: Object.keys(METAS).filter((k) => medias[k] !== null && medias[k] > METAS[k]) }
+    });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    console.error("❌ GET /owner/.../operacao:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar a operação" });
+  }
+});
+
 /* ---------- ADMIN: cadastrar donos (só quem está em ADMIN_EMAILS) ---------- */
 
 app.get("/admin/owners", requireAdmin, async (req, res) => {
