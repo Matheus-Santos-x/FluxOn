@@ -1091,10 +1091,10 @@ app.get("/api/v1/rodizio/:restaurant_id/:id/reservas", async (req, res) => {
 app.post("/api/v1/rodizio/:restaurant_id/:id/reservas", async (req, res) => {
   try {
     const { restaurant_id, id } = req.params;
-    const { nome, telefone, adultos, criancas, pagamento_ref } = req.body || {};
+    const { nome, telefone, adultos, criancas, pagamento_ref, manual } = req.body || {};
     const ad = Math.max(0, parseInt(adultos) || 0), cr = Math.max(0, parseInt(criancas) || 0);
         if (!String(nome || "").trim()) return sendError(res, 400, "Informe o nome");
-    if (!normalizePhone(telefone)) return sendError(res, 400, "Informe o telefone");
+    if (!manual && !normalizePhone(telefone)) return sendError(res, 400, "Informe o telefone");
     if (ad + cr < 1 || ad + cr > 60) return sendError(res, 400, "Informe quantas pessoas");
 
     // mesma confirmação de pagamento chegando duas vezes: devolve a reserva que já existe
@@ -1153,6 +1153,38 @@ app.patch("/api/v1/rodizio/:restaurant_id/reservas/:res_id", async (req, res) =>
     return res.json(data);
   } catch (err) {
     return sendError(res, 500, "Erro ao atualizar a reserva");
+  }
+});
+
+// altera quantas pessoas tem numa reserva paga (recalcula o valor)
+app.patch("/api/v1/rodizio/:restaurant_id/reservas/:res_id/pessoas", async (req, res) => {
+  try {
+    const { restaurant_id, res_id } = req.params;
+    const ad = Math.max(0, parseInt(req.body?.adultos) || 0), cr = Math.max(0, parseInt(req.body?.criancas) || 0);
+    if (ad + cr < 1 || ad + cr > 60) return sendError(res, 400, "Informe quantas pessoas (para tirar todas, cancele a reserva)");
+
+    const { data: reserva } = await supabase.from("rodizio_reservas").select("*")
+      .eq("id", res_id).eq("restaurant_id", restaurant_id).maybeSingle();
+    if (!reserva) return sendError(res, 404, "Reserva não encontrada");
+    if (!["pago", "resgatado"].includes(reserva.status)) return sendError(res, 409, "Só dá para alterar reservas pagas");
+
+    const { data: rod } = await supabase.from("rodizios").select("*").eq("id", reserva.rodizio_id).maybeSingle();
+    if (!rod) return sendError(res, 404, "Rodízio não encontrado");
+
+    const ocupadas = (await rodizioOcupadas(restaurant_id, [reserva.rodizio_id]))[reserva.rodizio_id] || 0;
+    const novas = ocupadas - ((reserva.adultos || 0) + (reserva.criancas || 0)) + ad + cr;
+    if (novas > (rod.vagas || 0)) return sendError(res, 409, "Vagas insuficientes");
+
+    const precoAd = Number(rod.preco) || 0;
+    const precoCr = rod.preco_crianca == null ? precoAd : Number(rod.preco_crianca) || 0;
+    const valor = Math.round((ad * precoAd + cr * precoCr) * 100) / 100;
+
+    const { data, error } = await supabase.from("rodizio_reservas")
+      .update({ adultos: ad, criancas: cr, valor_pago: valor }).eq("id", res_id).select().single();
+    if (error) throw error;
+    return res.json(data);
+  } catch (err) {
+    return sendError(res, 500, "Erro ao alterar a reserva");
   }
 });
 
