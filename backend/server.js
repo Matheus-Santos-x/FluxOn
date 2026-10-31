@@ -5581,6 +5581,42 @@ async function ownerBuscarPedidos(restaurantId, de, ate, colunas) {
   return out;
 }
 
+// reservas pagas de rodízio, no formato de venda, para somar ao faturamento do Owner
+async function ownerBuscarReservasRodizio(restaurantId, de, ate) {
+  const out = [];
+  const PAGINA = 1000;
+  for (let i = 0; i < 100; i++) {
+    const { data, error } = await supabase
+      .from("rodizio_reservas")
+      .select("id, valor_pago, adultos, criancas, created_at")
+      .eq("restaurant_id", restaurantId).neq("status", "cancelado")
+      .gte("created_at", de.toISOString()).lt("created_at", ate.toISOString())
+      .order("created_at", { ascending: true }).order("id", { ascending: true })
+      .range(i * PAGINA, i * PAGINA + PAGINA - 1);
+    if (error) throw error;
+    out.push(...(data || []));
+    if (!data || data.length < PAGINA) break;
+  }
+  return out.map((r) => {
+    const pessoas = (r.adultos || 0) + (r.criancas || 0) || 1;
+    const valor = parseFloat(r.valor_pago) || 0;
+    return {
+      id: r.id, total_price: valor, status: "finished", origin: "rodizio",
+      service_type: "local", table_number: "rodizio", created_at: r.created_at,
+      itens: [{ name: "Rodízio", qty: pessoas, price: valor / pessoas }]
+    };
+  });
+}
+
+// pedidos + reservas de rodízio
+async function ownerBuscarVendas(restaurantId, de, ate, colunas) {
+  const [pedidos, reservas] = await Promise.all([
+    ownerBuscarPedidos(restaurantId, de, ate, colunas),
+    ownerBuscarReservasRodizio(restaurantId, de, ate).catch(() => [])
+  ]);
+  return [...pedidos, ...reservas].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+}
+
 function ownerSeparar(orders, per) {
   const corte = per.from.getTime();
   const atual = [], anterior = [];
@@ -5628,7 +5664,7 @@ app.get("/owner/overview", ownerLimitDados, requireOwnerScope, async (req, res) 
     const restaurantes = await ownerListarRestaurantes(req.owner.id);
 
     const linhas = await Promise.all(restaurantes.map(async (r) => {
-      const orders = await ownerBuscarPedidos(
+            const orders = await ownerBuscarVendas(
         r.id, per.prevFrom, per.to, "id, total_price, status, created_at, service_type, origin, table_number"
       );
       const { atual, anterior } = ownerSeparar(orders, per);
@@ -5686,7 +5722,7 @@ app.get("/owner/restaurants/:restaurant_id/dashboard",
     if (!rest) return res.status(404).json({ error: "Restaurante não encontrado" });
     const plan = String(rest.plan || "essential").toLowerCase();
 
-    const orders = await ownerBuscarPedidos(
+      const orders = await ownerBuscarVendas(
       restaurant_id, per.prevFrom, per.to,
       "id, total_price, status, created_at, service_type, origin, table_number, itens"
     );
@@ -6352,7 +6388,7 @@ app.get("/owner/restaurants/:restaurant_id/financeiro", donoRota, async (req, re
     const { restaurant_id } = req.params;
     const per = ownerPeriodo(req.query);
 
-    const orders = await ownerBuscarPedidos(restaurant_id, per.from, per.to, "id, total_price, status, origin, itens, created_at, service_type, table_number");
+    const orders = await ownerBuscarVendas(restaurant_id, per.from, per.to, "id, total_price, status, origin, itens, created_at, service_type, table_number");
     const vendas = orders.filter((o) => o.origin !== "fidelidade" && o.status === "finished");
     const receita = custoArred(vendas.reduce((s, o) => s + (parseFloat(o.total_price) || 0), 0));
 
