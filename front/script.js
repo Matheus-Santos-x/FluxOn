@@ -1800,6 +1800,7 @@ async function rodAbrir(id) {
   document.getElementById("rod-voltar").onclick = rodRenderLista;
   c.innerHTML = `<p class="muted">Carregando...</p>`;
   try {
+    rodState.lista = await rodizioApi("");
     rodState.atual = rodState.lista.find(r => r.id === id);
     rodState.reservas = await rodizioApi(`/${id}/reservas`);
   } catch (e) { c.innerHTML = `<p class="muted">${escapeHtml(e.message)}</p>`; return; }
