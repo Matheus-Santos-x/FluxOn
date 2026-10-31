@@ -264,13 +264,13 @@ if (st.view === "overview") {
   });
 
 const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos" };
-  const SEM_PERIODO = ["custos", "cuing", "cufichas", "cudesp"];
-  const TITULOS = { dre: "Financeiro e DRE", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", clientes: "Clientes e origem", fidelidade: "Fidelidade", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF" };
+  const SEM_PERIODO = ["home", "custos", "cuing", "cufichas", "cudesp"];
+  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", clientes: "Clientes e origem", fidelidade: "Fidelidade", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF" };
   function render() {
     const ov = st.view === "overview";
     $("back").classList.toggle("hidden", ov || st.screen === "home");
-    $("periods").classList.toggle("hidden", SEM_PERIODO.includes(st.screen));
-    $("custom").classList.toggle("hidden", SEM_PERIODO.includes(st.screen) || st.period !== "custom");
+    $("periods").classList.toggle("hidden", !ov && SEM_PERIODO.includes(st.screen));
+    $("custom").classList.toggle("hidden", (!ov && SEM_PERIODO.includes(st.screen)) || st.period !== "custom");
     if (ov) { $("title").textContent = "Visão geral"; $("content").innerHTML = telaOverview(st.ov); return; }
     const d = st.dash;
     $("title").textContent = st.screen === "home" ? d.restaurant.name : TITULOS[st.screen];
@@ -452,7 +452,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
     const valor = semDesp ? f.lucro_bruto : f.lucro_liquido, margem = f.receita > 0 ? (valor / f.receita) * 100 : 0;
     const avisos = [
       f.cmv.cobertura_pct < 95 ? `CMV calculado com base em ${pct(f.cmv.cobertura_pct, 0)} das vendas (pratos com ficha técnica pronta).` : "",
-      semDesp ? "Cadastre suas despesas (folha, aluguel...) em Meus custos para ver o lucro líquido." : ""
+      semDesp ? "Cadastre suas despesas (folha, aluguel...) em Custos e estoque para ver o lucro líquido." : ""
     ].filter(Boolean).join(" ");
     return `<section class="grid2">
       <div class="kpi"><span class="label">${semDesp ? "Lucro bruto" : "Lucro líquido"}</span><span class="value" style="color:${valor >= 0 ? "var(--up)" : "var(--down)"}">${brl(valor)}</span><span class="sub">margem ${pct(margem)}</span></div>
@@ -461,17 +461,41 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
   }
 
   function telaHome(d) {
-    const k = d.kpis, f = fin(k.revenue), m = k.revenue > 0 ? (f.resultado / k.revenue) * 100 : 0;
+    const exec = temExec(d.restaurant.plan);
+    const card = (go, icone, t, ok) => `<li><button class="tile" data-go="${go}"><span class="tile-ic">${ic(icone)}</span><b>${t}</b>${ok ? "" : `<span class="tag red">Executive</span>`}</button></li>`;
+    const grupo = (t, itens) => `<section class="grp"><h2>${t}</h2><ul class="tiles">${itens.join("")}</ul></section>`;
+    return grupo("Dinheiro", [card("dre", "wallet", "Lucro e operação", true), card("custos", "box", "Custos e estoque", true), card("canais", "pie", "Rentabilidade por canal", exec), card("caixa", "file", "Vendas por dia", true)]) +
+      grupo("Clientes", [card("clientes", "users", "Clientes e origem", true), card("fidelidade", "star", "Fidelidade", true)]) +
+      grupo("Mais", [card("previsao", "trend", "Previsão de demanda", exec), card("pdf", "print", "Exportar PDF", true)]);
+  }
+
+  function contaDre() {
+    const f = st.fin, cats = Object.entries(f.despesas.por_categoria).sort((a, b) => ORDEM_DESP.indexOf(a[0]) - ORDEM_DESP.indexOf(b[0]));
+    const linha = (n, v, extra = "", neg = true) => `<div class="cl ${neg ? "neg" : ""}"><span>${n}${extra ? ` <small>${extra}</small>` : ""}</span><i></i><span class="n">${neg ? "− " : ""}${brl(v)}</span></div>`;
+    const sobra = f.lucro_liquido, margem = f.receita > 0 ? (sobra / f.receita) * 100 : 0;
+    const avisos = [
+      f.cmv.cobertura_pct < 95 ? `Mercadoria calculada com base em ${pct(f.cmv.cobertura_pct, 0)} das vendas (pratos com ficha pronta).` : "",
+      !f.despesas.cadastradas ? "Cadastre suas despesas em Custos e estoque para ver o lucro líquido." : ""
+    ].filter(Boolean).join(" ");
+    return `<section class="card conta"><h2>Fechamento do período</h2>
+      <div class="cl"><span>Faturamento</span><i></i><span class="n">${brl(f.receita)}</span></div>
+      ${linha("Mercadoria", f.cmv.valor, pct(f.cmv.pct, 0))}
+      ${cats.map(([c, v]) => linha(esc(CAT_DESP[c] || c), v, c === "impostos" && f.despesas.imposto_percentual ? pct(f.despesas.imposto_percentual, 0) : "")).join("")}
+      <div class="ctot"><span>Sobrou</span><div><b style="color:${sobra >= 0 ? "var(--up)" : "var(--down)"}">${brl(sobra)}</b><small>${pct(margem)} do faturamento</small></div></div>
+      ${avisos ? `<p class="foot" style="text-align:left">${avisos}</p>` : ""}</section>`;
+  }
+
+  function telaDre(d) {
+    const k = d.kpis, exec = temExec(d.restaurant.plan);
     const serie = d.period.days === 1 && Array.isArray(d.horas) ? d.horas.map((x) => x.revenue) : d.timeline.map((x) => x.revenue);
-    const plano = d.restaurant.plan, exec = temExec(plano), adv = temAdv(plano);
-    const saidas = f.cmv + f.imposto + f.totDesp, saldo = k.revenue - saidas;
     const roi = k.roi_locked
       ? `<div class="kpi"><span class="label">ROI do FluxON</span><span class="value">—</span><span class="lock">Plano Executive</span></div>`
       : `<div class="kpi"><span class="label">ROI do FluxON</span><span class="value">${(k.roi || 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}×</span><span class="sub">faturamento ÷ mensalidade</span></div>`;
-    const item = (go, icone, t, s, ok, plan) => `<li><button class="row-btn" data-go="${go}"><span class="row-ic">${ic(icone)}</span><span class="row-t"><b>${t}</b><span>${s}</span></span>${ok ? "" : `<span class="tag red">${plan}</span>`}<span class="chev">›</span></button></li>`;
+    const completo = exec && finOk();
     return nota(d.period) + `
       <section class="hero"><span class="label">Faturamento</span><span class="value">${brl(k.revenue)}</span>${delta(k.growth.revenue)}${spark(serie)}</section>
-            ${cardsLucro()}
+      ${completo ? contaDre() : cardsLucro()}
+      ${exec ? "" : lockCard("A conta completa, com impostos e despesas, faz parte do plano Executive.")}
       <section class="grid4">
         <div class="kpi"><span class="label">Pedidos</span><span class="value">${int(k.orders)}</span>${delta(k.growth.orders, "")}</div>
         <div class="kpi"><span class="label">Ticket médio</span><span class="value">${brl(k.ticket)}</span>${delta(k.growth.ticket, "")}</div>
@@ -479,27 +503,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
         ${roi}
       </section>
       ${secGrafico(d)}
-      ${cardFluxo()}
-      <section class="card"><h2>Visão geral</h2><ul class="list">
-        ${item("dre", "wallet", "Financeiro e DRE", "Receitas, CMV, despesas e resultado", exec, "Executive")}
-        ${item("custos", "box", "Custos e estoque", "Ingredientes, fichas dos pratos e despesas", true, "")}
-        ${item("canais", "pie", "Rentabilidade por canal", "Salão, balcão e delivery", exec, "Executive")}
-        ${item("clientes", "users", "Clientes e origem dos pedidos", "Novos, recorrentes e de onde vêm", true, "")}
-        ${item("fidelidade", "star", "Fidelidade", "Pontos ou selos e quanto cada um vale", true, "")}
-        ${item("previsao", "trend", "Previsão de demanda", "Próximos dias, picos e produtos", exec, "Executive")}
-        ${item("caixa", "file", "Vendas por dia", "Faturamento e pedidos de cada dia", true, "")}
-        ${item("pdf", "print", "Exportar PDF", "Escolha o período e as seções", true, "")}
-      </ul></section>
-      ${secCanais(d)}${secProdutos(d)}
-      <p class="foot">Itens marcados como “Exemplo” usam estimativas até o cadastro de custos e despesas.</p>`;
-  }
-
-  function telaDre(d) {
-    if (!temExec(d.restaurant.plan)) return lockCard("A DRE gerencial completa, com CMV, despesas e resultado, faz parte do plano Executive.");
-    const f = st.fin, cats = f ? Object.entries(f.despesas.por_categoria).sort((a, b) => b[1] - a[1]) : [];
-    const barras = cats.map(([c, v]) => `<div class="split-row"><div class="split-head"><span>${esc(CAT_DESP[c] || c)}</span><span>${brl(v)} · ${pct(f.despesas.total ? (v / f.despesas.total) * 100 : 0, 0)}</span></div><div class="bar amber"><i style="width:${f.despesas.total ? (v / f.despesas.total) * 100 : 0}%"></i></div></div>`).join("");
-    return nota(d.period) + secResumo(d) + secDre(d) +
-      `<section class="card"><h2>Despesas do período</h2>${barras ? `<div class="split">${barras}</div>` : `<div class="empty">Nenhuma despesa lançada neste período. Cadastre em Meus custos.</div>`}</section>`;
+      ${completo ? "" : cardFluxo()}`;
   }
 
   function telaCanais(d) {
@@ -945,8 +949,8 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
   function telaCaixa(d) {
     const dias = d.timeline.filter((x) => x.orders > 0 || x.revenue > 0).slice().reverse();
     const lista = dias.map((x) => `<div class="split-row"><div class="split-head"><span>${fmtData(x.date)}</span><span>${brl(x.revenue)} · ${int(x.orders)} ${x.orders === 1 ? "pedido" : "pedidos"}</span></div></div>`).join("");
-    return nota(d.period) + `<section class="card"><h2>Vendas por dia</h2>${lista ? `<div class="split">${lista}</div>` : `<div class="empty">Sem vendas no período.</div>`}
-      <p class="foot">Faturamento de pedidos finalizados. O fechamento do caixa (fundo, sangria e conferência) entra quando ligarmos ao caixa do Operacional.</p></section>`;
+    return nota(d.period) + secGrafico(d) + `<section class="card"><h2>Vendas por dia</h2>${lista ? `<div class="split">${lista}</div>` : `<div class="empty">Sem vendas no período.</div>`}
+      <p class="foot">Faturamento de pedidos finalizados. O fechamento do caixa (fundo, sangria e conferência) entra quando ligarmos ao caixa do Operacional.</p></section>` + secProdutos(d);
   }
   
   function telaPdf(d) {
