@@ -5092,7 +5092,8 @@ const OWNER_RECURSOS = {
   dre_completa: "executive", // conta completa: impostos e despesas
   canais: "executive",       // rentabilidade por canal
   previsao: "executive",     // previsão de demanda
-  roi: "executive"           // ROI do FluxON
+    roi: "executive",          // ROI do FluxON
+  operacao: "executive"      // operação e IA: status, horário de pico, tempo por etapa, desempenho da IA
 };
 function ownerRecursos(plan) {
   return Object.fromEntries(Object.entries(OWNER_RECURSOS).map(([r, min]) => [r, { ok: hasPlan(plan, min), plano: OWNER_PLANO_NOME[min] }]));
