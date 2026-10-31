@@ -47,6 +47,9 @@
   const nivel = (p) => ["essential", "advanced", "executive", "custom"].indexOf(String(p || "").toLowerCase());
   const temExec = (p) => nivel(p) >= 2;
   const temAdv = (p) => nivel(p) >= 1;
+  // o backend diz o que cada plano libera (tabela única OWNER_RECURSOS); sem ela, cai na regra antiga
+  const pode = (d, r) => (d.restaurant.recursos && d.restaurant.recursos[r] ? !!d.restaurant.recursos[r].ok : temExec(d.restaurant.plan));
+  const planoDe = (d, r) => (d.restaurant.recursos && d.restaurant.recursos[r] ? d.restaurant.recursos[r].plano : "Executive");
 
   /* ---------- modelo financeiro de EXEMPLO (até existir cadastro de custos) ---------- */
   const FIN = { imposto: 0.06, cmv: 0.312, desp: [["Folha e funcionários", 0.25], ["Aluguel", 0.09], ["Água, luz e internet", 0.05], ["Manutenção", 0.02], ["Outras despesas", 0.03]] };
@@ -461,12 +464,11 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
   }
 
   function telaHome(d) {
-    const exec = temExec(d.restaurant.plan);
-    const card = (go, icone, t, ok) => `<li><button class="tile" data-go="${go}"><span class="tile-ic">${ic(icone)}</span><b>${t}</b>${ok ? "" : `<span class="tag red">Executive</span>`}</button></li>`;
+    const card = (go, icone, t, rec) => { const ok = !rec || pode(d, rec); return `<li><button class="tile" data-go="${go}"><span class="tile-ic">${ic(icone)}</span><b>${t}</b>${ok ? "" : `<span class="tag red">${planoDe(d, rec)}</span>`}</button></li>`; };
     const grupo = (t, itens) => `<section class="grp"><h2>${t}</h2><ul class="tiles">${itens.join("")}</ul></section>`;
-    return grupo("Dinheiro", [card("dre", "wallet", "Lucro e operação", true), card("custos", "box", "Custos e estoque", true), card("canais", "pie", "Rentabilidade por canal", exec), card("caixa", "file", "Vendas por dia", true)]) +
-      grupo("Clientes", [card("clientes", "users", "Clientes e origem", true), card("fidelidade", "star", "Fidelidade", true)]) +
-      grupo("Mais", [card("previsao", "trend", "Previsão de demanda", exec), card("pdf", "print", "Exportar PDF", true)]);
+    return grupo("Dinheiro", [card("dre", "wallet", "Lucro e operação"), card("custos", "box", "Custos e estoque", "custos"), card("canais", "pie", "Rentabilidade por canal", "canais"), card("caixa", "file", "Vendas por dia", "vendas")]) +
+      grupo("Clientes", [card("clientes", "users", "Clientes e origem", "clientes"), card("fidelidade", "star", "Fidelidade", "fidelidade")]) +
+      grupo("Mais", [card("previsao", "trend", "Previsão de demanda", "previsao"), card("pdf", "print", "Exportar PDF", "pdf")]);
   }
 
   function contaDre() {
@@ -486,16 +488,16 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
   }
 
   function telaDre(d) {
-    const k = d.kpis, exec = temExec(d.restaurant.plan);
+    const const k = d.kpis, exec = pode(d, "dre_completa");
     const serie = d.period.days === 1 && Array.isArray(d.horas) ? d.horas.map((x) => x.revenue) : d.timeline.map((x) => x.revenue);
     const roi = k.roi_locked
-      ? `<div class="kpi"><span class="label">ROI do FluxON</span><span class="value">—</span><span class="lock">Plano Executive</span></div>`
+      ? `<div class="kpi"><span class="label">ROI do FluxON</span><span class="value">—</span><span class="lock">Plano ${planoDe(d, "roi")}</span></div>`
       : `<div class="kpi"><span class="label">ROI do FluxON</span><span class="value">${(k.roi || 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}×</span><span class="sub">faturamento ÷ mensalidade</span></div>`;
     const completo = exec && finOk();
     return nota(d.period) + `
       <section class="hero"><span class="label">Faturamento</span><span class="value">${brl(k.revenue)}</span>${delta(k.growth.revenue)}${spark(serie)}</section>
       ${completo ? contaDre() : cardsLucro()}
-      ${exec ? "" : lockCard("A conta completa, com impostos e despesas, faz parte do plano Executive.")}
+      ${exec ? "" : lockCard(`A conta completa, com impostos e despesas, faz parte do plano ${planoDe(d, "dre_completa")}.`, planoDe(d, "dre_completa"))}
       <section class="grid4">
         <div class="kpi"><span class="label">Pedidos</span><span class="value">${int(k.orders)}</span>${delta(k.growth.orders, "")}</div>
         <div class="kpi"><span class="label">Ticket médio</span><span class="value">${brl(k.ticket)}</span>${delta(k.growth.ticket, "")}</div>
@@ -507,7 +509,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
   }
 
   function telaCanais(d) {
-    if (!temExec(d.restaurant.plan)) return lockCard("A análise de rentabilidade por canal faz parte do plano Executive.");
+    if (!pode(d, "canais")) return lockCard(`A análise de rentabilidade por canal faz parte do plano ${planoDe(d, "canais")}.`, planoDe(d, "canais"));
     return nota(d.period) + secCanais(d) + secRent(d);
   }
 
@@ -942,7 +944,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
   }
 
   function telaPrevisao(d) {
-    if (!temExec(d.restaurant.plan)) return lockCard("A previsão de demanda faz parte do plano Executive.");
+    if (!pode(d, "previsao")) return lockCard(`A previsão de demanda faz parte do plano ${planoDe(d, "previsao")}.`, planoDe(d, "previsao"));
     return nota(d.period) + secPrev(d);
   }
 
@@ -954,10 +956,10 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
   }
   
   function telaPdf(d) {
-    const exec = temExec(d.restaurant.plan);
-    const secs = [["resumo", "Resumo e indicadores", true], ["grafico", "Gráfico de vendas", true], ["canais", "Vendas por canal", true], ["produtos", "Mais vendidos", true], ["dre", "DRE gerencial", exec], ["rent", "Rentabilidade por canal", exec], ["prev", "Previsão de demanda", exec]];
+    const pDre = pode(d, "dre_completa"), pRent = pode(d, "canais"), pPrev = pode(d, "previsao");
+    const secs = [["resumo", "Resumo e indicadores", true], ["grafico", "Gráfico de vendas", true], ["canais", "Vendas por canal", true], ["produtos", "Mais vendidos", true], ["dre", "DRE gerencial", pDre, "dre_completa"], ["rent", "Rentabilidade por canal", pRent, "canais"], ["prev", "Previsão de demanda", pPrev, "previsao"]];
     return nota(d.period) + `<section class="card"><h2>Escolha o que entra no relatório</h2><div class="checks">
-      ${secs.map(([k, n, ok]) => `<label class="check"><input type="checkbox" data-sec="${k}" ${ok ? "checked" : "disabled"}><span style="flex:1">${n}</span>${ok ? "" : '<span class="tag red">Executive</span>'}</label>`).join("")}</div>
+      ${secs.map(([k, n, ok, rec]) => `<label class="check"><input type="checkbox" data-sec="${k}" ${ok ? "checked" : "disabled"}><span style="flex:1">${n}</span>${ok ? "" : `<span class="tag red">${planoDe(d, rec)}</span>`}</label>`).join("")}</div>
       <button class="btn primary" id="pdf-go" style="width:100%;margin-top:14px">Gerar PDF do período</button>
       <p class="foot">Abre a impressão do aparelho: escolha “Salvar como PDF”.</p></section>`;
   }
