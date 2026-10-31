@@ -982,9 +982,11 @@ app.get("/api/v1/pedidos-mesa", async (req, res) => {
 async function rodizioOcupadas(restaurant_id, ids) {
   const mapa = {};
   if (!ids.length) return mapa;
+  const agora = new Date().toISOString();
   const { data } = await supabase.from("rodizio_reservas")
     .select("rodizio_id, adultos, criancas")
-    .eq("restaurant_id", restaurant_id).in("rodizio_id", ids).neq("status", "cancelado");
+    .eq("restaurant_id", restaurant_id).in("rodizio_id", ids)
+    .or(`status.in.(pago,resgatado),and(status.eq.aguardando,expira_em.gt.${agora})`);
   for (const r of data || []) mapa[r.rodizio_id] = (mapa[r.rodizio_id] || 0) + (r.adultos || 0) + (r.criancas || 0);
   return mapa;
 }
@@ -1074,6 +1076,7 @@ app.get("/api/v1/rodizio/:restaurant_id/:id/reservas", async (req, res) => {
   try {
     const { data, error } = await supabase.from("rodizio_reservas").select("*")
       .eq("restaurant_id", req.params.restaurant_id).eq("rodizio_id", req.params.id)
+      .neq("status", "aguardando")
       .order("created_at", { ascending: true });
     if (error) throw error;
     return res.json(data || []);
@@ -1148,6 +1151,142 @@ app.patch("/api/v1/rodizio/:restaurant_id/reservas/:res_id", async (req, res) =>
     return res.json(data);
   } catch (err) {
     return sendError(res, 500, "Erro ao atualizar a reserva");
+  }
+});
+
+// cria a cobrança Pix de uma reserva (o Food Tree vai chamar esta rota)
+app.post("/api/v1/rodizio/:restaurant_id/:id/pix", async (req, res) => {
+  let reservaId = null;
+  try {
+    const { restaurant_id, id } = req.params;
+    const { nome, telefone, adultos, criancas } = req.body || {};
+    const ad = Math.max(0, parseInt(adultos) || 0), cr = Math.max(0, parseInt(criancas) || 0);
+    const tel = normalizePhone(telefone);
+    if (!String(nome || "").trim()) return sendError(res, 400, "Informe o nome");
+    if (!tel) return sendError(res, 400, "Informe o telefone");
+    if (ad + cr < 1 || ad + cr > 60) return sendError(res, 400, "Informe quantas pessoas");
+
+    const { data: rod } = await supabase.from("rodizios").select("*")
+      .eq("id", id).eq("restaurant_id", restaurant_id).maybeSingle();
+    if (!rod) return sendError(res, 404, "Rodízio não encontrado");
+    if (rod.status !== "aberto") return sendError(res, 409, "Este rodízio não está aberto para reservas");
+
+    const config = await getIntegracao(restaurant_id, "maquininha");
+    if (!config?.mp_access_token) return sendError(res, 400, "Mercado Pago não configurado neste restaurante");
+
+    const ocupadas = (await rodizioOcupadas(restaurant_id, [id]))[id] || 0;
+    if (ocupadas + ad + cr > (rod.vagas || 0)) return sendError(res, 409, "Vagas insuficientes");
+
+    const precoAd = Number(rod.preco) || 0;
+    const precoCr = rod.preco_crianca == null ? precoAd : Number(rod.preco_crianca) || 0;
+    const valor = Math.round((ad * precoAd + cr * precoCr) * 100) / 100;
+    const expira = new Date(Date.now() + 15 * 60 * 1000);
+
+    const { data: reserva, error } = await supabase.from("rodizio_reservas").insert([{
+      restaurant_id, rodizio_id: id, nome: String(nome).trim(), telefone: tel,
+      adultos: ad, criancas: cr, valor_pago: valor, status: "aguardando", expira_em: expira.toISOString()
+    }]).select().single();
+    if (error) throw error;
+    reservaId = reserva.id;
+
+    // confere de novo (duas pessoas ao mesmo tempo)
+    const depois = (await rodizioOcupadas(restaurant_id, [id]))[id] || 0;
+    if (depois > (rod.vagas || 0)) {
+      await supabase.from("rodizio_reservas").delete().eq("id", reservaId);
+      return sendError(res, 409, "Vagas insuficientes");
+    }
+
+    const publico = process.env.PUBLIC_URL || "https://backend.evoriseai.com.br";
+    const expiraMp = new Date(expira.getTime() - 3 * 60 * 60 * 1000).toISOString().replace("Z", "-03:00");
+    const mpResp = await fetch("https://api.mercadopago.com/v1/payments", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.mp_access_token}`,
+        "Content-Type": "application/json",
+        "X-Idempotency-Key": reservaId
+      },
+      body: JSON.stringify({
+        transaction_amount: valor,
+        description: `${rod.nome} - ${String(nome).trim()}`.slice(0, 200),
+        payment_method_id: "pix",
+        date_of_expiration: expiraMp,
+        external_reference: reservaId,
+        notification_url: `${publico}/api/v1/mp/webhook-rodizio?rid=${restaurant_id}`,
+        payer: { email: `${tel}@reserva.fluxon.app`, first_name: String(nome).trim().split(" ")[0] }
+      })
+    });
+    const mp = await mpResp.json();
+    const td = mp?.point_of_interaction?.transaction_data;
+    if (!mpResp.ok || !td?.qr_code) {
+      console.error("❌ MP pix rodizio:", JSON.stringify(mp));
+      await supabase.from("rodizio_reservas").delete().eq("id", reservaId);
+      return sendError(res, 502, mp?.message || "Não foi possível gerar o Pix");
+    }
+
+    await supabase.from("rodizio_reservas").update({
+      pagamento_ref: String(mp.id), pix_copia_cola: td.qr_code, pix_qr_base64: td.qr_code_base64 || null
+    }).eq("id", reservaId);
+
+    return res.status(201).json({
+      success: true, reserva_id: reservaId, valor,
+      pix_copia_cola: td.qr_code, pix_qr_base64: td.qr_code_base64 || null, expira_em: expira.toISOString()
+    });
+  } catch (err) {
+    console.error("❌ rodizio/pix:", err.message);
+    if (reservaId) await supabase.from("rodizio_reservas").delete().eq("id", reservaId);
+    return sendError(res, 500, "Erro ao gerar o Pix");
+  }
+});
+
+// consulta se a reserva já foi paga (o Food Tree pergunta a cada poucos segundos)
+app.get("/api/v1/rodizio/:restaurant_id/reservas/:res_id/status", async (req, res) => {
+  try {
+    const { data } = await supabase.from("rodizio_reservas")
+      .select("status, valor_pago, expira_em")
+      .eq("id", req.params.res_id).eq("restaurant_id", req.params.restaurant_id).maybeSingle();
+    if (!data) return sendError(res, 404, "Reserva não encontrada");
+    const expirou = data.status === "aguardando" && data.expira_em && new Date(data.expira_em) < new Date();
+    return res.json({ status: expirou ? "expirado" : data.status, valor: data.valor_pago, expira_em: data.expira_em });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao consultar a reserva");
+  }
+});
+
+// o Mercado Pago avisa aqui quando o Pix é pago (sem login: a confirmação é buscada direto no Mercado Pago)
+app.post("/api/v1/mp/webhook-rodizio", async (req, res) => {
+  try {
+    const rid = req.query.rid;
+    const tipo = req.body?.type || req.query?.type || req.query?.topic;
+    const paymentId = req.body?.data?.id || req.query?.["data.id"] || req.query?.id;
+    if (!rid || !paymentId || (tipo && tipo !== "payment")) return res.sendStatus(200);
+
+    const config = await getIntegracao(rid, "maquininha");
+    if (!config?.mp_access_token) return res.sendStatus(200);
+
+    const r = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+      headers: { Authorization: `Bearer ${config.mp_access_token}` }
+    });
+    const p = await r.json();
+    if (!r.ok || p.status !== "approved" || !p.external_reference) return res.sendStatus(200);
+
+    const { data: reserva } = await supabase.from("rodizio_reservas").select("*")
+      .eq("id", p.external_reference).eq("restaurant_id", rid).eq("pagamento_ref", String(p.id)).maybeSingle();
+    if (!reserva || reserva.status !== "aguardando") return res.sendStatus(200);
+
+    const { data: ok } = await supabase.from("rodizio_reservas")
+      .update({ status: "pago", valor_pago: Number(p.transaction_amount) || reserva.valor_pago })
+      .eq("id", reserva.id).eq("status", "aguardando").select().maybeSingle();
+
+    if (ok) {
+      const { data: rod } = await supabase.from("rodizios").select("vagas").eq("id", reserva.rodizio_id).maybeSingle();
+      const total = (await rodizioOcupadas(rid, [reserva.rodizio_id]))[reserva.rodizio_id] || 0;
+      if (rod && total >= (rod.vagas || 0)) await supabase.from("rodizios").update({ status: "fechado" }).eq("id", reserva.rodizio_id);
+      console.log(`💳 Rodízio: reserva ${reserva.id} paga via Pix (${reserva.nome})`);
+    }
+    return res.sendStatus(200);
+  } catch (err) {
+    console.error("❌ webhook-rodizio:", err.message);
+    return res.sendStatus(500);
   }
 });
 
@@ -5589,7 +5728,7 @@ async function ownerBuscarReservasRodizio(restaurantId, de, ate) {
     const { data, error } = await supabase
       .from("rodizio_reservas")
       .select("id, valor_pago, adultos, criancas, created_at")
-      .eq("restaurant_id", restaurantId).neq("status", "cancelado")
+      .eq("restaurant_id", restaurantId).in("status", ["pago", "resgatado"])
       .gte("created_at", de.toISOString()).lt("created_at", ate.toISOString())
       .order("created_at", { ascending: true }).order("id", { ascending: true })
       .range(i * PAGINA, i * PAGINA + PAGINA - 1);
