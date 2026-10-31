@@ -307,6 +307,7 @@ function applyAccessUI() {
 function closeDrawer() {
   drawer?.classList.remove("open");
   drawerBackdrop?.classList.remove("open");
+  document.getElementById("rodizio-view")?.classList.add("hidden");
 }
 
 // ===== TABS =====
@@ -1606,7 +1607,6 @@ function abrirDrawerMesa(key) {
   );
 
   const ocupada = pedidosAtivos.length > 0;
-  const pedRod = pedidosAtivos.find(o => o.rodizio);
 
   const todosItens = [];
   pedidosAtivos.forEach(o => {
@@ -1699,7 +1699,6 @@ function abrirDrawerMesa(key) {
           <button class="primary-button" style="width:100%;" onclick="document.getElementById('mesa-drawer-modal').remove(); abrirCriarPedidoMesa('${key}')">
             Abrir Mesa
           </button>
-          ${!isBalcao ? `<button class="ghost-button" style="width:100%; margin-top:10px;" onclick="document.getElementById('mesa-drawer-modal').remove(); abrirRodizioMesa('${key}')">🍣 Abrir com rodízio</button>` : ""}
         </div>
       `}
 
@@ -1710,7 +1709,10 @@ function abrirDrawerMesa(key) {
   modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
 }
 
-// ===== RODÍZIO =====
+// ===== ABA RODÍZIO =====
+const rodState = { lista: [], atual: null, reservas: [] };
+const ROD_COR = { aberto: "34,197,94", fechado: "245,158,11", pago: "34,197,94", resgatado: "56,189,248", cancelado: "239,68,68" };
+
 async function rodizioApi(path, opts = {}) {
   const r = await fetch(`${API_BASE}/api/v1/rodizio/${getRestaurantId()}${path}`, { ...opts, headers: buildHeaders() });
   const d = await r.json().catch(() => ({}));
@@ -1718,129 +1720,163 @@ async function rodizioApi(path, opts = {}) {
   return d;
 }
 
-function rodizioAtualizaPedido(o) {
-  if (!o || !o.id) return;
-  const novo = { ...o, _frontStatus: toFrontStatus(o.status) };
-  const i = orders.findIndex(x => x.id === o.id);
-  if (i !== -1) orders[i] = novo; else orders.push(novo);
-}
-
 function rodizioModal(id, html) {
   document.getElementById(id)?.remove();
   const m = document.createElement("div");
   m.id = id; m.className = "modal-backdrop open";
-  m.innerHTML = `<div class="modal" style="max-width:420px;">${html}</div>`;
+  m.innerHTML = `<div class="modal" style="max-width:440px;">${html}</div>`;
   document.body.appendChild(m);
   m.addEventListener("click", e => { if (e.target === m) m.remove(); });
   return m;
 }
 
-async function abrirRodizioMesa(key) {
-  let tipos = [];
-  try { tipos = await rodizioApi(""); } catch (e) { alert(e.message); return; }
-  const m = rodizioModal("rodizio-modal", `
-    <div class="modal-header"><h3>🍣 Rodízio — Mesa ${escapeHtml(key)}</h3>
-      <button class="icon-button" id="rod-x">×</button></div>
+const rodDataBR = (d, h) => { const [y, m, dd] = String(d || "").split("-"); return `${dd}/${m}/${y}${h ? " às " + h : ""}`; };
+const rodPessoas = (r) => [r.adultos ? `${r.adultos} adulto${r.adultos > 1 ? "s" : ""}` : "", r.criancas ? `${r.criancas} criança${r.criancas > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
+const rodPill = (txt, k) => `<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid rgba(${ROD_COR[k]},0.5);background:rgba(${ROD_COR[k]},0.12);color:rgb(${ROD_COR[k]});">${txt}</span>`;
+
+function showRodizio() {
+  board?.classList.add("hidden");
+  crmView?.classList.add("hidden");
+  resultsView?.classList.add("hidden");
+  ["autoatendimento-view", "settings-view", "cardapio-view", "fidelidade-view", "mesas-view", "home-view", "admin-view", "tabs-bar", "open-create"]
+    .forEach(id => document.getElementById(id)?.classList.add("hidden"));
+  hideTabsBar();
+  closeDrawer();
+  document.getElementById("rodizio-view")?.classList.remove("hidden");
+  rodRenderLista();
+}
+
+async function rodRenderLista() {
+  const c = document.getElementById("rodizio-content");
+  const top = document.getElementById("rod-top");
+  top.innerHTML = `<button class="primary-button" id="rod-novo">＋ Abrir rodízio</button>`;
+  document.getElementById("rod-novo").onclick = rodNovo;
+  c.innerHTML = `<p class="muted">Carregando...</p>`;
+  try { rodState.lista = await rodizioApi(""); }
+  catch (e) { c.innerHTML = `<p class="muted">${escapeHtml(e.message)}</p>`; return; }
+  if (!rodState.lista.length) { c.innerHTML = `<div class="empty-state">Nenhum rodízio ainda. Toque em "Abrir rodízio".</div>`; return; }
+  c.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">` +
+    rodState.lista.map(r => `
+      <div class="stat-item" data-rod="${r.id}" style="cursor:pointer;text-align:left;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+          <b style="font-size:16px;">${escapeHtml(r.nome)}</b>${rodPill(r.status === "aberto" ? "Aberto" : "Fechado", r.status === "aberto" ? "aberto" : "fechado")}
+        </div>
+        <div class="muted" style="font-size:13px;">${rodDataBR(r.data_evento, r.horario)}</div>
+        <div style="margin-top:10px;font-weight:800;color:var(--primary);">${r.ocupadas}/${r.vagas} vagas</div>
+        <div class="muted" style="font-size:12px;">${formatCurrency(r.preco)}${r.preco_crianca != null ? ` · criança ${formatCurrency(r.preco_crianca)}` : ""}</div>
+      </div>`).join("") + `</div>`;
+  c.querySelectorAll("[data-rod]").forEach(el => el.onclick = () => rodAbrir(el.dataset.rod));
+}
+
+function rodNovo() {
+  const m = rodizioModal("rodizio-novo-modal", `
+    <div class="modal-header"><h3>Abrir rodízio</h3><button class="icon-button" id="rn-x">×</button></div>
     <div class="modal-body form-body">
-      ${tipos.length ? `
-      <label>Tipo de rodízio
-        <select id="rod-tipo">${tipos.map(t => `<option value="${t.id}" data-p="${t.preco}" data-c="${t.preco_crianca ?? t.preco}">${escapeHtml(t.nome)} — ${formatCurrency(t.preco)}</option>`).join("")}</select>
-      </label>
-      <label>Adultos <input id="rod-ad" type="number" min="0" value="2"></label>
-      <label>Crianças <input id="rod-cr" type="number" min="0" value="0"></label>
-      <div id="rod-total" style="font-weight:900;font-size:18px;color:rgba(251,191,36,1);"></div>`
-      : `<p class="muted">Nenhum rodízio cadastrado ainda. Toque em "Gerenciar rodízios".</p>`}
+      <label>Nome <input id="rn-nome" value="Rodízio"></label>
+      <label>Data <input id="rn-data" type="date"></label>
+      <label>Horário <input id="rn-hora" type="time" value="20:00"></label>
+      <label>Preço por adulto <input id="rn-preco" type="number" step="0.01" min="0"></label>
+      <label>Preço criança (opcional) <input id="rn-cr" type="number" step="0.01" min="0"></label>
+      <label>Vagas <input id="rn-vagas" type="number" min="1" value="40"></label>
     </div>
-    <div class="modal-actions">
-      <button class="ghost-button" id="rod-ger">Gerenciar rodízios</button>
-      ${tipos.length ? `<button class="primary-button" id="rod-ok">Abrir rodízio</button>` : ""}
-    </div>`);
-  m.querySelector("#rod-x").onclick = () => m.remove();
-  m.querySelector("#rod-ger").onclick = () => { m.remove(); gerenciarRodizios(key); };
-  if (!tipos.length) return;
-  const calc = () => {
-    const o = m.querySelector("#rod-tipo").selectedOptions[0];
-    const ad = parseInt(m.querySelector("#rod-ad").value) || 0, cr = parseInt(m.querySelector("#rod-cr").value) || 0;
-    m.querySelector("#rod-total").textContent = "Total: " + formatCurrency(ad * Number(o.dataset.p) + cr * Number(o.dataset.c));
-  };
-  ["#rod-tipo", "#rod-ad", "#rod-cr"].forEach(s => m.querySelector(s).addEventListener("input", calc));
-  calc();
-  const ok = m.querySelector("#rod-ok");
+    <div class="modal-actions"><button class="primary-button" id="rn-ok">Abrir rodízio</button></div>`);
+  m.querySelector("#rn-x").onclick = () => m.remove();
+  const ok = m.querySelector("#rn-ok");
   ok.onclick = async () => {
     ok.disabled = true;
     try {
-      const d = await rodizioApi(`/mesa/${encodeURIComponent(key)}/abrir`, {
-        method: "POST",
-        body: JSON.stringify({
-          rodizio_id: m.querySelector("#rod-tipo").value,
-          adultos: m.querySelector("#rod-ad").value,
-          criancas: m.querySelector("#rod-cr").value
-        })
-      });
-      rodizioAtualizaPedido(d.order);
-      m.remove(); renderMesas(); abrirListaRodizio(key);
+      await rodizioApi("", { method: "POST", body: JSON.stringify({
+        nome: m.querySelector("#rn-nome").value, data_evento: m.querySelector("#rn-data").value,
+        horario: m.querySelector("#rn-hora").value, preco: m.querySelector("#rn-preco").value,
+        preco_crianca: m.querySelector("#rn-cr").value, vagas: m.querySelector("#rn-vagas").value
+      }) });
+      m.remove(); rodRenderLista();
     } catch (e) { alert(e.message); ok.disabled = false; }
   };
 }
 
-async function gerenciarRodizios(key) {
-  let tipos = [];
-  try { tipos = await rodizioApi(""); } catch (e) { alert(e.message); return; }
-  const m = rodizioModal("rodizio-ger-modal", `
-    <div class="modal-header"><h3>Meus rodízios</h3><button class="icon-button" id="rg-x">×</button></div>
-    <div class="modal-body form-body">
-      ${tipos.map(t => `
-        <div class="modal-row"><span>${escapeHtml(t.nome)} — ${formatCurrency(t.preco)}${t.preco_crianca != null ? ` · criança ${formatCurrency(t.preco_crianca)}` : ""}</span>
-          <button class="ghost-button small" data-del="${t.id}">remover</button></div>`).join("") || `<p class="muted">Nenhum cadastrado.</p>`}
-      <label>Nome <input id="rg-nome" placeholder="Ex.: Rodízio Premium"></label>
-      <label>Preço por pessoa <input id="rg-preco" type="number" step="0.01" min="0"></label>
-      <label>Preço criança (opcional) <input id="rg-cr" type="number" step="0.01" min="0"></label>
-    </div>
-    <div class="modal-actions"><button class="primary-button" id="rg-add">Adicionar rodízio</button></div>`);
-  m.querySelector("#rg-x").onclick = () => { m.remove(); abrirRodizioMesa(key); };
-  m.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
-    try { await rodizioApi(`/${b.dataset.del}`, { method: "DELETE" }); m.remove(); gerenciarRodizios(key); }
-    catch (e) { alert(e.message); }
-  });
-  m.querySelector("#rg-add").onclick = async () => {
-    try {
-      await rodizioApi("", { method: "POST", body: JSON.stringify({
-        nome: m.querySelector("#rg-nome").value,
-        preco: m.querySelector("#rg-preco").value,
-        preco_crianca: m.querySelector("#rg-cr").value
-      }) });
-      m.remove(); gerenciarRodizios(key);
-    } catch (e) { alert(e.message); }
-  };
+async function rodAbrir(id) {
+  const c = document.getElementById("rodizio-content");
+  document.getElementById("rod-top").innerHTML = `<button class="ghost-button" id="rod-voltar">← Voltar</button>`;
+  document.getElementById("rod-voltar").onclick = rodRenderLista;
+  c.innerHTML = `<p class="muted">Carregando...</p>`;
+  try {
+    rodState.atual = rodState.lista.find(r => r.id === id);
+    rodState.reservas = await rodizioApi(`/${id}/reservas`);
+  } catch (e) { c.innerHTML = `<p class="muted">${escapeHtml(e.message)}</p>`; return; }
+  rodRenderDetalhe();
 }
 
-function abrirListaRodizio(key) {
-  const ped = orders.find(o => o.rodizio && o.destino === "mesas" &&
-    ["recebido", "preparo", "pronto"].includes(o._frontStatus) && String(o.table_number) === String(key));
-  if (!ped) { alert("Esta mesa não tem rodízio aberto."); return; }
-  const pessoas = ped.rodizio.pessoas || [];
-  const dentro = pessoas.filter(p => p.checkin).length;
-  const m = rodizioModal("rodizio-lista-modal", `
-    <div class="modal-header"><h3>🍣 ${escapeHtml(ped.rodizio.nome)} — Mesa ${escapeHtml(key)}</h3>
-      <button class="icon-button" id="rl-x">×</button></div>
-    <div class="modal-body">
-      <p class="muted">${dentro} de ${pessoas.length} fizeram check-in</p>
-      ${pessoas.map((p, i) => `
-        <label class="modal-row-inline" style="cursor:pointer;">
-          <input type="checkbox" data-i="${i}" ${p.checkin ? "checked" : ""}>
-          <span>${p.tipo === "crianca" ? "Criança" : "Adulto"} ${i + 1}</span>
-        </label>`).join("")}
-    </div>`);
-  m.querySelector("#rl-x").onclick = () => { m.remove(); renderMesas(); };
-  m.querySelectorAll("[data-i]").forEach(c => c.onchange = async () => {
-    try {
-      const d = await rodizioApi(`/pedido/${ped.id}/checkin`, {
-        method: "PATCH", body: JSON.stringify({ indice: Number(c.dataset.i), checkin: c.checked })
-      });
-      rodizioAtualizaPedido(d.order);
-      m.remove(); abrirListaRodizio(key);
-    } catch (e) { alert(e.message); c.checked = !c.checked; }
+async function rodRecarregar() {
+  const id = rodState.atual.id;
+  rodState.lista = await rodizioApi("");
+  rodState.atual = rodState.lista.find(r => r.id === id) || rodState.atual;
+  rodState.reservas = await rodizioApi(`/${id}/reservas`);
+  rodRenderDetalhe();
+}
+
+function rodRenderDetalhe() {
+  const r = rodState.atual, res = rodState.reservas;
+  const ativas = res.filter(x => x.status !== "cancelado");
+  const total = ativas.reduce((s, x) => s + Number(x.valor_pago || 0), 0);
+  const aberto = r.status === "aberto";
+  const c = document.getElementById("rodizio-content");
+  c.innerHTML = `
+    <div class="stat-item" style="text-align:left;margin-bottom:18px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <b style="font-size:20px;">${escapeHtml(r.nome)}</b>${rodPill(aberto ? "Aberto" : "Fechado", aberto ? "aberto" : "fechado")}
+      </div>
+      <div class="muted" style="margin:6px 0 14px;">${rodDataBR(r.data_evento, r.horario)} · ${formatCurrency(r.preco)}${r.preco_crianca != null ? ` · criança ${formatCurrency(r.preco_crianca)}` : ""}</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px;">
+        <div><span class="stat-label">Vagas</span><b style="font-size:22px;color:var(--primary);">${r.ocupadas}/${r.vagas}</b></div>
+        <div><span class="stat-label">Arrecadado</span><b style="font-size:22px;color:#fbbf24;">${formatCurrency(total)}</b></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="ghost-button" id="rd-toggle">${aberto ? "Fechar reservas" : "Reabrir reservas"}</button>
+        <button class="danger-button" id="rd-del">Remover rodízio</button>
+      </div>
+    </div>
+    <h4 style="margin-bottom:10px;">Reservas pagas</h4>
+    ${res.length ? res.map(x => `
+      <div class="modal-row" data-res="${x.id}" style="cursor:pointer;margin-bottom:8px;align-items:center;">
+        <div><b>${escapeHtml(x.nome)}</b><div class="muted" style="font-size:12px;">${escapeHtml(x.telefone || "")} · ${rodPessoas(x)}</div></div>
+        <div style="text-align:right;"><b style="color:#fbbf24;">${formatCurrency(x.valor_pago)}</b><div>${rodPill(x.status === "pago" ? "Pago" : x.status === "resgatado" ? "Resgatado" : "Cancelado", x.status)}</div></div>
+      </div>`).join("") : `<div class="empty-state">Nenhuma reserva paga ainda.</div>`}`;
+  document.getElementById("rd-toggle").onclick = async () => {
+    try { await rodizioApi(`/${r.id}`, { method: "PATCH", body: JSON.stringify({ status: aberto ? "fechado" : "aberto" }) }); rodRecarregar(); }
+    catch (e) { alert(e.message); }
+  };
+  document.getElementById("rd-del").onclick = () => showConfirmModal("Remover este rodízio?", async () => {
+    try { await rodizioApi(`/${r.id}`, { method: "DELETE" }); rodRenderLista(); }
+    catch (e) { alert(e.message); }
   });
+  c.querySelectorAll("[data-res]").forEach(el => el.onclick = () => rodReserva(el.dataset.res));
+}
+
+function rodReserva(id) {
+  const x = rodState.reservas.find(y => y.id === id); if (!x) return;
+  const m = rodizioModal("rodizio-res-modal", `
+    <div class="modal-header"><h3>${escapeHtml(x.nome)}</h3><button class="icon-button" id="rr-x">×</button></div>
+    <div class="modal-body">
+      <div class="modal-row"><span class="muted">Telefone</span><b>${escapeHtml(x.telefone || "—")}</b></div>
+      <div class="modal-row"><span class="muted">Pessoas</span><b>${rodPessoas(x)}</b></div>
+      <div class="modal-row"><span class="muted">Valor pago</span><b style="color:#fbbf24;">${formatCurrency(x.valor_pago)}</b></div>
+      <div class="modal-row"><span class="muted">Pago em</span><b>${new Date(x.created_at).toLocaleString("pt-BR")}</b></div>
+      <div class="modal-row"><span class="muted">Situação</span>${rodPill(x.status === "pago" ? "Pago" : x.status === "resgatado" ? "Resgatado" : "Cancelado", x.status)}</div>
+    </div>
+    <div class="modal-actions">
+      ${x.status !== "cancelado" ? `<button class="danger-button" id="rr-cancel">Cancelar reserva</button>` : ""}
+      ${x.status === "pago" ? `<button class="primary-button" id="rr-resg">Marcar resgatado</button>` : ""}
+      ${x.status === "resgatado" ? `<button class="ghost-button" id="rr-desf">Desfazer resgate</button>` : ""}
+    </div>`);
+  m.querySelector("#rr-x").onclick = () => m.remove();
+  const muda = async (status) => {
+    try { await rodizioApi(`/reservas/${x.id}`, { method: "PATCH", body: JSON.stringify({ status }) }); m.remove(); rodRecarregar(); }
+    catch (e) { alert(e.message); }
+  };
+  m.querySelector("#rr-resg")?.addEventListener("click", () => muda("resgatado"));
+  m.querySelector("#rr-desf")?.addEventListener("click", () => muda("pago"));
+  m.querySelector("#rr-cancel")?.addEventListener("click", () => showConfirmModal("Cancelar esta reserva? As vagas voltam a ficar livres.", () => muda("cancelado")));
 }
 
 function cancelarPedidosMesa(key) {
@@ -4707,6 +4743,7 @@ function setupDrawer() {
 if (resumoDiaBtn) resumoDiaBtn.addEventListener("click", () => { closeDrawer(); showCaixa(); });
   const mesasBtn = document.getElementById("drawer-mesas");
 if (mesasBtn) mesasBtn.addEventListener("click", showMesas);
+  document.getElementById("drawer-rodizio")?.addEventListener("click", showRodizio);
 
 const cardapioBtn = document.getElementById("drawer-cardapio");
 if (cardapioBtn) cardapioBtn.addEventListener("click", showCardapio);
