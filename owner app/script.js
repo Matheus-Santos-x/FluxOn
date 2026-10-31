@@ -269,7 +269,7 @@ if (st.view === "overview") {
 
 const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos" };
   const SEM_PERIODO = ["home", "custos", "cuing", "cufichas", "cudesp"];
-  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", simulador: "Simulador de preços", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF" };
+  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF" };
   function render() {
     const ov = st.view === "overview";
     $("back").classList.toggle("hidden", ov || st.screen === "home");
@@ -278,9 +278,8 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
     if (ov) { $("title").textContent = "Visão geral"; $("content").innerHTML = telaOverview(st.ov); return; }
     const d = st.dash;
     $("title").textContent = st.screen === "home" ? d.restaurant.name : TITULOS[st.screen];
-    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, simulador: telaSimulador, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
+    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
     $("content").innerHTML = T(d);
-    if (st.screen === "simulador") bindSim(d);
     if (st.screen === "pdf") bindPdf(d);
   }
 
@@ -292,7 +291,6 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
     return `<span class="delta ${cls}">${seta} ${pct(Math.abs(v))} <span class="muted" style="font-weight:400">${rotulo}</span></span>`;
   }
   const nota = (p) => `<p class="period-note">${fmtData(p.from)}${p.from !== p.to ? " a " + fmtData(p.to) : ""} · ${p.days} ${p.days === 1 ? "dia" : "dias"}</p>`;
-  const exemplo = `<span class="tag">Exemplo</span>`;
 
   function spark(vals) {
     if (vals.length < 2) return "";
@@ -316,7 +314,7 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
 
   /* ---------- seções reutilizáveis (tela e PDF) ---------- */
   function secResumo(d) {
-    const k = d.kpis, f = fin(k.revenue), m = k.revenue > 0 ? (f.resultado / k.revenue) * 100 : 0;
+    const k = d.kpis;
     return `<section class="grid4">
       <div class="kpi"><span class="label">Faturamento</span><span class="value">${brl(k.revenue)}</span></div>
       <div class="kpi"><span class="label">Pedidos</span><span class="value">${int(k.orders)}</span></div>
@@ -952,32 +950,6 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
         } catch (err) { toast(err.message); }
       };
     } catch (e) { cuErro("desp", e); }
-  }
-  
-  function telaSimulador(d) {
-    if (!temExec(d.restaurant.plan)) return lockCard("O simulador de precificação faz parte do plano Executive.");
-    return nota(d.period) + `<section class="card sim"><h2>Simular novo preço ${exemplo}</h2>
-      <label for="sim-p"><span>Mudança no preço de venda</span><b id="sim-v">0%</b></label>
-      <input id="sim-p" type="range" min="-20" max="20" step="1" value="0">
-      <p class="foot" style="text-align:left">Premissa: cada +1% no preço reduz as vendas em 0,8%. Nada é alterado nos preços reais.</p>
-      <div id="sim-out"></div></section>`;
-  }
-  function bindSim(d) {
-    const el = $("sim-p"); if (!el) return;
-    const k = d.kpis, f = fin(k.revenue);
-    const calc = () => {
-      const p = Number(el.value) / 100, v = -0.8 * p;
-      const rev2 = k.revenue * (1 + p) * (1 + v), cmv2 = f.cmv * (1 + v), res2 = rev2 - rev2 * FIN.imposto - cmv2 - f.totDesp;
-      const dRes = res2 - f.resultado, ped2 = k.orders * (1 + v), tk2 = ped2 > 0 ? rev2 / ped2 : 0, mg2 = rev2 > 0 ? (res2 / rev2) * 100 : 0;
-      $("sim-v").textContent = (p > 0 ? "+" : "") + Math.round(p * 100) + "%";
-      $("sim-out").innerHTML = `<div class="compare">
-        <div class="kpi"><span class="label">Faturamento</span><span class="value">${brl(rev2)}</span><span class="sub">hoje ${brl(k.revenue)}</span></div>
-        <div class="kpi"><span class="label">Resultado</span><span class="value">${brl(res2)}</span><span class="sub">hoje ${brl(f.resultado)}</span></div>
-        <div class="kpi"><span class="label">Pedidos</span><span class="value">${int(ped2)}</span><span class="sub">hoje ${int(k.orders)}</span></div>
-        <div class="kpi"><span class="label">Ticket médio</span><span class="value">${brl(tk2)}</span><span class="sub">margem ${pct(mg2)}</span></div></div>
-        <p class="peak">Impacto no resultado: <span class="pill ${dRes >= 0 ? "up" : "down"}">${dRes >= 0 ? "+" : ""}${brl(dRes)}</span></p>`;
-    };
-    el.addEventListener("input", calc); calc();
   }
 
   function telaPrevisao(d) {
