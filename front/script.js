@@ -8958,6 +8958,9 @@ async function fetchFidelidadePremios() {
                 <div style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px;">${escapeHtml(p.nome)}</div>
                 ${p.descricao ? `<div style="color:var(--muted); font-size:12px;">${escapeHtml(p.descricao)}</div>` : ""}
                 <div style="color:rgba(251,191,36,1); font-weight:800; font-size:13px; margin-top:4px;">⭐ ${p.pontos_necessarios} pontos</div>
+                ${Number(p.piso_resgate) > 0
+                  ? `<div style="color:var(--muted); font-size:11px; margin-top:2px;">Mínimo definido pelo dono: ${p.piso_resgate} pontos</div>`
+                  : `<div style="color:#f87171; font-size:11px; font-weight:700; margin-top:4px;">⏳ Aguardando o dono definir o mínimo. Ainda não pode ser resgatado.</div>`}
               </div>
               <div style="display:flex; gap:8px;">
                 <button onclick="openPremioModal(${JSON.stringify(p).replace(/"/g, '&quot;')})" style="padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.18); background:transparent; color:rgba(252,228,228,0.7); cursor:pointer; font-size:11px;">Editar</button>
@@ -9071,8 +9074,8 @@ function openPremioModal(premio = null) {
             <input type="hidden" id="premio-foto" value="${premio?.foto_url || ''}" />
           </div>
         </label>
-        <label style="color:rgba(252,228,228,0.8); font-size:13px;">Pontos necessários *
-          <input id="premio-pontos" type="number" value="${premio ? premio.pontos_necessarios : ""}" placeholder="Ex: 500"
+        <label style="color:rgba(252,228,228,0.8); font-size:13px;">Pontos necessários *${premio && Number(premio.piso_resgate) > 0 ? ` <span style="color:var(--muted); font-size:11px;">(mínimo ${premio.piso_resgate})</span>` : ""}
+          <input id="premio-pontos" type="number" data-piso="${premio ? Number(premio.piso_resgate) || 0 : 0}" value="${premio ? premio.pontos_necessarios : ""}" placeholder="Ex: 500"
             style="width:100%; margin-top:6px; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none;" />
         </label>
       </div>
@@ -9099,6 +9102,11 @@ async function salvarPremio(id = null) {
   const pontos_necessarios = parseInt(document.getElementById("premio-pontos").value) || 0;
 
   if (!nome || !pontos_necessarios) { alert("Nome e pontos são obrigatórios."); return; }
+  const pisoAtual = Number(document.getElementById("premio-pontos")?.dataset.piso) || 0;
+  if (pisoAtual > 0 && pontos_necessarios < pisoAtual) {
+    alert(`O dono definiu o mínimo de ${pisoAtual} pontos para este prêmio. Informe ${pisoAtual} ou mais.`);
+    return;
+  }
   const foto_url = document.getElementById("premio-foto")?.value.trim() || null;
 
   try {
