@@ -1733,6 +1733,12 @@ const rodDataBR = (d, h) => { const [y, m, dd] = String(d || "").split("-"); ret
 const rodPessoas = (r) => [r.adultos ? `${r.adultos} adulto${r.adultos > 1 ? "s" : ""}` : "", r.criancas ? `${r.criancas} criança${r.criancas > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
 const rodPill = (txt, k) => `<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid rgba(${ROD_COR[k]},0.5);background:rgba(${ROD_COR[k]},0.12);color:rgb(${ROD_COR[k]});">${txt}</span>`;
 
+const rodBarra = (oc, vg) => {
+  const p = vg > 0 ? Math.min(100, Math.round((oc / vg) * 100)) : 0;
+  const cor = p >= 90 ? "239,68,68" : p >= 60 ? "245,158,11" : "34,197,94";
+  return `<div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.08);overflow:hidden;"><div style="width:${p}%;height:100%;border-radius:999px;background:rgb(${cor});transition:width .3s;"></div></div>`;
+};
+
 function showRodizio() {
   board?.classList.add("hidden");
   crmView?.classList.add("hidden");
@@ -1756,13 +1762,14 @@ async function rodRenderLista() {
   if (!rodState.lista.length) { c.innerHTML = `<div class="empty-state">Nenhum rodízio ainda. Toque em "Abrir rodízio".</div>`; return; }
   c.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">` +
     rodState.lista.map(r => `
-      <div class="stat-item" data-rod="${r.id}" style="cursor:pointer;text-align:left;">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
-          <b style="font-size:16px;">${escapeHtml(r.nome)}</b>${rodPill(r.status === "aberto" ? "Aberto" : "Fechado", r.status === "aberto" ? "aberto" : "fechado")}
+           <div data-rod="${r.id}" style="cursor:pointer;text-align:left;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
+          <b style="font-size:17px;">${escapeHtml(r.nome)}</b>${rodPill(r.status === "aberto" ? "Aberto" : "Fechado", r.status === "aberto" ? "aberto" : "fechado")}
         </div>
-        <div class="muted" style="font-size:13px;">${rodDataBR(r.data_evento, r.horario)}</div>
-        <div style="margin-top:10px;font-weight:800;color:var(--primary);">${r.ocupadas}/${r.vagas} vagas</div>
-        <div class="muted" style="font-size:12px;">${formatCurrency(r.preco)}${r.preco_crianca != null ? ` · criança ${formatCurrency(r.preco_crianca)}` : ""}</div>
+        <div class="muted" style="font-size:13px;">📅 ${rodDataBR(r.data_evento, r.horario)}</div>
+        <div style="margin:14px 0 6px;display:flex;justify-content:space-between;font-size:13px;"><b style="color:var(--primary);">${r.ocupadas}/${r.vagas} vagas</b><span class="muted">${r.restantes} livres</span></div>
+        ${rodBarra(r.ocupadas, r.vagas)}
+        <div class="muted" style="font-size:12px;margin-top:10px;">Adulto ${formatCurrency(r.preco)}${r.preco_crianca != null ? ` · criança ${formatCurrency(r.preco_crianca)}` : ""}</div>
       </div>`).join("") + `</div>`;
   c.querySelectorAll("[data-rod]").forEach(el => el.onclick = () => rodAbrir(el.dataset.rod));
 }
@@ -1827,10 +1834,12 @@ function rodRenderDetalhe() {
         <b style="font-size:20px;">${escapeHtml(r.nome)}</b>${rodPill(aberto ? "Aberto" : "Fechado", aberto ? "aberto" : "fechado")}
       </div>
       <div class="muted" style="margin:6px 0 14px;">${rodDataBR(r.data_evento, r.horario)} · ${formatCurrency(r.preco)}${r.preco_crianca != null ? ` · criança ${formatCurrency(r.preco_crianca)}` : ""}</div>
-      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px;">
-        <div><span class="stat-label">Vagas</span><b style="font-size:22px;color:var(--primary);">${r.ocupadas}/${r.vagas}</b></div>
-        <div><span class="stat-label">Arrecadado</span><b style="font-size:22px;color:#fbbf24;">${formatCurrency(total)}</b></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:12px;">
+        <div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:12px;"><div class="muted" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">Ocupadas</div><b style="font-size:22px;color:var(--primary);">${r.ocupadas}/${r.vagas}</b></div>
+        <div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:12px;"><div class="muted" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">Livres</div><b style="font-size:22px;">${r.restantes}</b></div>
+        <div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:12px;"><div class="muted" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;">Arrecadado</div><b style="font-size:22px;color:#fbbf24;">${formatCurrency(total)}</b></div>
       </div>
+      <div style="margin-bottom:16px;">${rodBarra(r.ocupadas, r.vagas)}</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <button class="primary-button" id="rd-add">＋ Adicionar reserva</button>
         <button class="ghost-button" id="rd-toggle">${aberto ? "Fechar reservas" : "Reabrir reservas"}</button>
@@ -1839,8 +1848,9 @@ function rodRenderDetalhe() {
     </div>
     <h4 style="margin-bottom:10px;">Reservas pagas</h4>
     ${res.length ? res.map(x => `
-      <div class="modal-row" data-res="${x.id}" style="cursor:pointer;margin-bottom:8px;align-items:center;">
-        <div><b>${escapeHtml(x.nome)}</b><div class="muted" style="font-size:12px;">${escapeHtml(x.telefone || "")} · ${rodPessoas(x)}</div></div>
+           <div class="modal-row" data-res="${x.id}" style="cursor:pointer;margin-bottom:8px;align-items:center;gap:12px;">
+        <div style="width:38px;height:38px;border-radius:50%;background:rgba(239,68,68,0.15);color:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0;">${escapeHtml((x.nome || "?").trim().charAt(0).toUpperCase())}</div>
+        <div style="flex:1;min-width:0;"><b>${escapeHtml(x.nome)}</b><div class="muted" style="font-size:12px;">${escapeHtml(x.telefone || "")} · ${rodPessoas(x)}</div></div>
         <div style="text-align:right;"><b style="color:#fbbf24;">${formatCurrency(x.valor_pago)}</b><div>${rodPill(x.status === "pago" ? "Pago" : x.status === "resgatado" ? "Resgatado" : "Cancelado", x.status)}</div></div>
       </div>`).join("") : `<div class="empty-state">Nenhuma reserva paga ainda.</div>`}`;
   document.getElementById("rd-toggle").onclick = async () => {
