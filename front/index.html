@@ -1172,27 +1172,44 @@ input:focus, textarea:focus, select:focus {
   </div>
 </div>
 
-<!-- ⚡ PIX ONLINE (MERCADO PAGO) -->
+<!-- ⚡ PIX ONLINE -->
 <div style="background:transparent; border:none; border-bottom:1px solid rgba(255,255,255,0.07); overflow:hidden;">
   <button onclick="toggleAccordion('pixonline')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; border-bottom:1px solid rgba(255,255,255,0.06); cursor:pointer;">
     <div style="display:flex; align-items:center; gap:10px;">
       <span style="font-size:20px;">⚡</span>
-      <span style="color:rgba(252,228,228,1); font-size:16px; font-weight:800;">Pix online (Mercado Pago)</span>
+      <span style="color:rgba(252,228,228,1); font-size:16px; font-weight:800;">Pix online</span>
     </div>
     <span id="arrow-pixonline" style="color:rgba(252,228,228,0.5); font-size:18px; transition:transform 0.2s;">▼</span>
   </button>
   <div id="accordion-pixonline" style="display:none; padding:0 24px 24px 24px; flex-direction:column; gap:12px;">
-    <p style="color:rgba(252,228,228,0.45); font-size:13px; margin:0 0 8px 0;">Cole o Access Token de produção do Mercado Pago. É com ele que o rodízio gera o Pix e confirma o pagamento sozinho.</p>
+    <p style="color:rgba(252,228,228,0.45); font-size:13px; margin:0 0 8px 0;">Escolha o banco que vai receber o Pix das reservas e configure a integração.</p>
+
     <label style="display:flex; flex-direction:column; gap:6px;">
-      <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Access Token</span>
-      <input type="password" id="settings-pix-token" placeholder="APP_USR-..."
+      <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Banco / Gateway</span>
+      <select id="settings-pix-tipo" onchange="onPixChange(this.value)"
         style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none;">
+        <option value="">Selecione...</option>
+        <option value="mercadopago">Mercado Pago</option>
+        <option value="asaas" disabled>Asaas (em breve)</option>
+        <option value="efi" disabled>Efí Bank (em breve)</option>
+        <option value="pagbank" disabled>PagBank (em breve)</option>
+      </select>
     </label>
-    <small style="color:rgba(252,228,228,0.35); font-size:11px; line-height:1.5;">
-      Encontre em mercadopago.com.br/developers → Suas integrações → Credenciais de produção.
-    </small>
+
+    <!-- CAMPOS MERCADO PAGO -->
+    <div id="pix-fields-mercadopago" style="display:none; flex-direction:column; gap:12px;">
+      <label style="display:flex; flex-direction:column; gap:6px;">
+        <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">Access Token</span>
+        <input type="password" id="settings-pix-token" placeholder="APP_USR-..."
+          style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none;">
+      </label>
+      <small style="color:rgba(252,228,228,0.35); font-size:11px; line-height:1.5;">
+        Use o Access Token de produção: mercadopago.com.br/developers → Suas integrações → Credenciais de produção.
+      </small>
+    </div>
+
     <div style="display:flex; gap:10px; margin-top:4px;">
-      <button class="primary-button" id="btn-salvar-pix" style="flex:1;">Salvar</button>
+      <button class="primary-button" id="btn-salvar-pix" style="flex:1;">Salvar configuração</button>
       <button class="ghost-button" id="btn-remover-pix">🗑️ Remover</button>
     </div>
     <p id="settings-pix-status" style="margin-top:4px; font-size:13px; min-height:18px;"></p>
