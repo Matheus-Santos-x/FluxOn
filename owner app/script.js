@@ -299,7 +299,7 @@ if (st.view === "overview") {
     const g = e.target.closest("[data-go]"); if (g) { st.screen = g.dataset.go; render(); window.scrollTo({ top: 0 }); }
   });
 
-const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos" };
+const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos", fidmodelo: "fidelidade", fidpiso: "fidelidade" };
   const SEM_PERIODO = ["home", "custos", "cuing", "cufichas", "cudesp", "fidelidade", "fidmodelo", "fidpiso"];
   const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", fidmodelo: "Modelo de fidelidade", fidpiso: "Piso dos prêmios", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF" };
   function render() {
