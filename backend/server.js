@@ -4389,13 +4389,24 @@ app.post("/api/v1/fidelidade/premios", async (req, res) => {
   }
 });
 
+// o Operacional nunca consegue deixar o custo abaixo do piso definido pelo dono
+async function premioCamposSeguros(id, body) {
+  const campos = pick(body, ["nome", "descricao", "pontos_necessarios", "foto_url", "ativo"]);
+  if (campos.pontos_necessarios !== undefined) {
+    const { data: atual } = await supabase.from("premios_fidelidade").select("piso_resgate").eq("id", id).maybeSingle();
+    const piso = Number(atual?.piso_resgate) || 0;
+    if (!(Number(campos.pontos_necessarios) >= piso)) campos.pontos_necessarios = piso;
+  }
+  return campos;
+}
+
 // Edita prêmio
 app.patch("/api/v1/fidelidade/premios/:id", requireRowOwner("premios_fidelidade"), async (req, res) => {
   try {
     const { id } = req.params;
     const { data, error } = await supabase
             .from("premios_fidelidade")
-      .update(pick(req.body, ["nome","descricao","pontos_necessarios","foto_url","ativo"]))
+      .update(await premioCamposSeguros(id, req.body))
       .eq("id", id)
       .select().single();
     if (error) return sendError(res, 500, "Erro ao atualizar prêmio");
@@ -4477,7 +4488,7 @@ app.get("/api/v1/fidelidade/cliente/:token", async (req, res) => {
         token: cliente.token_fidelidade,
         restaurant_id: cliente.restaurant_id
       },
-      premios: premios || [],
+      premios: (premios || []).filter(p => Number(p.piso_resgate) > 0 && Number(p.pontos_necessarios) >= Number(p.piso_resgate)),
       resgates: resgates || []
     });
   } catch (err) {
@@ -4509,8 +4520,11 @@ app.post("/api/v1/fidelidade/resgatar", async (req, res) => {
         .eq("id", item.premio_id)
         .single();
       if (!premio) return sendError(res, 404, `Prêmio ${item.premio_id} não encontrado`);
-      premiosCarrinho.push({ ...premio, quantidade: item.quantidade || 1 });
-      totalPontos += premio.pontos_necessarios * (item.quantidade || 1);
+      if (!(Number(premio.piso_resgate) > 0) || premio.restaurant_id !== cliente.restaurant_id)
+        return sendError(res, 400, "Este prêmio não está disponível para resgate");
+      const qtd = Math.min(20, Math.max(1, Math.floor(Number(item.quantidade)) || 1));
+      premiosCarrinho.push({ ...premio, quantidade: qtd });
+      totalPontos += Math.max(Number(premio.pontos_necessarios) || 0, Number(premio.piso_resgate)) * qtd;
     }
 
         const cfgFid = await configFidelidade(cliente.restaurant_id);
@@ -6272,6 +6286,79 @@ app.put("/owner/restaurants/:restaurant_id/fidelidade",
   } catch (err) {
     console.error("❌ PUT /owner/.../fidelidade:", err.message);
     return res.status(500).json({ error: "Erro ao salvar a fidelidade" });
+  }
+});
+
+/* ---------- fidelidade: piso dos prêmios (o dono define o mínimo de cada prêmio) ---------- */
+
+// lista os prêmios cadastrados no Operacional, com o piso de cada um
+app.get("/owner/restaurants/:restaurant_id/fidelidade/premios",
+  ownerLimitDados, requireOwnerScope, requireOwnerRestaurante, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const cfg = await configFidelidade(restaurant_id);
+    const { data, error } = await supabase.from("premios_fidelidade")
+      .select("id, nome, pontos_necessarios, piso_resgate")
+      .eq("restaurant_id", restaurant_id).eq("ativo", true).order("nome");
+    if (error) throw error;
+    const premios = data || [];
+    return res.json({
+      modelo: cfg.modelo,
+      premios,
+      pendentes: premios.filter((p) => !(Number(p.piso_resgate) > 0)).length
+    });
+  } catch (err) {
+    console.error("❌ GET /owner/.../fidelidade/premios:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar os prêmios" });
+  }
+});
+
+// o dono define o piso de um prêmio (se o custo atual ficou abaixo, ele sobe até o piso)
+app.put("/owner/restaurants/:restaurant_id/fidelidade/premios/:id/piso",
+  ownerLimitDados, requireOwnerScope, requireOwnerRestaurante, async (req, res) => {
+  try {
+    const { restaurant_id, id } = req.params;
+    const piso = Math.floor(Number(req.body?.piso));
+    if (!Number.isFinite(piso) || piso < 1 || piso > 1000000) {
+      return res.status(400).json({ error: "O piso deve ficar entre 1 e 1.000.000" });
+    }
+    const { data: premio } = await supabase.from("premios_fidelidade")
+      .select("id, pontos_necessarios").eq("id", id).eq("restaurant_id", restaurant_id).maybeSingle();
+    if (!premio) return res.status(404).json({ error: "Prêmio não encontrado" });
+
+    const campos = { piso_resgate: piso };
+    if ((Number(premio.pontos_necessarios) || 0) < piso) campos.pontos_necessarios = piso;
+    const { data, error } = await supabase.from("premios_fidelidade")
+      .update(campos).eq("id", id).eq("restaurant_id", restaurant_id)
+      .select("id, nome, pontos_necessarios, piso_resgate").single();
+    if (error) throw error;
+    return res.json({ ok: true, premio: data });
+  } catch (err) {
+    console.error("❌ PUT /owner/.../fidelidade/premios/:id/piso:", err.message);
+    return res.status(500).json({ error: "Erro ao salvar o piso" });
+  }
+});
+
+// avisos do sino (o servidor monta a lista na hora; novos tipos de aviso entram aqui)
+app.get("/owner/restaurants/:restaurant_id/notificacoes",
+  ownerLimitDados, requireOwnerScope, requireOwnerRestaurante, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const itens = [];
+    const { count } = await supabase.from("premios_fidelidade")
+      .select("id", { count: "exact", head: true })
+      .eq("restaurant_id", restaurant_id).eq("ativo", true).is("piso_resgate", null);
+    if (count > 0) {
+      itens.push({
+        id: "fid-piso", tipo: "fidelidade", gravidade: "alta", ir: "fidpiso",
+        titulo: "Defina o piso dos prêmios",
+        texto: `${count} prêmio${count > 1 ? "s" : ""} sem valor mínimo. Enquanto isso, ${count > 1 ? "eles não podem" : "ele não pode"} ser resgatado${count > 1 ? "s" : ""}.`
+      });
+    }
+    return res.json({ total: itens.length, itens });
+  } catch (err) {
+    console.error("❌ GET /owner/.../notificacoes:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar os avisos" });
   }
 });
 
