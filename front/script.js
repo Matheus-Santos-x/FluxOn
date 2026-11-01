@@ -1883,6 +1883,104 @@ function rodReserva(id) {
   m.querySelector("#rr-cancel")?.addEventListener("click", () => showConfirmModal("Cancelar esta reserva? As vagas voltam a ficar livres.", () => muda("cancelado")));
 }
 
+// ===== TELA DE COBRANÇA PIX (serve o rodízio e os próximos usos) =====
+async function pixCobrar(p) {
+  const r = await fetch(`${API_BASE}/api/v1/pix/${getRestaurantId()}/cobrancas`, {
+    method: "POST", headers: buildHeaders(),
+    body: JSON.stringify({ tipo: p.tipo, dados: p.dados, nome: p.nome, telefone: p.telefone })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.success) throw new Error(d?.error || "Não foi possível gerar o Pix");
+  pixTela(d, p);
+}
+
+function pixTela(d, p) {
+  document.getElementById("pix-tela-modal")?.remove();
+  const m = document.createElement("div");
+  m.id = "pix-tela-modal"; m.className = "modal-backdrop open";
+  m.innerHTML = `
+    <style>@keyframes pixpulse{0%,100%{opacity:1}50%{opacity:.3}}</style>
+    <div style="width:min(400px,92vw);background:#0f0f10;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:22px 22px 24px;text-align:center;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.6);">
+      <button id="pxt-x" class="icon-button" style="position:absolute;top:12px;right:12px;">×</button>
+      <div style="font-size:12px;font-weight:800;letter-spacing:1px;color:rgba(252,228,228,.5);text-transform:uppercase;">Pix para</div>
+      <div style="font-size:22px;font-weight:900;margin-top:2px;">${escapeHtml(p.titulo || "")}</div>
+      <div class="muted" style="font-size:13px;margin-top:4px;">${escapeHtml(p.detalhe || "")}</div>
+      <div style="font-size:38px;font-weight:900;color:#fbbf24;margin:14px 0;">${formatCurrency(d.valor)}</div>
+      <div id="pxt-corpo"></div>
+    </div>`;
+  document.body.appendChild(m);
+
+  const corpo = m.querySelector("#pxt-corpo");
+  let timer, poll, encerrado = false;
+  const parar = () => { clearInterval(timer); clearInterval(poll); };
+  const fechar = () => { parar(); m.remove(); };
+  m.querySelector("#pxt-x").onclick = fechar;
+  m.addEventListener("click", e => { if (e.target === m) fechar(); });
+
+  const pago = () => {
+    encerrado = true; parar();
+    corpo.innerHTML = `
+      <div style="width:76px;height:76px;margin:6px auto 12px;border-radius:50%;background:rgba(34,197,94,.15);border:2px solid #22c55e;color:#22c55e;font-size:40px;display:flex;align-items:center;justify-content:center;">✓</div>
+      <div style="font-size:18px;font-weight:900;color:#22c55e;">Pagamento confirmado</div>
+      <button class="primary-button" id="pxt-ok" style="width:100%;margin-top:18px;">Fechar</button>`;
+    m.querySelector("#pxt-ok").onclick = fechar;
+    try { p.onPago && p.onPago(d); } catch {}
+  };
+
+  const expirado = () => {
+    encerrado = true; parar();
+    corpo.innerHTML = `
+      <div style="font-size:18px;font-weight:900;color:#ef4444;margin:10px 0 6px;">Pix expirado</div>
+      <div class="muted" style="font-size:13px;">O tempo acabou e o pagamento não foi feito.</div>
+      <button class="primary-button" id="pxt-novo" style="width:100%;margin-top:18px;">Gerar novo Pix</button>`;
+    m.querySelector("#pxt-novo").onclick = async (ev) => {
+      const b = ev.currentTarget; b.disabled = true;
+      try { await pixCobrar(p); } catch (e) { alert(e.message); b.disabled = false; }
+    };
+  };
+
+  const checar = async () => {
+    if (encerrado) return;
+    try {
+      const r = await fetch(`${API_BASE}/api/v1/pix/${getRestaurantId()}/cobrancas/${d.cobranca_id}/status`);
+      const s = await r.json();
+      if (encerrado) return;
+      if (s.status === "pago") return pago();
+      if (s.status === "expirado" || s.status === "cancelado") return expirado();
+    } catch {}
+  };
+
+  corpo.innerHTML = `
+    ${d.pix_qr_base64 ? `<div style="background:#fff;border-radius:16px;padding:12px;display:inline-block;"><img src="data:image/png;base64,${d.pix_qr_base64}" style="width:220px;height:220px;display:block;" alt="QR Code Pix"></div>` : ""}
+    <button class="primary-button" id="pxt-copiar" style="width:100%;margin-top:14px;">Copiar código Pix</button>
+    <div style="margin-top:14px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;">
+      <span style="width:8px;height:8px;border-radius:50%;background:var(--primary);animation:pixpulse 1.2s infinite;"></span>
+      <span>Aguardando pagamento</span><span class="muted">·</span><b id="pxt-tempo">--:--</b>
+    </div>`;
+
+  m.querySelector("#pxt-copiar").onclick = async (ev) => {
+    const b = ev.currentTarget;
+    try { await navigator.clipboard.writeText(d.pix_copia_cola); }
+    catch { const t = document.createElement("textarea"); t.value = d.pix_copia_cola; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
+    b.textContent = "✓ Código copiado";
+    setTimeout(() => { b.textContent = "Copiar código Pix"; }, 2000);
+  };
+
+  const fim = new Date(d.expira_em).getTime();
+  const tick = () => {
+    const s = Math.max(0, Math.round((fim - Date.now()) / 1000));
+    const el = m.querySelector("#pxt-tempo");
+    if (el) el.textContent = `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+    if (s <= 0 && !encerrado) {
+      clearInterval(timer);
+      checar().then(() => { if (!encerrado) expirado(); });
+    }
+  };
+  timer = setInterval(tick, 1000);
+  poll = setInterval(checar, 4000);
+  tick();
+}
+
 function rodAdicionar() {
   const r = rodState.atual;
   const pa = Number(r.preco), pc = r.preco_crianca == null ? pa : Number(r.preco_crianca);
@@ -1890,13 +1988,13 @@ function rodAdicionar() {
     <div class="modal-header"><h3>Adicionar reserva</h3><button class="icon-button" id="ra-x">×</button></div>
     <div class="modal-body form-body">
       <label>Nome <input id="ra-nome"></label>
-      <label>Telefone (opcional) <input id="ra-tel" type="tel"></label>
+      <label>Telefone (obrigatório para cobrar no Pix) <input id="ra-tel" type="tel"></label>
       <label>Adultos <input id="ra-ad" type="number" min="0" value="1"></label>
       <label>Crianças <input id="ra-cr" type="number" min="0" value="0"></label>
       <div id="ra-total" style="font-weight:900;font-size:18px;color:#fbbf24;"></div>
-      <p class="muted" style="font-size:12px;">Entra como reserva paga. Use para quem pagou no balcão, em dinheiro ou por telefone.</p>
+      <p class="muted" style="font-size:12px;">"Cobrar no Pix" mostra o QR na tela e a reserva só entra na lista depois que o pagamento cair. "Já pago" registra direto (dinheiro, maquininha, balcão).</p>
     </div>
-    <div class="modal-actions"><button class="primary-button" id="ra-ok">Adicionar</button></div>`);
+    <div class="modal-actions"><button class="ghost-button" id="ra-ok">Já pago (balcão)</button><button class="primary-button" id="ra-pix">Cobrar no Pix</button></div>`);
   const calc = () => {
     const ad = parseInt(m.querySelector("#ra-ad").value) || 0, cr = parseInt(m.querySelector("#ra-cr").value) || 0;
     m.querySelector("#ra-total").textContent = "Total: " + formatCurrency(ad * pa + cr * pc);
@@ -1904,6 +2002,25 @@ function rodAdicionar() {
   ["#ra-ad", "#ra-cr"].forEach(s => m.querySelector(s).addEventListener("input", calc));
   calc();
   m.querySelector("#ra-x").onclick = () => m.remove();
+  m.querySelector("#ra-pix").onclick = async (ev) => {
+    const btn = ev.currentTarget;
+    const nome = m.querySelector("#ra-nome").value.trim();
+    const tel = m.querySelector("#ra-tel").value.trim();
+    const ad = parseInt(m.querySelector("#ra-ad").value) || 0, cr = parseInt(m.querySelector("#ra-cr").value) || 0;
+    if (!nome) return alert("Informe o nome");
+    if (!tel) return alert("Informe o telefone para cobrar no Pix");
+    if (ad + cr < 1) return alert("Informe quantas pessoas");
+    btn.disabled = true;
+    try {
+      await pixCobrar({
+        tipo: "rodizio", dados: { rodizio_id: r.id, adultos: ad, criancas: cr },
+        nome, telefone: tel, titulo: nome,
+        detalhe: `Reserva de ${ad + cr} vaga${ad + cr > 1 ? "s" : ""} · ${rodPessoas({ adultos: ad, criancas: cr })}`,
+        onPago: rodRecarregar
+      });
+      m.remove();
+    } catch (e) { alert(e.message); btn.disabled = false; }
+  };
   const ok = m.querySelector("#ra-ok");
   ok.onclick = async () => {
     ok.disabled = true;
