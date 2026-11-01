@@ -1188,95 +1188,288 @@ app.patch("/api/v1/rodizio/:restaurant_id/reservas/:res_id/pessoas", async (req,
   }
 });
 
-// token do Mercado Pago para Pix online (usa a seção "Pix online"; se faltar, cai na da maquininha)
-async function mpTokenPix(restaurant_id) {
-  const a = await getIntegracao(restaurant_id, "pix_online");
-  if (a?.mp_access_token) return a.mp_access_token;
-  const b = await getIntegracao(restaurant_id, "maquininha");
-  return b?.mp_access_token || null;
+/* ================= PIX ONLINE: motor de cobranças =================
+   Para ligar um uso novo (pedido do cardápio, reserva de mesa...), acrescente um tipo em PIX_TIPOS.
+   O motor cuida do resto: valor só do servidor, QR no banco escolhido e pagamento conferido no banco. */
+
+class PixErro extends Error {
+  constructor(status, message) { super(message); this.status = status; }
 }
 
-// cria a cobrança Pix de uma reserva (o Food Tree vai chamar esta rota)
-app.post("/api/v1/rodizio/:restaurant_id/:id/pix", async (req, res) => {
-  let reservaId = null;
+const PIX_EXPIRA_MIN = 15;
+const PIX_VALOR_MAX = 50000;
+
+const limiterPixCriar = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20, // 20 cobranças a cada 10 minutos por IP
+  message: { error: "Muitas tentativas. Aguarde alguns minutos." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/* ---- bancos: um adaptador por banco (criar, refDoAviso, consultar) ---- */
+const PIX_PROVEDORES = {
+  mercadopago: {
+    async criar({ cred, valor, descricao, referencia, nome, telefone, expiraEm, webhookUrl }) {
+      const expiraMp = new Date(expiraEm.getTime() - 3 * 60 * 60 * 1000).toISOString().replace("Z", "-03:00");
+      const r = await fetch("https://api.mercadopago.com/v1/payments", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${cred.mp_access_token}`,
+          "Content-Type": "application/json",
+          "X-Idempotency-Key": referencia
+        },
+        body: JSON.stringify({
+          transaction_amount: valor,
+          description: descricao,
+          payment_method_id: "pix",
+          date_of_expiration: expiraMp,
+          external_reference: referencia,
+          notification_url: webhookUrl,
+          payer: { email: `${telefone}@reserva.fluxon.app`, first_name: String(nome).trim().split(" ")[0] }
+        })
+      });
+      const mp = await r.json();
+      const td = mp?.point_of_interaction?.transaction_data;
+      if (!r.ok || !td?.qr_code) {
+        console.error("❌ MP pix:", JSON.stringify(mp));
+        throw new Error(mp?.message || "Não foi possível gerar o Pix");
+      }
+      return { ref: String(mp.id), copiaECola: td.qr_code, qrBase64: td.qr_code_base64 || null };
+    },
+    // o aviso do banco só diz qual pagamento mudou; a confirmação é sempre buscada no banco
+    refDoAviso(req) {
+      const tipo = req.body?.type || req.query?.type || req.query?.topic;
+      if (tipo && tipo !== "payment") return null;
+      return req.body?.data?.id || req.query?.["data.id"] || req.query?.id || null;
+    },
+    async consultar({ cred, ref }) {
+      const r = await fetch(`https://api.mercadopago.com/v1/payments/${ref}`, {
+        headers: { Authorization: `Bearer ${cred.mp_access_token}` }
+      });
+      const p = await r.json();
+      if (!r.ok) return null;
+      return { pago: p.status === "approved", valor: Number(p.transaction_amount) || 0 };
+    }
+  }
+  // próximos bancos entram aqui, no mesmo formato
+};
+
+// qual banco o restaurante escolheu em Configurações → Pix online
+async function pixConfig(restaurant_id) {
+  const a = await getIntegracao(restaurant_id, "pix_online");
+  const tipo = a?.tipo || (a?.mp_access_token ? "mercadopago" : null);
+  if (tipo && PIX_PROVEDORES[tipo]) return { tipo, cred: a };
+  const b = await getIntegracao(restaurant_id, "maquininha"); // sem Pix online: tenta o token da maquininha Mercado Pago
+  if (b?.mp_access_token) return { tipo: "mercadopago", cred: b };
+  return null;
+}
+
+/* ---- tipos de cobrança: um por uso ----
+   publico: true  → o cliente pode pedir sem login (ex.: página de reserva)
+   publico: false → só com login do restaurante ou chave do servidor
+   preparar()  valida e calcula o valor NO SERVIDOR; devolve { valor, descricao, referencia_id }
+   aoPagar()   roda quando o banco confirma o pagamento
+   aoFalhar()  desfaz o que o preparar criou, se o banco não gerar o Pix */
+const PIX_TIPOS = {
+  rodizio: {
+    publico: true,
+    async preparar({ restaurant_id, dados, pagador, expira }) {
+      const ad = Math.max(0, parseInt(dados.adultos) || 0), cr = Math.max(0, parseInt(dados.criancas) || 0);
+      if (ad + cr < 1 || ad + cr > 60) throw new PixErro(400, "Informe quantas pessoas");
+
+      const { data: rod } = await supabase.from("rodizios").select("*")
+        .eq("id", dados.rodizio_id).eq("restaurant_id", restaurant_id).maybeSingle();
+      if (!rod) throw new PixErro(404, "Rodízio não encontrado");
+      if (rod.status !== "aberto") throw new PixErro(409, "Este rodízio não está aberto para reservas");
+
+      const ocupadas = (await rodizioOcupadas(restaurant_id, [rod.id]))[rod.id] || 0;
+      if (ocupadas + ad + cr > (rod.vagas || 0)) throw new PixErro(409, "Vagas insuficientes");
+
+      const precoAd = Number(rod.preco) || 0;
+      const precoCr = rod.preco_crianca == null ? precoAd : Number(rod.preco_crianca) || 0;
+      const valor = Math.round((ad * precoAd + cr * precoCr) * 100) / 100;
+
+      const { data: reserva, error } = await supabase.from("rodizio_reservas").insert([{
+        restaurant_id, rodizio_id: rod.id, nome: pagador.nome, telefone: pagador.telefone,
+        adultos: ad, criancas: cr, valor_pago: valor, status: "aguardando", expira_em: expira.toISOString()
+      }]).select().single();
+      if (error) throw error;
+
+      // confere de novo (duas pessoas ao mesmo tempo)
+      const depois = (await rodizioOcupadas(restaurant_id, [rod.id]))[rod.id] || 0;
+      if (depois > (rod.vagas || 0)) {
+        await supabase.from("rodizio_reservas").delete().eq("id", reserva.id);
+        throw new PixErro(409, "Vagas insuficientes");
+      }
+      return { valor, descricao: `${rod.nome} - ${pagador.nome}`.slice(0, 200), referencia_id: reserva.id };
+    },
+    async aoPagar({ cobranca }) {
+      const { data: reserva } = await supabase.from("rodizio_reservas")
+        .update({ status: "pago", valor_pago: cobranca.valor, pagamento_ref: cobranca.pagamento_ref })
+        .eq("id", cobranca.referencia_id).eq("restaurant_id", cobranca.restaurant_id).eq("status", "aguardando")
+        .select().maybeSingle();
+      if (!reserva) throw new Error("a reserva não estava mais aguardando pagamento");
+      const { data: rod } = await supabase.from("rodizios").select("vagas").eq("id", reserva.rodizio_id).maybeSingle();
+      const total = (await rodizioOcupadas(cobranca.restaurant_id, [reserva.rodizio_id]))[reserva.rodizio_id] || 0;
+      if (rod && total >= (rod.vagas || 0)) await supabase.from("rodizios").update({ status: "fechado" }).eq("id", reserva.rodizio_id);
+    },
+    async aoFalhar({ restaurant_id, referencia_id }) {
+      await supabase.from("rodizio_reservas").delete()
+        .eq("id", referencia_id).eq("restaurant_id", restaurant_id).eq("status", "aguardando");
+    }
+  }
+  // pedido: { publico: true, preparar, aoPagar, aoFalhar }          ← próximo
+  // reserva_mesa: { publico: true, preparar, aoPagar, aoFalhar }    ← depois
+};
+
+/* ---- motor ---- */
+async function pixCriarCobranca({ restaurant_id, tipo, dados, pagador }) {
+  const def = PIX_TIPOS[tipo];
+  if (!def) throw new PixErro(400, "Tipo de cobrança inválido");
+  const cfg = await pixConfig(restaurant_id);
+  if (!cfg) throw new PixErro(400, "Pix online não configurado neste restaurante");
+
+  // limites contra abuso
+  const agora = new Date().toISOString();
+  const { count: abertasTel } = await supabase.from("cobrancas_pix").select("id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurant_id).eq("pagador_telefone", pagador.telefone)
+    .eq("status", "aguardando").gt("expira_em", agora);
+  if (abertasTel >= 3) throw new PixErro(429, "Você já tem Pix em aberto. Pague ou aguarde expirar.");
+  const { count: abertasRest } = await supabase.from("cobrancas_pix").select("id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurant_id).eq("status", "aguardando").gt("expira_em", agora);
+  if (abertasRest >= 200) throw new PixErro(429, "Muitas cobranças em aberto. Tente de novo em instantes.");
+
+  const expira = new Date(Date.now() + PIX_EXPIRA_MIN * 60 * 1000);
+  const prep = await def.preparar({ restaurant_id, dados: dados || {}, pagador, expira });
+  const falhar = () => def.aoFalhar?.({ restaurant_id, referencia_id: prep.referencia_id });
+
+  const valor = Math.round(Number(prep.valor) * 100) / 100;
+  if (!(valor > 0) || valor > PIX_VALOR_MAX) { await falhar(); throw new PixErro(400, "Valor inválido"); }
+
+  const { data: cobranca, error } = await supabase.from("cobrancas_pix").insert([{
+    restaurant_id, tipo, referencia_id: prep.referencia_id, valor, descricao: prep.descricao,
+    status: "aguardando", provedor: cfg.tipo, pagador_nome: pagador.nome, pagador_telefone: pagador.telefone,
+    expira_em: expira.toISOString()
+  }]).select().single();
+  if (error) { await falhar(); throw error; }
+
+  const publico = process.env.PUBLIC_URL || "https://backend.evoriseai.com.br";
+  let pix;
   try {
-    const { restaurant_id, id } = req.params;
-    const { nome, telefone, adultos, criancas } = req.body || {};
-    const ad = Math.max(0, parseInt(adultos) || 0), cr = Math.max(0, parseInt(criancas) || 0);
+    pix = await PIX_PROVEDORES[cfg.tipo].criar({
+      cred: cfg.cred, valor, descricao: prep.descricao, referencia: cobranca.id,
+      nome: pagador.nome, telefone: pagador.telefone, expiraEm: expira,
+      webhookUrl: `${publico}/api/v1/pix/webhook/${cfg.tipo}?rid=${restaurant_id}`
+    });
+  } catch (e) {
+    console.error("❌ pix criar:", e.message);
+    await supabase.from("cobrancas_pix").delete().eq("id", cobranca.id);
+    await falhar();
+    throw new PixErro(502, "Não foi possível gerar o Pix agora. Tente de novo.");
+  }
+
+  await supabase.from("cobrancas_pix").update({
+    pagamento_ref: pix.ref, pix_copia_cola: pix.copiaECola, pix_qr_base64: pix.qrBase64
+  }).eq("id", cobranca.id);
+
+  return {
+    cobranca_id: cobranca.id, valor,
+    pix_copia_cola: pix.copiaECola, pix_qr_base64: pix.qrBase64, expira_em: expira.toISOString()
+  };
+}
+
+// confere o pagamento direto no banco e, se pago, executa a ação do tipo
+async function pixConfirmar(cobranca) {
+  if (!cobranca || cobranca.status !== "aguardando" || !cobranca.pagamento_ref) return cobranca;
+  const cfg = await pixConfig(cobranca.restaurant_id);
+  if (!cfg || cfg.tipo !== cobranca.provedor) return cobranca;
+
+  const info = await PIX_PROVEDORES[cfg.tipo].consultar({ cred: cfg.cred, ref: cobranca.pagamento_ref });
+  if (!info?.pago) return cobranca;
+  if (info.valor + 0.009 < Number(cobranca.valor)) {
+    console.warn(`⚠️ Pix ${cobranca.id}: pago ${info.valor}, esperado ${cobranca.valor}. Ignorado.`);
+    return cobranca;
+  }
+
+  const { data: ok } = await supabase.from("cobrancas_pix")
+    .update({ status: "pago", pago_em: new Date().toISOString() })
+    .eq("id", cobranca.id).eq("status", "aguardando").select().maybeSingle();
+  if (!ok) return cobranca; // outra confirmação chegou primeiro
+
+  try {
+    await PIX_TIPOS[ok.tipo]?.aoPagar({ cobranca: ok });
+    console.log(`💳 Pix pago: ${ok.tipo} ${ok.referencia_id} (R$ ${ok.valor})`);
+  } catch (e) {
+    // pagou, mas a ação falhou: fica registrado para resolver na mão
+    console.error(`❌ Pix ${ok.id} pago mas aoPagar falhou:`, e.message);
+    await supabase.from("cobrancas_pix").update({ pendencia: String(e.message).slice(0, 300) }).eq("id", ok.id);
+  }
+  return ok;
+}
+
+/* ---- rotas ---- */
+
+// cria uma cobrança Pix
+app.post("/api/v1/pix/:restaurant_id/cobrancas", limiterPixCriar, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const { tipo, dados, nome, telefone } = req.body || {};
+    const def = PIX_TIPOS[tipo];
+    if (!def) return sendError(res, 400, "Tipo de cobrança inválido");
+    if (!(await restaurantExists(restaurant_id))) return sendError(res, 404, "Restaurante não encontrado");
+
+    if (!def.publico) {
+      const a = readAuth(req);
+      if (!a) return sendError(res, 401, "Não autorizado");
+      if (a.kind === "user" && a.restaurant_id !== restaurant_id) return sendError(res, 403, "Não autorizado");
+    }
+
     const tel = normalizePhone(telefone);
     if (!String(nome || "").trim()) return sendError(res, 400, "Informe o nome");
     if (!tel) return sendError(res, 400, "Informe o telefone");
-    if (ad + cr < 1 || ad + cr > 60) return sendError(res, 400, "Informe quantas pessoas");
 
-    const { data: rod } = await supabase.from("rodizios").select("*")
-      .eq("id", id).eq("restaurant_id", restaurant_id).maybeSingle();
-    if (!rod) return sendError(res, 404, "Rodízio não encontrado");
-    if (rod.status !== "aberto") return sendError(res, 409, "Este rodízio não está aberto para reservas");
-
-        const mpToken = await mpTokenPix(restaurant_id);
-    if (!mpToken) return sendError(res, 400, "Mercado Pago não configurado neste restaurante");
-
-    const ocupadas = (await rodizioOcupadas(restaurant_id, [id]))[id] || 0;
-    if (ocupadas + ad + cr > (rod.vagas || 0)) return sendError(res, 409, "Vagas insuficientes");
-
-    const precoAd = Number(rod.preco) || 0;
-    const precoCr = rod.preco_crianca == null ? precoAd : Number(rod.preco_crianca) || 0;
-    const valor = Math.round((ad * precoAd + cr * precoCr) * 100) / 100;
-    const expira = new Date(Date.now() + 15 * 60 * 1000);
-
-    const { data: reserva, error } = await supabase.from("rodizio_reservas").insert([{
-      restaurant_id, rodizio_id: id, nome: String(nome).trim(), telefone: tel,
-      adultos: ad, criancas: cr, valor_pago: valor, status: "aguardando", expira_em: expira.toISOString()
-    }]).select().single();
-    if (error) throw error;
-    reservaId = reserva.id;
-
-    // confere de novo (duas pessoas ao mesmo tempo)
-    const depois = (await rodizioOcupadas(restaurant_id, [id]))[id] || 0;
-    if (depois > (rod.vagas || 0)) {
-      await supabase.from("rodizio_reservas").delete().eq("id", reservaId);
-      return sendError(res, 409, "Vagas insuficientes");
-    }
-
-    const publico = process.env.PUBLIC_URL || "https://backend.evoriseai.com.br";
-    const expiraMp = new Date(expira.getTime() - 3 * 60 * 60 * 1000).toISOString().replace("Z", "-03:00");
-    const mpResp = await fetch("https://api.mercadopago.com/v1/payments", {
-      method: "POST",
-      headers: {
-                Authorization: `Bearer ${mpToken}`,
-        "Content-Type": "application/json",
-        "X-Idempotency-Key": reservaId
-      },
-      body: JSON.stringify({
-        transaction_amount: valor,
-        description: `${rod.nome} - ${String(nome).trim()}`.slice(0, 200),
-        payment_method_id: "pix",
-        date_of_expiration: expiraMp,
-        external_reference: reservaId,
-        notification_url: `${publico}/api/v1/mp/webhook-rodizio?rid=${restaurant_id}`,
-        payer: { email: `${tel}@reserva.fluxon.app`, first_name: String(nome).trim().split(" ")[0] }
-      })
+    const out = await pixCriarCobranca({
+      restaurant_id, tipo, dados, pagador: { nome: String(nome).trim().slice(0, 80), telefone: tel }
     });
-    const mp = await mpResp.json();
-    const td = mp?.point_of_interaction?.transaction_data;
-    if (!mpResp.ok || !td?.qr_code) {
-      console.error("❌ MP pix rodizio:", JSON.stringify(mp));
-      await supabase.from("rodizio_reservas").delete().eq("id", reservaId);
-      return sendError(res, 502, mp?.message || "Não foi possível gerar o Pix");
-    }
-
-    await supabase.from("rodizio_reservas").update({
-      pagamento_ref: String(mp.id), pix_copia_cola: td.qr_code, pix_qr_base64: td.qr_code_base64 || null
-    }).eq("id", reservaId);
-
-    return res.status(201).json({
-      success: true, reserva_id: reservaId, valor,
-      pix_copia_cola: td.qr_code, pix_qr_base64: td.qr_code_base64 || null, expira_em: expira.toISOString()
-    });
+    return res.status(201).json({ success: true, ...out });
   } catch (err) {
-    console.error("❌ rodizio/pix:", err.message);
-    if (reservaId) await supabase.from("rodizio_reservas").delete().eq("id", reservaId);
+    if (err instanceof PixErro) return sendError(res, err.status, err.message);
+    console.error("❌ pix/cobrancas:", err.message);
     return sendError(res, 500, "Erro ao gerar o Pix");
+  }
+});
+
+// o cliente pergunta "já paguei?" (confere no banco mesmo se o aviso atrasar)
+app.get("/api/v1/pix/:restaurant_id/cobrancas/:id/status", async (req, res) => {
+  try {
+    const { data } = await supabase.from("cobrancas_pix").select("*")
+      .eq("id", req.params.id).eq("restaurant_id", req.params.restaurant_id).maybeSingle();
+    if (!data) return sendError(res, 404, "Cobrança não encontrada");
+    let c = data;
+    if (c.status === "aguardando" && new Date(c.expira_em) > new Date()) c = await pixConfirmar(c);
+    const expirou = c.status === "aguardando" && new Date(c.expira_em) < new Date();
+    return res.json({ status: expirou ? "expirado" : c.status, valor: c.valor, expira_em: c.expira_em });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao consultar a cobrança");
+  }
+});
+
+// o banco avisa aqui que algo mudou; o pagamento é sempre conferido no banco
+app.post("/api/v1/pix/webhook/:provedor", async (req, res) => {
+  try {
+    const rid = req.query.rid;
+    const provedor = PIX_PROVEDORES[req.params.provedor];
+    if (!provedor || !rid) return res.sendStatus(200);
+    const ref = provedor.refDoAviso(req);
+    if (!ref) return res.sendStatus(200);
+    const { data: cobranca } = await supabase.from("cobrancas_pix").select("*")
+      .eq("restaurant_id", rid).eq("pagamento_ref", String(ref)).maybeSingle();
+    if (cobranca) await pixConfirmar(cobranca);
+    return res.sendStatus(200);
+  } catch (err) {
+    console.error("❌ pix/webhook:", err.message);
+    return res.sendStatus(500);
   }
 });
 
@@ -1294,43 +1487,6 @@ app.get("/api/v1/rodizio/:restaurant_id/reservas/:res_id/status", async (req, re
   }
 });
 
-// o Mercado Pago avisa aqui quando o Pix é pago (sem login: a confirmação é buscada direto no Mercado Pago)
-app.post("/api/v1/mp/webhook-rodizio", async (req, res) => {
-  try {
-    const rid = req.query.rid;
-    const tipo = req.body?.type || req.query?.type || req.query?.topic;
-    const paymentId = req.body?.data?.id || req.query?.["data.id"] || req.query?.id;
-    if (!rid || !paymentId || (tipo && tipo !== "payment")) return res.sendStatus(200);
-
-        const mpToken = await mpTokenPix(rid);
-    if (!mpToken) return res.sendStatus(200);
-
-    const r = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-      headers: { Authorization: `Bearer ${mpToken}` }
-    });
-    const p = await r.json();
-    if (!r.ok || p.status !== "approved" || !p.external_reference) return res.sendStatus(200);
-
-    const { data: reserva } = await supabase.from("rodizio_reservas").select("*")
-      .eq("id", p.external_reference).eq("restaurant_id", rid).eq("pagamento_ref", String(p.id)).maybeSingle();
-    if (!reserva || reserva.status !== "aguardando") return res.sendStatus(200);
-
-    const { data: ok } = await supabase.from("rodizio_reservas")
-      .update({ status: "pago", valor_pago: Number(p.transaction_amount) || reserva.valor_pago })
-      .eq("id", reserva.id).eq("status", "aguardando").select().maybeSingle();
-
-    if (ok) {
-      const { data: rod } = await supabase.from("rodizios").select("vagas").eq("id", reserva.rodizio_id).maybeSingle();
-      const total = (await rodizioOcupadas(rid, [reserva.rodizio_id]))[reserva.rodizio_id] || 0;
-      if (rod && total >= (rod.vagas || 0)) await supabase.from("rodizios").update({ status: "fechado" }).eq("id", reserva.rodizio_id);
-      console.log(`💳 Rodízio: reserva ${reserva.id} paga via Pix (${reserva.nome})`);
-    }
-    return res.sendStatus(200);
-  } catch (err) {
-    console.error("❌ webhook-rodizio:", err.message);
-    return res.sendStatus(500);
-  }
-});
 
 // ✅ NOVA ROTA — Adiciona itens novos ao pedido existente e imprime só os novos
 app.patch("/api/v1/pedidos/:id/adicionar-itens", requireRowOwner("orders"), async (req, res) => {
