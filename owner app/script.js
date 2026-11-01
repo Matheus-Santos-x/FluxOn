@@ -237,6 +237,37 @@
   }
 $("back").addEventListener("click", () => { const de = st.screen; st.screen = PAI[de] || "home"; window.scrollTo({ top: 0 }); if (de === "custos") carregar(); else render(); });
 
+  /* ---------- sino de avisos ---------- */
+  const sino = { itens: [] };
+  async function atualizarSino() {
+    if (DEMO || !st.owner) return;
+    const multi = st.view === "overview";
+    const lojas = multi ? st.restaurants : st.restaurants.filter((r) => r.id === st.view);
+    const listas = await Promise.all(lojas.map((r) =>
+      api(`/owner/restaurants/${encodeURIComponent(r.id)}/notificacoes`)
+        .then((d) => (d.itens || []).map((i) => ({ ...i, loja: r }))).catch(() => [])));
+    sino.itens = listas.flat();
+    $("bell-dot").classList.toggle("hidden", !sino.itens.length);
+    $("bell-panel").innerHTML = `<div class="who"><b>Avisos</b>${sino.itens.length ? "" : '<span class="muted">Nenhum aviso por enquanto.</span>'}</div>` +
+      sino.itens.map((i) => `<button data-ir="${esc(i.ir)}" data-loja="${esc(i.loja.id)}" role="menuitem"><span class="name wrap"><b>${esc(i.titulo)}</b><br><span class="muted" style="font-size:12px">${esc(i.texto)}${st.restaurants.length > 1 ? " · " + esc(i.loja.name) : ""}</span></span><span class="tick">›</span></button>`).join("");
+  }
+  const abrirSino = (abrir) => {
+    $("bell-panel").classList.toggle("hidden", !abrir);
+    $("bell").setAttribute("aria-expanded", String(abrir));
+    if (abrir) abrirMenu(false);
+  };
+  $("bell").addEventListener("click", (e) => { e.stopPropagation(); abrirSino($("bell-panel").classList.contains("hidden")); });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".bell-wrap")) abrirSino(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") abrirSino(false); });
+  $("bell-panel").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ir]"); if (!b) return;
+    abrirSino(false);
+    const loja = b.dataset.loja, tela = b.dataset.ir;
+    if (st.view === loja && st.dash) { st.screen = tela; render(); }
+    else { st.view = loja; st.screen = tela; store.set("fluxon_owner_view", loja); montarAvatar(); carregar(); }
+    window.scrollTo({ top: 0 });
+  });
+
   /* ---------- carregamento ---------- */
   const qs = () => (st.period === "custom" ? `period=custom&from=${st.from}&to=${st.to}` : `period=${st.period}`);
   async function carregar() {
@@ -256,6 +287,7 @@ if (st.view === "overview") {
         if (my !== st.reqId) return; st.dash = d; st.fin = f; st.ov = null;
       }
       render();
+      atualizarSino();
     } catch (e) {
       if (my !== st.reqId) return;
       $("content").innerHTML = `<div class="card err"><p style="margin:0 0 12px">${esc(e.message)}</p><button class="btn" id="retry">Tentar de novo</button></div>`;
@@ -268,8 +300,8 @@ if (st.view === "overview") {
   });
 
 const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos" };
-  const SEM_PERIODO = ["home", "custos", "cuing", "cufichas", "cudesp"];
-  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF" };
+  const SEM_PERIODO = ["home", "custos", "cuing", "cufichas", "cudesp", "fidelidade", "fidmodelo", "fidpiso"];
+  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", fidmodelo: "Modelo de fidelidade", fidpiso: "Piso dos prêmios", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF" };
   function render() {
     const ov = st.view === "overview";
     $("back").classList.toggle("hidden", ov || st.screen === "home");
@@ -278,7 +310,7 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
     if (ov) { $("title").textContent = "Visão geral"; $("content").innerHTML = telaOverview(st.ov); return; }
     const d = st.dash;
     $("title").textContent = st.screen === "home" ? d.restaurant.name : TITULOS[st.screen];
-    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
+    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, fidmodelo: telaFidModelo, fidpiso: telaFidPiso, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
     $("content").innerHTML = T(d);
     if (st.screen === "pdf") bindPdf(d);
   }
@@ -582,22 +614,37 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
       <section class="card"><h2>Tipo de serviço</h2><div class="split">${c.origem.total ? linhas(c.servico, { local: "No local (salão e balcão)", delivery: "Delivery" }) : `<p class="foot">Sem pedidos no período.</p>`}</div></section>`;
   }
 
-
+  /* ---------- fidelidade: menu ---------- */
   function telaFidelidade() {
+    const my = ++st.reqId;
+    api(`/owner/restaurants/${encodeURIComponent(st.view)}/fidelidade/premios`).then((r) => {
+      if (my !== st.reqId || st.screen !== "fidelidade") return;
+      const n = Number(r.pendentes) || 0, dot = $("fid-dot"), sub = $("fid-sub");
+      if (dot) dot.classList.toggle("hidden", !n);
+      if (sub && n) sub.textContent = `${n} prêmio${n > 1 ? "s" : ""} sem piso · defina agora`;
+    }).catch(() => {});
+    return `<section class="card"><h2>Fidelidade</h2><ul class="list">
+      ${cuLinha("fidmodelo", "star", "Modelo de fidelidade", "Pontos ou selos e quanto o cliente ganha")}
+      <li><button class="row-btn" data-go="fidpiso"><span class="row-ic">${ic("lock")}</span><span class="row-t"><b>Piso dos prêmios</b><span id="fid-sub">Valor mínimo para resgatar cada prêmio</span></span><span class="alerta-dot hidden" id="fid-dot"></span><span class="chev">›</span></button></li>
+    </ul></section>`;
+  }
+
+  /* ---------- fidelidade: modelo (pontos ou selos) ---------- */
+  function telaFidModelo() {
     const my = ++st.reqId, base = `/owner/restaurants/${encodeURIComponent(st.view)}/fidelidade`;
     api(base).then((cfg) => {
-      if (my !== st.reqId || st.screen !== "fidelidade") return;
+      if (my !== st.reqId || st.screen !== "fidmodelo") return;
       let modelo = cfg.modelo === "selos" ? "selos" : "pontos";
       const num = (v) => Number(String(v).replace(",", "."));
       const desenhar = () => {
         const selos = modelo === "selos";
         $("content").innerHTML = `
           <section class="card"><h2>Como o cliente ganha recompensa</h2>
-            <div style="display:flex;gap:8px;margin-bottom:10px">
-              <button class="chip" data-m="pontos" aria-selected="${!selos}" style="flex:1">Pontos</button>
-              <button class="chip" data-m="selos" aria-selected="${selos}" style="flex:1">Selos</button>
-            </div>
-            <p class="foot" style="text-align:left">${selos
+            <select id="fid-modelo" aria-label="Modelo de fidelidade">
+              <option value="pontos"${selos ? "" : " selected"}>Pontos</option>
+              <option value="selos"${selos ? " selected" : ""}>Selos</option>
+            </select>
+            <p class="foot" style="text-align:left;margin-top:10px">${selos
               ? "Selos: o cliente ganha 1 selo por pedido a partir de um valor mínimo. Bom para quem busca visitas no salão."
               : "Pontos: o cliente ganha pontos por cada real gasto. Bom para delivery e pedidos de valores variados."}</p>
           </section>
@@ -606,7 +653,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
             <p class="foot" id="fid-ex" style="text-align:left;margin-top:10px"></p>
           </section>
           <button class="btn primary" id="fid-save" style="width:100%">Salvar</button>
-          <p class="foot">Vale para novos pedidos. O saldo que os clientes já têm não muda.</p>`;
+          <p class="foot">Vale para novos pedidos. O saldo que os clientes já têm não muda.<br>Cadastre as recompensas no painel Operacional e defina o piso de cada uma em Piso dos prêmios.</p>`;
         const inp = $("fid-valor"), ex = $("fid-ex");
         const atualizar = () => {
           const v = num(inp.value);
@@ -615,10 +662,10 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
             : `Um pedido de ${brl(50)} rende ${int(Math.floor(50 * v))} pontos.`;
         };
         inp.addEventListener("input", atualizar); atualizar();
-        document.querySelectorAll("[data-m]").forEach((b) => b.addEventListener("click", () => {
+        $("fid-modelo").addEventListener("change", (e) => {
           const v = num(inp.value); if (v > 0) cfg[selos ? "valor_selo" : "pontos_por_real"] = v;
-          modelo = b.dataset.m; desenhar();
-        }));
+          modelo = e.target.value; desenhar();
+        });
         $("fid-save").addEventListener("click", async () => {
           const v = num(inp.value); if (!(v > 0)) { toast("Informe um valor maior que zero."); return; }
           if (selos) cfg.valor_selo = v; else cfg.pontos_por_real = v;
@@ -632,6 +679,51 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
         });
       };
       desenhar();
+    }).catch((e) => {
+      if (my !== st.reqId) return;
+      $("content").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`;
+    });
+    return `<div class="skeleton"></div><div class="skeleton"></div>`;
+  }
+
+  /* ---------- fidelidade: piso dos prêmios ---------- */
+  function telaFidPiso() {
+    const my = ++st.reqId, base = `/owner/restaurants/${encodeURIComponent(st.view)}/fidelidade/premios`;
+    api(base).then((r) => {
+      if (my !== st.reqId || st.screen !== "fidpiso") return;
+      const un = r.modelo === "selos" ? "selos" : "pontos";
+      const intro = store.get("fluxon_owner_fidpiso_visto") ? "" : `
+        <section class="card" style="border-color:var(--amber)"><h2>Proteja o seu restaurante</h2>
+          <p class="foot" style="text-align:left;margin:0 0 12px">Aqui você define o mínimo de ${un} para resgatar cada prêmio. Assim ninguém consegue baixar o valor de um prêmio para tirar benefício próprio ou prejudicar você. Prêmio sem piso fica bloqueado para resgate.</p>
+          <button class="btn small" id="fp-ok">Entendi</button>
+        </section>`;
+      const linhas = r.premios.map((p) => {
+        const pend = !(Number(p.piso_resgate) > 0);
+        return `<li class="fp-item${pend ? " pend" : ""}" data-id="${esc(p.id)}">
+          <div class="fp-top"><b>${esc(p.nome)}</b>${pend ? '<span class="tag red">Sem piso</span>' : ""}</div>
+          <div class="foot fp-custo" style="text-align:left;margin:0">Custo atual: ${int(p.pontos_necessarios)} ${un}</div>
+          <div class="fp-edit"><input inputmode="numeric" placeholder="Mínimo de ${un}" value="${pend ? "" : Number(p.piso_resgate)}" aria-label="Piso de ${esc(p.nome)}"><button class="btn small primary" data-save>Salvar</button></div>
+        </li>`;
+      }).join("");
+      $("content").innerHTML = intro + `<section class="card"><h2>Piso dos prêmios</h2>${linhas
+        ? `<ul class="list">${linhas}</ul>`
+        : `<div class="empty">Nenhum prêmio cadastrado ainda. Cadastre as recompensas no painel Operacional e elas aparecem aqui.</div>`}</section>`;
+      const ok = $("fp-ok");
+      if (ok) ok.addEventListener("click", () => { store.set("fluxon_owner_fidpiso_visto", "1"); ok.closest("section").remove(); });
+      $("content").querySelectorAll("[data-save]").forEach((b) => b.addEventListener("click", async () => {
+        const li = b.closest("[data-id]"), inp = li.querySelector("input");
+        const piso = Math.floor(Number(String(inp.value).replace(",", ".")));
+        if (!(piso >= 1)) { toast("Informe um valor maior que zero."); return; }
+        b.disabled = true; b.textContent = "Salvando...";
+        try {
+          const x = await api(`${base}/${encodeURIComponent(li.dataset.id)}/piso`, { method: "PUT", body: JSON.stringify({ piso }) });
+          li.classList.remove("pend"); li.querySelector(".tag")?.remove();
+          li.querySelector(".fp-custo").textContent = `Custo atual: ${int(x.premio.pontos_necessarios)} ${un}`;
+          inp.value = x.premio.piso_resgate;
+          toast("Piso salvo."); atualizarSino();
+        } catch (e) { toast(e.message); }
+        b.disabled = false; b.textContent = "Salvar";
+      }));
     }).catch((e) => {
       if (my !== st.reqId) return;
       $("content").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`;
