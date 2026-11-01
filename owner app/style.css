@@ -212,3 +212,17 @@ table.dre .neg{color:var(--down)}
 .conta .ctot b{display:block;font-size:34px;letter-spacing:-.02em;line-height:1;text-align:right;font-variant-numeric:tabular-nums}
 .conta .ctot small{display:block;text-align:right;color:var(--muted);font-size:12px;font-weight:400;margin-top:4px}
 
+/* sino de avisos e luzinha de alerta */
+.bell-wrap{position:relative}
+.bell{position:relative;padding:0;font-size:inherit}
+#bell-panel{right:-50px}
+.menu .name.wrap{white-space:normal}
+.bell-dot,.alerta-dot{border-radius:50%;background:var(--red);animation:pisca 1.1s infinite}
+.bell-dot{position:absolute;top:6px;right:7px;width:10px;height:10px;box-shadow:0 0 0 2px var(--bg)}
+.alerta-dot{width:10px;height:10px;flex:none;box-shadow:0 0 8px var(--red)}
+@keyframes pisca{50%{opacity:.25}}
+@media(prefers-reduced-motion:reduce){.bell-dot,.alerta-dot{animation:none}}
+.fp-item{padding:14px 0;display:grid;gap:8px}
+.fp-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.fp-edit{display:flex;gap:8px}
+.fp-edit input{flex:1;min-width:0}
