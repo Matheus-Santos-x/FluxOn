@@ -2513,10 +2513,14 @@ async function loadSettingsData() {
     console.error("Erro ao carregar webhook:", e);
   }
 
-  // Pix online (Mercado Pago)
+  // Pix online
   try {
     const pxResp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/integracao/pix_online`, { headers: buildHeaders() });
     const pxData = await pxResp.json();
+    const tipo = (pxData.configurado && pxData.dados?.tipo) || (pxData.configurado ? "mercadopago" : "");
+    const pxSel = document.getElementById("settings-pix-tipo");
+    if (pxSel) pxSel.value = tipo;
+    onPixChange(tipo);
     const pxEl = document.getElementById("settings-pix-token");
     if (pxEl) pxEl.value = pxData.configurado && pxData.dados?.mp_access_token ? pxData.dados.mp_access_token : "";
   } catch (e) {
@@ -4866,6 +4870,11 @@ document.addEventListener("click", (e) => {
   console.log("✅ Drawer totalmente configurado!");
 }
 
+function onPixChange(tipo) {
+  const f = document.getElementById("pix-fields-mercadopago");
+  if (f) f.style.display = tipo === "mercadopago" ? "flex" : "none";
+}
+
 function toggleAccordion(id) {
   const body = document.getElementById(`accordion-${id}`);
   const arrow = document.getElementById(`arrow-${id}`);
@@ -5547,16 +5556,22 @@ document.getElementById("btn-salvar-marketplace")?.addEventListener("click", sal
   }
 });
   
-// Pix online (Mercado Pago)
+// Pix online
 document.getElementById("btn-salvar-pix")?.addEventListener("click", async () => {
   const rid = getRestaurantId();
   const status = document.getElementById("settings-pix-status");
-  const token = document.getElementById("settings-pix-token")?.value?.trim();
-  if (!token) { if (status) status.textContent = "❌ Cole o Access Token."; return; }
+  const tipo = document.getElementById("settings-pix-tipo")?.value;
+  if (!tipo) { if (status) status.textContent = "❌ Selecione o banco."; return; }
+
+  let dados = { tipo };
+  if (tipo === "mercadopago") {
+    dados.mp_access_token = document.getElementById("settings-pix-token")?.value?.trim();
+    if (!dados.mp_access_token) { if (status) status.textContent = "❌ Cole o Access Token."; return; }
+  }
+
   try {
     const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/integracao/pix_online`, {
-      method: "PATCH", headers: buildHeaders(),
-      body: JSON.stringify({ dados: { mp_access_token: token }, ativo: true })
+      method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ dados, ativo: true })
     });
     const data = await resp.json();
     if (status) status.textContent = data.success ? "✅ Pix online salvo!" : "❌ Erro ao salvar.";
@@ -5568,7 +5583,9 @@ document.getElementById("btn-remover-pix")?.addEventListener("click", async () =
   const status = document.getElementById("settings-pix-status");
   try {
     await fetch(`${API_BASE}/api/v1/restaurante/${rid}/integracao/pix_online`, { method: "DELETE", headers: buildHeaders() });
-    const el = document.getElementById("settings-pix-token"); if (el) el.value = "";
+    const t = document.getElementById("settings-pix-token"); if (t) t.value = "";
+    const s = document.getElementById("settings-pix-tipo"); if (s) s.value = "";
+    onPixChange("");
     if (status) status.textContent = "🗑️ Removido.";
   } catch (e) { if (status) status.textContent = "❌ Erro de conexão."; }
 });
