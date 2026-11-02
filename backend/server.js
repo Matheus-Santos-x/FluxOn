@@ -1339,7 +1339,7 @@ async function pedidoFidelizar(rid, phone, nome, total) {
     const { data: perfil } = await supabase.from("base_clientes").select("*")
       .eq("restaurant_id", rid).eq("numero", phone).maybeSingle();
     if (perfil) {
-      await supabase.from("base_clientes").update({ [ganho.coluna]: (perfil[ganho.coluna] || 0) + ganho.qtd }).eq("id", perfil.id);
+      await supabase.from("base_clientes").update({ [ganho.coluna]: (perfil[ganho.coluna] || 0) + ganho.qtd, ...(!perfil.nome && nome ? { nome } : {}) }).eq("id", perfil.id);
     } else {
       const token = (Math.random().toString(36).substring(2, 8) + Math.random().toString(36).substring(2, 8)).substring(0, 12);
       await supabase.from("base_clientes").insert([{
@@ -2055,7 +2055,7 @@ try {
       if (perfil) {
         await supabase
           .from("base_clientes")
-          .update({ [ganho.coluna]: (perfil[ganho.coluna] || 0) + pontosGanhos })
+          .update({ [ganho.coluna]: (perfil[ganho.coluna] || 0) + pontosGanhos, ...(!perfil.nome && client_name ? { nome: client_name } : {}) })
           .eq("id", perfil.id);
       } else {
         const token = (Math.random().toString(36).substring(2, 8) +
