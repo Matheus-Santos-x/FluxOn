@@ -2,6 +2,7 @@
    INIT
    ============================================================ */
 function showError(msg){
+  document.body.style.opacity = "1";
   ["bestsellersSection", "catNav", "cartFab"].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.style.display = "none";
