@@ -1193,10 +1193,15 @@ function abrirBotaoAdminCentral(i) {
 }
 
 async function enviarFotoAdminCentral(file) {
+  // abre o recorte em pé (formato de celular): dá pra dar zoom e arrastar a foto
+  const recorte = await openCropModal(file, { proporcao: 9 / 16, largura: 1080, altura: 1920, titulo: "✂️ Ajustar foto de fundo" });
+  const input = document.getElementById("admin-central-foto");
+  if (input) input.value = ""; // deixa escolher a mesma foto de novo
+  if (!recorte) return;
   _acStatus("Enviando foto...");
   try {
     const formData = new FormData();
-    formData.append("file", file, file.name || "foto.jpg");
+    formData.append("file", recorte, "fundo.jpg");
     formData.append("bucket", "restaurante-banners");
     const resp = await fetch(`${API_BASE}/api/v1/upload-image`, { method: "POST", body: formData });
     const data = await resp.json().catch(() => ({}));
@@ -7639,10 +7644,18 @@ function resizeImage(file, maxWidth, maxHeight) {
 // ── CROP ──
 let cropperInstance = null;
 let cropResolve = null;
+let cropSaida = { width: 800, height: 800 };
 
-function openCropModal(file) {
+// opcoes (tudo opcional): { proporcao: 9/16, largura: 1080, altura: 1920, titulo: "..." }
+// sem opções continua igual: quadrado 800x800
+function openCropModal(file, opcoes = {}) {
   return new Promise((resolve) => {
     cropResolve = resolve;
+    cropSaida = { width: opcoes.largura || 800, height: opcoes.altura || 800 };
+    const titulo = document.querySelector("#crop-modal-backdrop .crop-modal-title");
+    if (titulo) titulo.textContent = opcoes.titulo || "✂️ Recortar imagem";
+    const area = document.querySelector("#crop-modal-backdrop .crop-img-wrap");
+    if (area) area.style.height = (opcoes.proporcao || 1) < 1 ? "min(62vh, 520px)" : ""; // foto em pé ganha mais altura
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = document.getElementById('crop-image');
@@ -7659,7 +7672,7 @@ function openCropModal(file) {
       // Espera o img carregar antes de iniciar o Cropper
       img.onload = () => {
         cropperInstance = new Cropper(img, {
-          aspectRatio: 1,         // quadrado — igual Instagram
+          aspectRatio: opcoes.proporcao || 1, // quadrado por padrão — igual Instagram
           viewMode: 1,
           dragMode: 'move',
           autoCropArea: 0.9,
@@ -7686,7 +7699,7 @@ function cancelCrop() {
 function confirmCrop() {
   if (!cropperInstance || !cropResolve) return;
 
-  const canvas = cropperInstance.getCroppedCanvas({ width: 800, height: 800 });
+  const canvas = cropperInstance.getCroppedCanvas({ ...cropSaida, imageSmoothingQuality: "high" });
 
   canvas.toBlob((blob) => {
     document.getElementById('crop-modal-backdrop').classList.add('hidden');
