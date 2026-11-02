@@ -22,7 +22,9 @@ function loginAtualizarBotao(){
     const nome = String(FID.cliente.nome || "").trim();
     btn.classList.add("logado");
     btn.setAttribute("aria-label", "Minha conta");
-    btn.innerHTML = `<span class="login-avatar">${escHtml((nome || "?").charAt(0).toUpperCase())}</span>`;
+    btn.innerHTML = nome
+      ? `<span class="login-avatar">${escHtml(nome.charAt(0).toUpperCase())}</span>`
+      : `<span class="login-avatar">${ICONE_USUARIO.replace("<svg ", '<svg style="color:#fff" ')}</span>`;
   }else{
     btn.classList.remove("logado");
     btn.setAttribute("aria-label", "Entrar");
@@ -55,7 +57,8 @@ function loginAbrir(){
   lockBodyScroll();
   document.getElementById("loginFechar").onclick = loginFechar;
   wrap.addEventListener("click", e => { if(e.target === wrap) loginFechar(); });
-  loginPassoTelefone(LOGIN.nome || v.nome || "", LOGIN.telefone || v.telefone || "");
+  LOGIN.nome = LOGIN.nome || v.nome || "";
+  loginPassoTelefone(LOGIN.nome, LOGIN.telefone || v.telefone || "");
   gsap.fromTo(wrap, { opacity:0 }, { opacity:1, duration:.25 });
   gsap.fromTo(wrap.querySelector(".detail-panel"), { scale:.9, opacity:0 }, { scale:1, opacity:1, duration:.35, ease:"back.out(1.4)" });
 }
@@ -73,14 +76,13 @@ function loginPassoTelefone(nome, telefone){
   const corpo = document.getElementById("loginCorpo");
   corpo.innerHTML = `
     <p class="login-txt">Entre com seu WhatsApp para ver seus ${FID.modelo === "selos" ? "selos" : "pontos"} e trocar por prêmios. Você só faz isso uma vez neste aparelho.</p>
-    <div class="field"><label>Seu nome</label><input type="text" id="loginNome" value="${escHtml(nome)}" placeholder="Como podemos te chamar?" autocomplete="name"></div>
     <div class="field"><label>Telefone (WhatsApp)</label><input type="tel" id="loginTel" value="${escHtml(telefoneMascara(telefone))}" placeholder="(00) 00000-0000" inputmode="tel" autocomplete="tel"></div>
     <button class="checkout-btn" id="loginEnviar">Receber código no WhatsApp</button>`;
   const tel = document.getElementById("loginTel");
   tel.addEventListener("input", () => { tel.value = telefoneMascara(tel.value); });
   tel.addEventListener("keydown", e => { if(e.key === "Enter") loginSolicitar(); });
   document.getElementById("loginEnviar").onclick = loginSolicitar;
-  setTimeout(() => (nome ? tel : document.getElementById("loginNome")).focus(), 350);
+  setTimeout(() => tel.focus(), 350);
 }
 
 async function loginSolicitar(){
