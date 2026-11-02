@@ -28,7 +28,7 @@ function mostrarPasso(id){
 async function descobrirRestaurante(){
   const r = new URLSearchParams(location.search).get("r");
   if(r) return r;
-  const resp = await fetch(`${API_BASE}/api/v1/dominio-central/${encodeURIComponent(location.hostname)}`);
+  const resp = await fetch(`${API_BASE}/api/v1/dominio-vouchers/${encodeURIComponent(location.hostname)}`);
   if(!resp.ok) return null;
   return (await resp.json()).restaurant_id || null;
 }
@@ -64,6 +64,9 @@ function montarTela(){
   });
   ["destTel", "telComprador"].forEach(id => $(id).addEventListener("input", e => { e.target.value = mascaraTel(e.target.value); }));
   $("info").textContent = `Válido por ${l.validade_dias} dias a partir da compra. Pode ser usado aos poucos: o que sobrar continua valendo até a data de validade.`;
+  if(l.central_url){
+    ["voltar", "okVoltar"].forEach(id => { $(id).href = l.central_url; $(id).hidden = false; });
+  }
   $("pagar").onclick = pagar;
   atualizarBotao();
   $("vp").hidden = false;
