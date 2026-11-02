@@ -679,9 +679,11 @@ async function selecionarAdminRestaurante(id) {
   document.getElementById("admin-f-dom-delivery").value = r.cardapio_delivery_url || "";
   document.getElementById("admin-f-dom-central").value = r.central_url || "";
   document.getElementById("admin-f-dom-vouchers").value = r.vouchers_url || "";
+  document.getElementById("admin-f-dom-reservas").value = r.reservas_url || "";
   document.getElementById("admin-status-dominios").textContent = "";
   carregarAdminCentral();
   carregarAdminVouchers();
+  carregarAdminReservas();
 
   // Carrega config (aparência + operação) — rota GET não exige token do próprio restaurante
   try {
@@ -897,7 +899,8 @@ async function salvarAdminDominios() {
     cardapio_url: document.getElementById("admin-f-dom-mesa").value.trim(),
     cardapio_delivery_url: document.getElementById("admin-f-dom-delivery").value.trim(),
     central_url: document.getElementById("admin-f-dom-central").value.trim(),
-    vouchers_url: document.getElementById("admin-f-dom-vouchers").value.trim()
+    vouchers_url: document.getElementById("admin-f-dom-vouchers").value.trim(),
+    reservas_url: document.getElementById("admin-f-dom-reservas").value.trim()
   };
   status.textContent = "Salvando..."; status.style.color = "rgba(252,228,228,0.6)";
   try {
@@ -911,6 +914,7 @@ async function salvarAdminDominios() {
     document.getElementById("admin-f-dom-delivery").value = adminSelectedRestaurant.cardapio_delivery_url || "";
     document.getElementById("admin-f-dom-central").value = adminSelectedRestaurant.central_url || "";
     document.getElementById("admin-f-dom-vouchers").value = adminSelectedRestaurant.vouchers_url || "";
+    document.getElementById("admin-f-dom-reservas").value = adminSelectedRestaurant.reservas_url || "";
     status.textContent = "✅ Salvo! Já vale agora."; status.style.color = "rgba(34,197,94,0.9)";
   } catch (e) {
     status.textContent = "❌ " + e.message; status.style.color = "rgba(239,68,68,0.9)";
@@ -1306,6 +1310,110 @@ async function salvarAdminVouchers() {
     if (!resp.ok) throw new Error(d.error || "Erro ao salvar");
     await carregarAdminVouchers("✅ Salvo! Já vale agora.");
     if (typeof carregarAdminCentral === "function") carregarAdminCentral(); // atualiza a sugestão de link na Central
+  } catch (e) {
+    st.textContent = "❌ " + e.message; st.style.color = "rgba(239,68,68,0.9)";
+  }
+}
+
+/* ========================================
+   📅 RESERVA DE MESA (Admin)
+   Liga/desliga, valor do Pix (vira crédito), tempos e lugares de cada mesa
+======================================== */
+async function carregarAdminReservas(msg) {
+  const corpo = document.getElementById("admin-reservas-corpo");
+  if (!corpo || !adminSelectedRestaurant) return;
+  const rid = adminSelectedRestaurant.id;
+  corpo.innerHTML = `<p style="color:rgba(252,228,228,0.5); font-size:13px; margin:0;">Carregando...</p>`;
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants/${rid}/reservas`, { headers: buildAdminHeaders() });
+    const d = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(d.error || "Erro ao carregar");
+    if (adminSelectedRestaurant?.id !== rid) return;
+    const inp = "padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit; width:100%; box-sizing:border-box;";
+    const rot = "color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;";
+    const tempo = n => n >= 1440 ? `${n / 1440} dia${n >= 2880 ? "s" : ""}` : n >= 60 ? `${n / 60}h`.replace(".5h", "h30") : `${n} min`;
+    const sel = (id, lista, atual, fmt) => `<select id="${id}" style="${inp}">${lista.map(n => `<option value="${n}" ${n === atual ? "selected" : ""}>${fmt(n)}</option>`).join("")}</select>`;
+    const campo = (titulo, html) => `<label style="display:flex; flex-direction:column; gap:4px; flex:1; min-width:140px;"><span style="${rot}">${titulo}</span>${html}</label>`;
+    const dominio = adminSelectedRestaurant.reservas_url;
+    const quando = iso => new Date(iso).toLocaleString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+    corpo.innerHTML = `
+      ${d.pix_online ? "" : `<p style="margin:0; padding:10px 12px; border-radius:8px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); color:rgba(251,191,36,0.9); font-size:12px; line-height:1.5;">⚠️ Este restaurante ainda não tem Pix online configurado. Sem ele, a página de reservas não abre.</p>`}
+      <label style="display:flex; align-items:center; gap:10px; color:rgba(252,228,228,0.9); font-size:14px; cursor:pointer;">
+        <input type="checkbox" id="admin-rs-ativo" ${d.ativo ? "checked" : ""} style="width:18px; height:18px; accent-color:#ef4444;">
+        Aceitar reservas de mesa
+      </label>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        ${campo("Valor no Pix (vira crédito)", `<input id="admin-rs-valor" type="number" min="1" max="1000" step="1" value="${d.valor}" style="${inp}">`)}
+        ${campo("Duração da reserva", sel("admin-rs-duracao", d.opcoes.duracao, d.duracao, tempo))}
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        ${campo("Mesa bloqueada antes", sel("admin-rs-bloqueio", d.opcoes.bloqueio, d.bloqueio, n => n ? tempo(n) + " antes" : "Não bloquear"))}
+        ${campo("Tolerância de atraso", sel("admin-rs-tolerancia", d.opcoes.tolerancia, d.tolerancia, tempo))}
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        ${campo("Antecedência mínima", sel("admin-rs-antecedencia", d.opcoes.antecedencia, d.antecedencia, tempo))}
+        ${campo("Reservar com até", sel("admin-rs-dias", d.opcoes.dias, d.dias, n => `${n} dias de antecedência`))}
+      </div>
+      <p style="color:rgba(252,228,228,0.45); font-size:12px; line-height:1.5; margin:0;">Os horários saem dos Horários de Funcionamento, de 30 em 30 minutos, até 1h antes de fechar. O número de mesas vem de Dados e Operação.</p>
+
+      <span style="${rot}">Mesas (lugares e se aceitam reserva)</span>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px;">
+        ${d.mesas.map(m => `
+          <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0d0d0d;">
+            <input type="checkbox" data-rs-mesa="${m.numero}" ${m.reservavel ? "checked" : ""} title="Aceita reserva" style="width:16px; height:16px; accent-color:#ef4444;">
+            <span style="color:rgba(252,228,228,0.9); font-size:13px; font-weight:700; flex:1;">Mesa ${m.numero}</span>
+            <input type="number" data-rs-lugares="${m.numero}" min="1" max="30" value="${m.lugares}" title="Lugares" style="${inp} width:54px; padding:6px 8px;">
+          </div>`).join("")}
+      </div>
+      <span style="color:rgba(252,228,228,0.4); font-size:11px;">Marcado = aceita reserva · número = quantos lugares a mesa tem.</span>
+
+      <button type="button" class="primary-button" id="admin-btn-save-reservas">Salvar</button>
+      <p id="admin-status-reservas" style="font-size:13px; min-height:18px; margin:0;"></p>
+      ${dominio
+        ? `<a href="https://${_acEsc(dominio)}" target="_blank" rel="noopener" style="color:rgba(252,228,228,0.7); font-size:13px;">Abrir a página de reservas ↗</a>`
+        : `<p style="color:rgba(252,228,228,0.45); font-size:12px; margin:0;">Cadastre o domínio em Domínios → Reservas para abrir a página.</p>`}
+
+      <span style="${rot}">Próximas reservas</span>
+      ${d.proximas.length ? d.proximas.map(r => `
+        <div style="display:flex; justify-content:space-between; gap:10px; padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0d0d0d; font-size:13px; color:rgba(252,228,228,0.9);">
+          <span><b>${_acEsc(quando(r.inicio))}</b> · Mesa ${r.mesa} · ${r.pessoas}p</span>
+          <span style="color:rgba(252,228,228,0.6);">${_acEsc(r.nome)}</span>
+        </div>`).join("") : `<p style="color:rgba(252,228,228,0.45); font-size:12px; margin:0;">Nenhuma reserva por enquanto.</p>`}
+    `;
+    document.getElementById("admin-btn-save-reservas").onclick = () => salvarAdminReservas(d.mesas);
+    if (msg) {
+      const st = document.getElementById("admin-status-reservas");
+      st.textContent = msg; st.style.color = "rgba(34,197,94,0.9)";
+    }
+  } catch (e) {
+    corpo.innerHTML = `<p style="color:rgba(239,68,68,0.9); font-size:13px; margin:0;">❌ ${_acEsc(e.message)}</p>`;
+  }
+}
+
+async function salvarAdminReservas(mesas) {
+  if (!adminSelectedRestaurant) return;
+  const st = document.getElementById("admin-status-reservas");
+  const v = id => document.getElementById(id).value;
+  st.textContent = "Salvando..."; st.style.color = "rgba(252,228,228,0.6)";
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants/${adminSelectedRestaurant.id}/reservas`, {
+      method: "PATCH", headers: buildAdminHeaders(),
+      body: JSON.stringify({
+        ativo: document.getElementById("admin-rs-ativo").checked,
+        valor: Number(v("admin-rs-valor")),
+        duracao: Number(v("admin-rs-duracao")), bloqueio: Number(v("admin-rs-bloqueio")),
+        tolerancia: Number(v("admin-rs-tolerancia")), antecedencia: Number(v("admin-rs-antecedencia")), dias: Number(v("admin-rs-dias")),
+        mesas: mesas.map(m => ({
+          numero: m.numero,
+          lugares: Number(document.querySelector(`[data-rs-lugares="${m.numero}"]`).value) || 4,
+          reservavel: document.querySelector(`[data-rs-mesa="${m.numero}"]`).checked
+        }))
+      })
+    });
+    const d = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(d.error || "Erro ao salvar");
+    await carregarAdminReservas("✅ Salvo! Já vale agora.");
   } catch (e) {
     st.textContent = "❌ " + e.message; st.style.color = "rgba(239,68,68,0.9)";
   }
