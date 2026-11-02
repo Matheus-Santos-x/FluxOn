@@ -3714,7 +3714,7 @@ function centralSugestoes({ rest, cfg, premios }) {
     cfg.endereco && { icone: "mapa", rotulo: "Como chegar?", url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cfg.endereco)}`, origem: "Endereço cadastrado" },
     centralWhatsApp(cfg.telefone) && { icone: "whatsapp", rotulo: "Entre em contato", url: centralWhatsApp(cfg.telefone), origem: "WhatsApp cadastrado" },
     centralInstagram(cfg.instagram) && { icone: "instagram", rotulo: "Instagram", url: centralInstagram(cfg.instagram), origem: "Instagram cadastrado" },
-    rest.central_url && cfg.voucher_ativo && { icone: "voucher", rotulo: "Vale-presente", url: `https://${rest.central_url}/vale-presente.html`, origem: "Página do vale-presente" }
+    rest.central_url && cfg.voucher_ativo && { icone: "voucher", rotulo: "Vale-presente", url: `https://${rest.central_url}/vouchers.html`, origem: "Página do vale-presente" }
   ].filter(Boolean);
 }
 
