@@ -1398,6 +1398,278 @@ PIX_TIPOS.pedido = {
   async aoFalhar() { /* o rascunho continua; o cliente pode tentar de novo */ }
 };
 
+/* ========================================
+   🎁 VALE-PRESENTE (vouchers)
+   O cliente compra pela página /vale-presente da Central, paga no Pix e o
+   código chega no WhatsApp (dele ou de quem vai ganhar). No restaurante o
+   código é consultado e usado como forma de pagamento; o saldo que sobra
+   continua valendo até a data de validade.
+======================================== */
+const VOUCHER_VALORES = [50, 100, 150, 200, 300, 500];
+const VOUCHER_VALIDADES = [7, 10, 15, 30, 60, 90, 180];
+const VOUCHER_LETRAS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // sem 0/O, 1/I/L: fácil de ditar
+
+function voucherNovoCodigo() {
+  let s = "";
+  for (let i = 0; i < 12; i++) s += VOUCHER_LETRAS[crypto.randomInt(0, VOUCHER_LETRAS.length)];
+  return `VP-${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8)}`;
+}
+// "vp 7k2m-9q..." → "VP-7K2M-9QXX-XXXX"
+function voucherLimparCodigo(v) {
+  const s = String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^VP/, "");
+  return s.length === 12 ? `VP-${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8)}` : null;
+}
+const voucherMoeda = (v) => `R$ ${Number(v).toFixed(2).replace(".", ",")}`;
+const voucherData = (iso) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+async function voucherConfig(rid) {
+  const { data } = await supabase.from("restaurante_config")
+    .select("voucher_ativo, voucher_validade_dias").eq("restaurant_id", rid).maybeSingle();
+  return { ativo: !!data?.voucher_ativo, validade: Number(data?.voucher_validade_dias) || 30 };
+}
+
+// manda uma mensagem no WhatsApp do cliente pelo webhook de mensagens do restaurante
+// (sem ele, pelo webhook do FluxON). Não derruba nada se falhar: só avisa no log.
+async function voucherWhatsApp(rid, nomeRest, nome, telefone, mensagem) {
+  try {
+    const tel = String(telefone || "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+    if (tel.length < 10) return false;
+    const crm = await getIntegracao(rid, "webhook_crm");
+    const url = crm?.webhook_url || OWNER_OTP_WEBHOOK_URL;
+    if (!url) { console.error("❌ voucher: nenhum webhook de WhatsApp configurado"); return false; }
+    const corpo = crm?.webhook_url
+      ? { restaurant_id: rid, restaurant_name: nomeRest, client_name: nome || null, client_phone: tel,
+          client_phone_whatsapp: `55${tel}`, message: mensagem, sent_at: new Date().toISOString(), source: "vale_presente" }
+      : { tipo: "vale_presente", nome: nome || null, telefone: `55${tel}`, mensagem };
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(!crm?.webhook_url && OWNER_OTP_WEBHOOK_SECRET ? { "x-fluxon-secret": OWNER_OTP_WEBHOOK_SECRET } : {}) },
+      body: JSON.stringify(corpo),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!r.ok) console.error(`❌ voucher: webhook respondeu ${r.status}`);
+    return r.ok;
+  } catch (err) {
+    console.error("❌ voucher WhatsApp:", err.message);
+    return false;
+  }
+}
+
+PIX_TIPOS.voucher = {
+  publico: true,
+  async preparar({ restaurant_id, dados, pagador, expira }) {
+    const cfg = await voucherConfig(restaurant_id);
+    if (!cfg.ativo) throw new PixErro(400, "Vale-presente indisponível neste restaurante");
+    const valor = Number(dados.valor);
+    if (!VOUCHER_VALORES.includes(valor)) throw new PixErro(400, "Escolha um dos valores disponíveis");
+
+    const presente = !!dados.presente;
+    const destNome = String(dados.destinatario_nome || "").trim().slice(0, 80);
+    const destTel = normalizePhone(dados.destinatario_telefone);
+    if (presente && (!destNome || !destTel)) throw new PixErro(400, "Informe o nome e o WhatsApp de quem vai ganhar");
+
+    let voucher = null;
+    for (let tentativa = 0; tentativa < 5 && !voucher; tentativa++) {
+      const { data, error } = await supabase.from("vouchers").insert([{
+        restaurant_id, codigo: voucherNovoCodigo(), valor, saldo: valor, status: "aguardando",
+        comprador_nome: pagador.nome, comprador_telefone: pagador.telefone,
+        presente, destinatario_nome: presente ? destNome : null, destinatario_telefone: presente ? destTel : null,
+        mensagem: presente ? String(dados.mensagem || "").trim().slice(0, 200) || null : null,
+        validade_dias: cfg.validade, pix_expira_em: expira.toISOString()
+      }]).select().single();
+      if (!error) voucher = data;
+      else if (error.code !== "23505") throw error; // 23505 = código repetido: tenta outro
+    }
+    if (!voucher) throw new PixErro(500, "Não foi possível gerar o vale. Tente de novo.");
+    return { valor, descricao: `Vale-presente ${voucherMoeda(valor)} - ${pagador.nome}`.slice(0, 200), referencia_id: String(voucher.id) };
+  },
+  async aoPagar({ cobranca }) {
+    const { data: v0 } = await supabase.from("vouchers").select("validade_dias")
+      .eq("id", cobranca.referencia_id).eq("restaurant_id", cobranca.restaurant_id).maybeSingle();
+    const agora = new Date();
+    const expira = new Date(agora.getTime() + (Number(v0?.validade_dias) || 30) * 24 * 60 * 60 * 1000);
+    const { data: v } = await supabase.from("vouchers")
+      .update({ status: "ativo", pago_em: agora.toISOString(), expira_em: expira.toISOString() })
+      .eq("id", cobranca.referencia_id).eq("restaurant_id", cobranca.restaurant_id).eq("status", "aguardando")
+      .select().maybeSingle();
+    if (!v) throw new Error("o vale não estava mais aguardando pagamento");
+
+    const { data: cfg } = await supabase.from("restaurante_config").select("nome_exibicao").eq("restaurant_id", v.restaurant_id).maybeSingle();
+    const { data: r } = await supabase.from("restaurants").select("name").eq("id", v.restaurant_id).maybeSingle();
+    const nomeRest = cfg?.nome_exibicao || r?.name || "o restaurante";
+    const validade = voucherData(v.expira_em);
+
+    if (v.presente) {
+      await voucherWhatsApp(v.restaurant_id, nomeRest, v.destinatario_nome, v.destinatario_telefone,
+        `🎁 Oi, ${v.destinatario_nome}! ${v.comprador_nome} te deu um vale-presente de *${voucherMoeda(v.valor)}* no ${nomeRest}.` +
+        (v.mensagem ? `\n\n💬 "${v.mensagem}"` : "") +
+        `\n\nSeu código: *${v.codigo}*\nVálido até ${validade}. É só mostrar o código na hora de pagar. Dá pra usar aos poucos.`);
+      await voucherWhatsApp(v.restaurant_id, nomeRest, v.comprador_nome, v.comprador_telefone,
+        `✅ Pagamento confirmado! O vale-presente de *${voucherMoeda(v.valor)}* do ${nomeRest} foi enviado para ${v.destinatario_nome}.\nCódigo: *${v.codigo}* (válido até ${validade}).`);
+    } else {
+      await voucherWhatsApp(v.restaurant_id, nomeRest, v.comprador_nome, v.comprador_telefone,
+        `🎁 Pagamento confirmado! Seu vale-presente de *${voucherMoeda(v.valor)}* no ${nomeRest}.\n\nCódigo: *${v.codigo}*\nVálido até ${validade}. É só mostrar o código na hora de pagar. Dá pra usar aos poucos.`);
+    }
+  },
+  async aoFalhar({ restaurant_id, referencia_id }) {
+    await supabase.from("vouchers").delete()
+      .eq("id", referencia_id).eq("restaurant_id", restaurant_id).eq("status", "aguardando");
+  }
+};
+
+// situação de um vale na hora de consultar/usar
+function voucherSituacao(v) {
+  if (v.status === "aguardando") return "nao_pago";
+  if (v.status === "cancelado") return "cancelado";
+  if (v.expira_em && new Date(v.expira_em) < new Date()) return "vencido";
+  if (Number(v.saldo) <= 0.009) return "usado";
+  return "valido";
+}
+
+// só o próprio restaurante (login) ou a chave do servidor mexe nos vales
+function voucherAutorizado(req, rid) {
+  const a = readAuth(req);
+  return !!a && (a.kind === "service" || a.restaurant_id === rid);
+}
+
+// página de compra: valores, validade e se dá pra comprar
+app.get("/api/v1/vouchers/:restaurant_id/loja", async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    const { data: rest } = await supabase.from("restaurants").select("id, name").eq("id", rid).maybeSingle();
+    if (!rest) return sendError(res, 404, "Restaurante não encontrado");
+    const [cfg, { data: visual }, pix] = await Promise.all([
+      voucherConfig(rid),
+      supabase.from("restaurante_config").select("nome_exibicao, logo_url, cor_primaria").eq("restaurant_id", rid).maybeSingle(),
+      pixConfig(rid)
+    ]);
+    return res.json({
+      disponivel: cfg.ativo && !!pix,
+      nome: visual?.nome_exibicao || rest.name || "",
+      logo_url: visual?.logo_url || null,
+      cor: visual?.cor_primaria || "#d62828",
+      valores: VOUCHER_VALORES,
+      validade_dias: cfg.validade
+    });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao carregar o vale-presente");
+  }
+});
+
+// depois de pago, a página mostra o código na tela (caso o WhatsApp atrase)
+app.get("/api/v1/vouchers/:restaurant_id/compra/:cobranca_id", async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    const { data: c } = await supabase.from("cobrancas_pix").select("id, tipo, status, referencia_id")
+      .eq("id", req.params.cobranca_id).eq("restaurant_id", rid).maybeSingle();
+    if (!c || c.tipo !== "voucher") return sendError(res, 404, "Compra não encontrada");
+    if (c.status !== "pago") return res.json({ pago: false });
+    const { data: v } = await supabase.from("vouchers")
+      .select("codigo, valor, expira_em, presente, destinatario_nome").eq("id", c.referencia_id).eq("restaurant_id", rid).maybeSingle();
+    if (!v) return sendError(res, 404, "Vale não encontrado");
+    return res.json({ pago: true, ...v });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao consultar a compra");
+  }
+});
+
+// Operacional: consulta um vale pelo código (vale? quanto tem? até quando?)
+app.get("/api/v1/vouchers/:restaurant_id/consultar/:codigo", async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    if (!voucherAutorizado(req, rid)) return sendError(res, 401, "Não autorizado");
+    const codigo = voucherLimparCodigo(req.params.codigo);
+    if (!codigo) return sendError(res, 400, "Código inválido. Ele tem o formato VP-XXXX-XXXX-XXXX");
+    const { data: v } = await supabase.from("vouchers").select("*").eq("restaurant_id", rid).eq("codigo", codigo).maybeSingle();
+    if (!v) return sendError(res, 404, "Vale não encontrado neste restaurante");
+    const { data: usos } = await supabase.from("voucher_usos").select("valor, criado_em, order_id")
+      .eq("voucher_id", v.id).order("criado_em", { ascending: false });
+    return res.json({
+      codigo: v.codigo, situacao: voucherSituacao(v), valor: Number(v.valor), saldo: Number(v.saldo),
+      expira_em: v.expira_em, pago_em: v.pago_em, presente: v.presente,
+      para: v.presente ? v.destinatario_nome : v.comprador_nome, comprador: v.comprador_nome,
+      usos: usos || []
+    });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao consultar o vale");
+  }
+});
+
+// Operacional: usa parte (ou todo) o saldo do vale num pagamento
+app.post("/api/v1/vouchers/:restaurant_id/usar", async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    if (!voucherAutorizado(req, rid)) return sendError(res, 401, "Não autorizado");
+    const codigo = voucherLimparCodigo(req.body?.codigo);
+    const valor = Math.round(Number(req.body?.valor) * 100) / 100;
+    if (!codigo) return sendError(res, 400, "Código inválido");
+    if (!(valor > 0)) return sendError(res, 400, "Informe o valor a usar");
+
+    // tenta algumas vezes: se dois caixas usarem o mesmo vale ao mesmo tempo, só um desconta por vez
+    for (let tentativa = 0; tentativa < 3; tentativa++) {
+      const { data: v } = await supabase.from("vouchers").select("*").eq("restaurant_id", rid).eq("codigo", codigo).maybeSingle();
+      if (!v) return sendError(res, 404, "Vale não encontrado neste restaurante");
+      const sit = voucherSituacao(v);
+      if (sit !== "valido") {
+        const motivo = { nao_pago: "Este vale ainda não foi pago", cancelado: "Este vale foi cancelado",
+          vencido: `Este vale venceu em ${voucherData(v.expira_em)}`, usado: "Este vale já foi todo usado" }[sit];
+        return sendError(res, 409, motivo);
+      }
+      const saldo = Number(v.saldo);
+      if (valor > saldo + 0.009) return sendError(res, 409, `Saldo insuficiente: o vale tem ${voucherMoeda(saldo)}`);
+      const novo = Math.round((saldo - valor) * 100) / 100;
+      const { data: ok } = await supabase.from("vouchers").update({ saldo: novo })
+        .eq("id", v.id).eq("saldo", v.saldo).select("id").maybeSingle();
+      if (!ok) continue; // outro caixa mexeu agora: lê de novo
+      await supabase.from("voucher_usos").insert([{
+        voucher_id: v.id, restaurant_id: rid, valor,
+        order_id: req.body?.order_id ? String(req.body.order_id) : null,
+        usado_por: readAuth(req)?.email || null
+      }]);
+      return res.json({ success: true, codigo: v.codigo, usado: valor, saldo: novo, expira_em: v.expira_em });
+    }
+    return sendError(res, 409, "O vale está sendo usado em outro caixa agora. Tente de novo.");
+  } catch (err) {
+    console.error("❌ voucher/usar:", err.message);
+    return sendError(res, 500, "Erro ao usar o vale");
+  }
+});
+
+// Admin: liga/desliga a venda e define a validade
+app.get("/admin/restaurants/:id/vouchers", requireAdmin, async (req, res) => {
+  try {
+    const cfg = await voucherConfig(req.params.id);
+    const { data: vendidos } = await supabase.from("vouchers").select("valor, saldo, expira_em, status")
+      .eq("restaurant_id", req.params.id).neq("status", "aguardando");
+    const agora = new Date();
+    const ativos = (vendidos || []).filter(v => v.status === "ativo" && new Date(v.expira_em) > agora && Number(v.saldo) > 0);
+    return res.json({
+      ativo: cfg.ativo, validade_dias: cfg.validade, opcoes_validade: VOUCHER_VALIDADES, valores: VOUCHER_VALORES,
+      pix_online: !!(await pixConfig(req.params.id)),
+      vendidos: (vendidos || []).length,
+      total_vendido: (vendidos || []).reduce((s, v) => s + Number(v.valor), 0),
+      saldo_em_aberto: ativos.reduce((s, v) => s + Number(v.saldo), 0)
+    });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao carregar o vale-presente");
+  }
+});
+
+app.patch("/admin/restaurants/:id/vouchers", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const validade = Number(req.body?.validade_dias);
+    if (!VOUCHER_VALIDADES.includes(validade)) return sendError(res, 400, "Validade inválida");
+    const { error } = await supabase.from("restaurante_config")
+      .upsert({ restaurant_id: id, voucher_ativo: !!req.body?.ativo, voucher_validade_dias: validade }, { onConflict: "restaurant_id" });
+    if (error) return sendError(res, 500, "Erro ao salvar: " + error.message);
+    await logAdminAction(req.auth.email, "editar_vale_presente", { restaurant_id: id, ativo: !!req.body?.ativo, validade });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
 /* ---- motor ---- */
 async function pixCriarCobranca({ restaurant_id, tipo, dados, pagador }) {
   const def = PIX_TIPOS[tipo];
@@ -3420,11 +3692,11 @@ const CENTRAL_ICONES = ["cardapio", "delivery", "fidelidade", "reserva", "vouche
 // junta tudo que a central usa: restaurante, configuração, prêmios e a configuração própria da central
 async function centralDados(rid) {
   const { data: rest } = await supabase.from("restaurants")
-    .select("id, name, plan, cardapio_delivery_url").eq("id", rid).maybeSingle();
+    .select("id, name, plan, cardapio_delivery_url, central_url").eq("id", rid).maybeSingle();
   if (!rest) return null;
   const [{ data: cfg }, { count: premios }, { data: central }] = await Promise.all([
     supabase.from("restaurante_config")
-      .select("nome_exibicao, logo_url, banner_url, subtitulo, telefone, instagram, endereco, cor_primaria")
+      .select("nome_exibicao, logo_url, banner_url, subtitulo, telefone, instagram, endereco, cor_primaria, voucher_ativo")
       .eq("restaurant_id", rid).maybeSingle(),
     supabase.from("premios_fidelidade")
       .select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("ativo", true),
@@ -3441,7 +3713,8 @@ function centralSugestoes({ rest, cfg, premios }) {
     delivery && premios > 0 && { icone: "fidelidade", rotulo: "Fidelidade", url: `${delivery}/#fidelidade`, origem: "Fidelidade do cardápio" },
     cfg.endereco && { icone: "mapa", rotulo: "Como chegar?", url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cfg.endereco)}`, origem: "Endereço cadastrado" },
     centralWhatsApp(cfg.telefone) && { icone: "whatsapp", rotulo: "Entre em contato", url: centralWhatsApp(cfg.telefone), origem: "WhatsApp cadastrado" },
-    centralInstagram(cfg.instagram) && { icone: "instagram", rotulo: "Instagram", url: centralInstagram(cfg.instagram), origem: "Instagram cadastrado" }
+    centralInstagram(cfg.instagram) && { icone: "instagram", rotulo: "Instagram", url: centralInstagram(cfg.instagram), origem: "Instagram cadastrado" },
+    rest.central_url && cfg.voucher_ativo && { icone: "voucher", rotulo: "Vale-presente", url: `https://${rest.central_url}/vale-presente.html`, origem: "Página do vale-presente" }
   ].filter(Boolean);
 }
 
