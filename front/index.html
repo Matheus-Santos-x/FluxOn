@@ -1546,6 +1546,30 @@ input:focus, textarea:focus, select:focus {
           </div>
         </div>
 
+        <!-- 🌐 DOMÍNIOS -->
+        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
+          <button onclick="toggleAccordion('admin-dominios')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:18px;">🌐</span>
+              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Domínios</span>
+            </div>
+            <span id="arrow-admin-dominios" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
+          </button>
+          <div id="accordion-admin-dominios" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Cardápio delivery + fidelidade</span>
+              <input id="admin-f-dom-delivery" placeholder="pedidos.restaurante.com.br" autocomplete="off" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+            </label>
+            <label style="display:flex; flex-direction:column; gap:4px;">
+              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Cardápio da mesa (QR Code)</span>
+              <input id="admin-f-dom-mesa" placeholder="mesa.restaurante.com.br" autocomplete="off" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+            </label>
+            <p style="color:rgba(252,228,228,0.45); font-size:12px; line-height:1.5; margin:0;">Só o domínio, sem https://. O link da fidelidade do cliente passa a ser: https://[domínio do delivery]/?token=...</p>
+            <button class="primary-button" id="admin-btn-save-dominios" style="margin-top:4px;">Salvar</button>
+            <p id="admin-status-dominios" style="font-size:13px; min-height:18px; margin:0;"></p>
+          </div>
+        </div>
+
         <!-- 📋 DADOS E OPERAÇÃO -->
         <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
           <button onclick="toggleAccordion('admin-operacao')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
