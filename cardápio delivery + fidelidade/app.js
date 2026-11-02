@@ -107,6 +107,12 @@ async function iniciarAbas(){
   document.body.classList.add("com-menu");
   gsap.fromTo(btn, { opacity:0, scale:.7 }, { opacity:1, scale:1, duration:.4, ease:"back.out(1.8)" });
   btn.onclick = abrirMenu;
+
+  const entrar = document.getElementById("loginBtn");
+  entrar.hidden = false;
+  loginAtualizarBotao();
+  gsap.fromTo(entrar, { opacity:0, scale:.7 }, { opacity:1, scale:1, duration:.4, ease:"back.out(1.8)", delay:.08 });
+  entrar.onclick = loginClique;
   document.getElementById("sideMenuClose").onclick = fecharMenu;
   overlay.addEventListener("click", fecharMenu);
   document.addEventListener("keydown", e => { if(e.key === "Escape") fecharMenu(); });
