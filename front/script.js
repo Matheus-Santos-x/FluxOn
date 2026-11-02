@@ -1274,7 +1274,7 @@ async function carregarAdminVouchers(msg) {
       <button type="button" class="primary-button" id="admin-btn-save-vouchers">Salvar</button>
       <p id="admin-status-vouchers" style="font-size:13px; min-height:18px; margin:0;"></p>
       ${dominio
-        ? `<a href="https://${_acEsc(dominio)}/vale-presente.html" target="_blank" rel="noopener" style="color:rgba(252,228,228,0.7); font-size:13px;">Abrir a página de compra ↗</a>`
+        ? `<a href="https://${_acEsc(dominio)}/vouchers.html" target="_blank" rel="noopener" style="color:rgba(252,228,228,0.7); font-size:13px;">Abrir a página de compra ↗</a>`
         : `<p style="color:rgba(252,228,228,0.45); font-size:12px; margin:0;">A página de compra fica no domínio da Central: cadastre-o em Domínios.</p>`}
     `;
     document.getElementById("admin-btn-save-vouchers").onclick = salvarAdminVouchers;
