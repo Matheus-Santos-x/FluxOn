@@ -1,15 +1,4 @@
-/* ============================================================
-   FIDELIDADE — aba "Fidelidade" dentro do próprio cardápio.
 
-   Como o cliente entra: pelo link que o restaurante manda no
-   WhatsApp (seudominio.com/?token=...). O token fica salvo neste
-   aparelho, então nas próximas visitas ele já abre logado.
-   Sem token, a aba mostra como o programa funciona e os prêmios.
-
-   O modelo (pontos ou selos) vem do servidor e a tela se adapta:
-   pontos → saldo grande + barra até o próximo prêmio
-   selos  → cartela de selos
-   ============================================================ */
 const FID = {
   token: null,
   cliente: null,     // { nome, pontos (saldo do modelo ativo), modelo, selos, pontos_resgatados }
@@ -367,11 +356,15 @@ function fidAtualizarFab(){
 }
 
 // pontinho na aba quando já dá pra resgatar algo
+// pontinho no menu quando já dá pra resgatar algo + saldo embaixo de "Fidelidade"
 function fidAtualizarPontinho(){
-  const dot = document.getElementById("fidTabDot");
-  if(!dot) return;
   const pode = !!FID.cliente && FID.premios.some(p => fidSaldo() >= fidCusto(p));
-  dot.style.display = pode ? "block" : "none";
+  ["menuDot", "sideFidDot"].forEach(id => {
+    const dot = document.getElementById(id);
+    if(dot) dot.style.display = pode ? "block" : "none";
+  });
+  const sub = document.getElementById("sideFidSub");
+  if(sub) sub.textContent = FID.cliente ? `${fidNum(fidSaldo())} ${fidUn(fidSaldo())}` : "Pontos e prêmios";
 }
 
 function flyToTarget(btn, alvo){
