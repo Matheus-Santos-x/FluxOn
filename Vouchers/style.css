@@ -1,6 +1,54 @@
 /* ============================================================
-   VALE-PRESENTE — usa o fundo, o logo e as cores do style.css da Central
+   VALE-PRESENTE — página própria (serviço separado da Central)
    ============================================================ */
+:root{
+  --cor:#d62828;          /* cor do restaurante (vem do servidor) */
+  --texto:#ffffff;
+  --vidro:rgba(18,14,12,.52);
+  --linha:rgba(255,255,255,.10);
+}
+*{ box-sizing:border-box; margin:0; padding:0; }
+html,body{ height:100%; }
+body{
+  background:#0b0a09;
+  color:var(--texto);
+  font-family:"Poppins", system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+a{ color:inherit; text-decoration:none; -webkit-tap-highlight-color:transparent; }
+[hidden]{ display:none !important; }
+
+.fundo{
+  position:fixed; inset:0;
+  background:radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--cor) 38%, #0b0a09), #0b0a09 72%);
+}
+.fundo::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(180deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.18) 30%, rgba(0,0,0,.18) 52%, rgba(0,0,0,.72) 82%, rgba(0,0,0,.9) 100%);
+}
+.logo{
+  width:88px; height:88px; border-radius:50%;
+  background:#141110;
+  border:2px solid rgba(255,255,255,.14);
+  box-shadow:0 10px 30px -8px rgba(0,0,0,.7);
+  overflow:hidden;
+  display:flex; align-items:center; justify-content:center;
+  font-size:34px; font-weight:500;
+}
+.logo img{ width:100%; height:100%; object-fit:cover; }
+.assinatura{ margin-top:18px; text-align:center; font-size:10.5px; color:rgba(255,255,255,.5); }
+.assinatura b{ font-weight:600; color:rgba(255,255,255,.75); }
+.aviso{
+  position:fixed; inset:0; z-index:5;
+  display:flex; align-items:center; justify-content:center;
+  padding:24px; text-align:center;
+  font-size:14px; color:rgba(255,255,255,.7);
+}
+@keyframes subir{ from{ opacity:0; transform:translateY(16px); } to{ opacity:1; transform:none; } }
+@media (prefers-reduced-motion:reduce){
+  *{ animation:none !important; transition:none !important; }
+}
 .vp{
   position:relative; z-index:1;
   max-width:480px; margin:0 auto;
