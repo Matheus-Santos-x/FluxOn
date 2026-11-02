@@ -1537,7 +1537,7 @@ function voucherAutorizado(req, rid) {
 app.get("/api/v1/vouchers/:restaurant_id/loja", async (req, res) => {
   try {
     const rid = req.params.restaurant_id;
-    const { data: rest } = await supabase.from("restaurants").select("id, name").eq("id", rid).maybeSingle();
+    const { data: rest } = await supabase.from("restaurants").select("id, name, central_url").eq("id", rid).maybeSingle();
     if (!rest) return sendError(res, 404, "Restaurante não encontrado");
     const [cfg, { data: visual }, pix] = await Promise.all([
       voucherConfig(rid),
@@ -1550,7 +1550,8 @@ app.get("/api/v1/vouchers/:restaurant_id/loja", async (req, res) => {
       logo_url: visual?.logo_url || null,
       cor: visual?.cor_primaria || "#d62828",
       valores: VOUCHER_VALORES,
-      validade_dias: cfg.validade
+      validade_dias: cfg.validade,
+      central_url: rest.central_url ? `https://${rest.central_url}` : null
     });
   } catch (err) {
     return sendError(res, 500, "Erro ao carregar o vale-presente");
@@ -2511,7 +2512,7 @@ app.get("/admin/restaurants", requireAdmin, async (req, res) => {
     const { q = "" } = req.query;
     let query = supabase
       .from("restaurants")
-      .select("id, name, email, plan, created_at, cardapio_url, cardapio_delivery_url, fidelidade_url, tracking_url, central_url")
+      .select("id, name, email, plan, created_at, cardapio_url, cardapio_delivery_url, fidelidade_url, tracking_url, central_url, vouchers_url")
       .order("name");
 
     if (q.trim()) query = query.ilike("name", `%${q.trim()}%`);
@@ -2610,10 +2611,10 @@ app.patch("/admin/restaurants/:id/horarios", requireAdmin, async (req, res) => {
 app.patch("/admin/restaurants/:id/dominios", requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const fields = pick(req.body, ["cardapio_url", "fidelidade_url", "tracking_url", "cardapio_delivery_url", "central_url"]);
+    const fields = pick(req.body, ["cardapio_url", "fidelidade_url", "tracking_url", "cardapio_delivery_url", "central_url", "vouchers_url"]);
 
     // domínios ficam sempre no mesmo formato (sem https, minúsculo); tracking_url é um link completo, fica como veio
-    for (const k of ["cardapio_url", "fidelidade_url", "cardapio_delivery_url", "central_url"]) {
+    for (const k of ["cardapio_url", "fidelidade_url", "cardapio_delivery_url", "central_url", "vouchers_url"]) {
       if (!(k in fields)) continue;
       if (!fields[k]) { fields[k] = null; continue; }
       const d = normalizarDominio(fields[k]);
@@ -3663,6 +3664,14 @@ app.patch("/api/v1/restaurante/:restaurant_id/dominio-delivery", async (req, res
    domínio do delivery, endereço, telefone e Instagram.
    Botão sem dado cadastrado não aparece.
 ======================================== */
+app.get("/api/v1/dominio-vouchers/:dominio", async (req, res) => {
+  const dominio = normalizarDominio(req.params.dominio);
+  if (!dominio) return sendError(res, 404, "Domínio não encontrado");
+  const { data } = await supabase.from("restaurants").select("id").eq("vouchers_url", dominio).limit(1);
+  if (data?.[0]) return res.json({ restaurant_id: data[0].id });
+  return sendError(res, 404, "Domínio não encontrado");
+});
+
 app.get("/api/v1/dominio-central/:dominio", async (req, res) => {
   const dominio = normalizarDominio(req.params.dominio);
   if (!dominio) return sendError(res, 404, "Domínio não encontrado");
@@ -3693,7 +3702,7 @@ const CENTRAL_ICONES = ["cardapio", "delivery", "fidelidade", "reserva", "vouche
 // junta tudo que a central usa: restaurante, configuração, prêmios e a configuração própria da central
 async function centralDados(rid) {
   const { data: rest } = await supabase.from("restaurants")
-    .select("id, name, plan, cardapio_delivery_url, central_url").eq("id", rid).maybeSingle();
+    .select("id, name, plan, cardapio_delivery_url, central_url, vouchers_url").eq("id", rid).maybeSingle();
   if (!rest) return null;
   const [{ data: cfg }, { count: premios }, { data: central }] = await Promise.all([
     supabase.from("restaurante_config")
@@ -3715,7 +3724,7 @@ function centralSugestoes({ rest, cfg, premios }) {
     cfg.endereco && { icone: "mapa", rotulo: "Como chegar?", url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cfg.endereco)}`, origem: "Endereço cadastrado" },
     centralWhatsApp(cfg.telefone) && { icone: "whatsapp", rotulo: "Entre em contato", url: centralWhatsApp(cfg.telefone), origem: "WhatsApp cadastrado" },
     centralInstagram(cfg.instagram) && { icone: "instagram", rotulo: "Instagram", url: centralInstagram(cfg.instagram), origem: "Instagram cadastrado" },
-    rest.central_url && cfg.voucher_ativo && { icone: "voucher", rotulo: "Vale-presente", url: `https://${rest.central_url}/vouchers.html`, origem: "Página do vale-presente" }
+    rest.vouchers_url && cfg.voucher_ativo && { icone: "voucher", rotulo: "Vale-presente", url: `https://${rest.vouchers_url}`, origem: "Página do vale-presente" }
   ].filter(Boolean);
 }
 
