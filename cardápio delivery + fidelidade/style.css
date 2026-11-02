@@ -1233,8 +1233,49 @@ backdrop-filter:blur(10px);
     border:2px solid var(--bg);
     animation:pulse-dot 1.8s ease-in-out infinite;
   }
-  /* quando o menu existe, a barra de categorias abre espaço pro botão */
-  body.com-menu .cat-nav{ padding-left:64px; }
+  /* quando o menu existe, a barra de categorias abre espaço pros botões */
+  body.com-menu .cat-nav{ padding-left:64px; padding-right:104px; }
+
+  /* ================= BOTÃO ENTRAR / MINHA CONTA ================= */
+  .login-btn{
+    position:fixed; top:calc(10px + env(safe-area-inset-top)); right:12px;
+    z-index:61;
+    height:40px; padding:0 14px 0 11px; border-radius:12px;
+    background:color-mix(in srgb, var(--surface) 82%, transparent);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    border:1px solid var(--line);
+    box-shadow:0 6px 16px -6px rgba(0,0,0,.45);
+    display:flex; align-items:center; gap:7px;
+    font-size:13px; font-weight:800; color:var(--text);
+    transition:transform .15s ease, border-color .2s ease;
+  }
+  .login-btn[hidden]{display:none;}
+  .login-btn:active{transform:scale(.94);}
+  .login-btn svg{ color:var(--red-glow); }
+  .login-btn.logado{ width:40px; padding:0; justify-content:center; border-color:color-mix(in srgb, var(--red) 55%, var(--line)); }
+  .login-avatar{
+    width:30px; height:30px; border-radius:9px;
+    background:linear-gradient(140deg, var(--red), var(--red-dim));
+    color:#fff; font-family:var(--font-display); font-size:14px;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  .login-panel{ max-width:420px; }
+  .login-txt{ font-size:13.5px; color:var(--muted); line-height:1.5; margin:4px 0 16px; }
+  .login-txt b{ color:var(--text); }
+  .login-codigo{ font-family:var(--font-mono) !important; font-size:26px !important; letter-spacing:.5em; text-align:center; }
+  .login-links{ display:flex; justify-content:space-between; gap:10px; margin-top:14px; }
+  .login-links button{ font-size:12.5px; font-weight:700; color:var(--muted); text-decoration:underline; text-underline-offset:3px; }
+  .login-links button:disabled{ text-decoration:none; color:var(--muted-2); font-family:var(--font-mono); font-weight:400; }
+  .fid-entrar{
+    position:relative; z-index:1;
+    width:100%; margin-top:18px; padding:13px;
+    border-radius:11px; background:#fff; color:var(--red);
+    font-size:14px; font-weight:800; text-transform:uppercase; letter-spacing:.04em;
+    box-shadow:0 8px 20px -8px rgba(0,0,0,.45);
+    transition:transform .15s ease;
+  }
+  .fid-entrar:active{ transform:scale(.97); }
 
   .side-menu{
     position:fixed; top:0; left:0; bottom:0;
@@ -1384,7 +1425,7 @@ backdrop-filter:blur(10px);
     display:flex; align-items:center; justify-content:center;
     font-family:var(--font-mono); font-size:12px; font-weight:700;
   }
-  .fid-anon-nota{ position:relative; z-index:1; font-size:12px; margin-top:16px; opacity:.85; line-height:1.45; }
+  .fid-anon-nota{ position:relative; z-index:1; font-size:12px; margin-top:12px; opacity:.85; line-height:1.45; text-align:center; }
 
   .fid-subnav{ display:flex; gap:8px; margin:24px 0 16px; }
   .fid-heading{ margin:28px 0 14px; }
