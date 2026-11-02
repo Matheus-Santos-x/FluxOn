@@ -679,6 +679,7 @@ async function selecionarAdminRestaurante(id) {
   document.getElementById("admin-f-dom-delivery").value = r.cardapio_delivery_url || "";
   document.getElementById("admin-f-dom-central").value = r.central_url || "";
   document.getElementById("admin-status-dominios").textContent = "";
+  carregarAdminCentral();
 
   // Carrega config (aparência + operação) — rota GET não exige token do próprio restaurante
   try {
