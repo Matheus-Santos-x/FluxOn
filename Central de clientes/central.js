@@ -62,6 +62,13 @@ function render(d){
   const frase = document.getElementById("frase");
   if(d.frase){ frase.textContent = d.frase; frase.hidden = false; }
 
+  const status = document.getElementById("status");
+  if(d.status && d.status.texto){
+    status.textContent = d.status.texto;
+    status.classList.toggle("aberto", !!d.status.aberto);
+    status.hidden = false;
+  }
+
   // botões: até 4 por linha; com menos de 4, eles se dividem na linha toda
   const botoes = (d.botoes || []).filter(b => linkSeguro(b.url));
   const box = document.getElementById("botoes");
