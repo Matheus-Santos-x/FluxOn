@@ -680,6 +680,7 @@ async function selecionarAdminRestaurante(id) {
   document.getElementById("admin-f-dom-central").value = r.central_url || "";
   document.getElementById("admin-status-dominios").textContent = "";
   carregarAdminCentral();
+  carregarAdminVouchers();
 
   // Carrega config (aparência + operação) — rota GET não exige token do próprio restaurante
   try {
@@ -1232,6 +1233,78 @@ async function salvarAdminCentral() {
     await carregarAdminCentral("✅ Salvo! Já vale agora.");
   } catch (e) {
     _acStatus("❌ " + e.message, "erro");
+  }
+}
+
+/* ========================================
+   🎁 VALE-PRESENTE (Admin)
+   Liga/desliga a venda, define a validade e mostra o resumo do que foi vendido
+======================================== */
+async function carregarAdminVouchers(msg) {
+  const corpo = document.getElementById("admin-vouchers-corpo");
+  if (!corpo || !adminSelectedRestaurant) return;
+  const rid = adminSelectedRestaurant.id;
+  corpo.innerHTML = `<p style="color:rgba(252,228,228,0.5); font-size:13px; margin:0;">Carregando...</p>`;
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants/${rid}/vouchers`, { headers: buildAdminHeaders() });
+    const d = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(d.error || "Erro ao carregar");
+    if (adminSelectedRestaurant?.id !== rid) return;
+    const dominio = adminSelectedRestaurant.central_url;
+    const brl = v => `R$ ${Number(v || 0).toFixed(2).replace(".", ",")}`;
+    const caixa = "padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0d0d0d; flex:1; min-width:110px;";
+    corpo.innerHTML = `
+      ${d.pix_online ? "" : `<p style="margin:0; padding:10px 12px; border-radius:8px; background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); color:rgba(251,191,36,0.9); font-size:12px; line-height:1.5;">⚠️ Este restaurante ainda não tem Pix online configurado. Sem ele, a página de compra não abre.</p>`}
+      <label style="display:flex; align-items:center; gap:10px; color:rgba(252,228,228,0.9); font-size:14px; cursor:pointer;">
+        <input type="checkbox" id="admin-vp-ativo" ${d.ativo ? "checked" : ""} style="width:18px; height:18px; accent-color:#ef4444;">
+        Vender vale-presente
+      </label>
+      <label style="display:flex; flex-direction:column; gap:4px;">
+        <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Validade (a partir da compra)</span>
+        <select id="admin-vp-validade" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;">
+          ${d.opcoes_validade.map(n => `<option value="${n}" ${n === d.validade_dias ? "selected" : ""}>${n} dias</option>`).join("")}
+        </select>
+      </label>
+      <p style="color:rgba(252,228,228,0.45); font-size:12px; line-height:1.5; margin:0;">Valores à venda: ${d.valores.map(v => `R$ ${v}`).join(", ")}. O saldo que sobra depois de um uso vence na mesma data.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <div style="${caixa}"><div style="color:rgba(252,228,228,0.5); font-size:11px;">Vendidos</div><div style="color:rgba(252,228,228,1); font-size:16px; font-weight:800;">${d.vendidos}</div></div>
+        <div style="${caixa}"><div style="color:rgba(252,228,228,0.5); font-size:11px;">Total vendido</div><div style="color:rgba(252,228,228,1); font-size:16px; font-weight:800;">${brl(d.total_vendido)}</div></div>
+        <div style="${caixa}"><div style="color:rgba(252,228,228,0.5); font-size:11px;">Saldo em aberto</div><div style="color:rgba(252,228,228,1); font-size:16px; font-weight:800;">${brl(d.saldo_em_aberto)}</div></div>
+      </div>
+      <button type="button" class="primary-button" id="admin-btn-save-vouchers">Salvar</button>
+      <p id="admin-status-vouchers" style="font-size:13px; min-height:18px; margin:0;"></p>
+      ${dominio
+        ? `<a href="https://${_acEsc(dominio)}/vale-presente.html" target="_blank" rel="noopener" style="color:rgba(252,228,228,0.7); font-size:13px;">Abrir a página de compra ↗</a>`
+        : `<p style="color:rgba(252,228,228,0.45); font-size:12px; margin:0;">A página de compra fica no domínio da Central: cadastre-o em Domínios.</p>`}
+    `;
+    document.getElementById("admin-btn-save-vouchers").onclick = salvarAdminVouchers;
+    if (msg) {
+      const st = document.getElementById("admin-status-vouchers");
+      st.textContent = msg; st.style.color = "rgba(34,197,94,0.9)";
+    }
+  } catch (e) {
+    corpo.innerHTML = `<p style="color:rgba(239,68,68,0.9); font-size:13px; margin:0;">❌ ${_acEsc(e.message)}</p>`;
+  }
+}
+
+async function salvarAdminVouchers() {
+  if (!adminSelectedRestaurant) return;
+  const st = document.getElementById("admin-status-vouchers");
+  st.textContent = "Salvando..."; st.style.color = "rgba(252,228,228,0.6)";
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants/${adminSelectedRestaurant.id}/vouchers`, {
+      method: "PATCH", headers: buildAdminHeaders(),
+      body: JSON.stringify({
+        ativo: document.getElementById("admin-vp-ativo").checked,
+        validade_dias: Number(document.getElementById("admin-vp-validade").value)
+      })
+    });
+    const d = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(d.error || "Erro ao salvar");
+    await carregarAdminVouchers("✅ Salvo! Já vale agora.");
+    if (typeof carregarAdminCentral === "function") carregarAdminCentral(); // atualiza a sugestão de link na Central
+  } catch (e) {
+    st.textContent = "❌ " + e.message; st.style.color = "rgba(239,68,68,0.9)";
   }
 }
 
