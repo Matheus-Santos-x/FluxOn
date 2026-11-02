@@ -59,13 +59,27 @@ function showError(msg){
    cadastrados ou se o cliente entrou pelo link da fidelidade.
    ============================================================ */
 let ABA_ATUAL = "cardapio";
+const sideMenu = document.getElementById("sideMenu");
+
+function abrirMenu(){
+  sideMenu.setAttribute("aria-hidden", "false");
+  openOverlay();
+  gsap.to(sideMenu, { x:0, duration:.45, ease:"power3.out" });
+  gsap.fromTo(sideMenu.querySelectorAll(".side-item"), { opacity:0, x:-12 }, { opacity:1, x:0, duration:.35, stagger:.06, delay:.1, ease:"power2.out" });
+}
+function fecharMenu(){
+  if(sideMenu.getAttribute("aria-hidden") === "true") return;
+  sideMenu.setAttribute("aria-hidden", "true");
+  gsap.to(sideMenu, { x:"-105%", duration:.35, ease:"power2.in" });
+  closeOverlay();
+}
 
 function mostrarAba(aba, semRolar){
+  document.querySelectorAll(".side-item").forEach(b => b.classList.toggle("active", b.dataset.aba === aba));
   if(aba === ABA_ATUAL) return;
   ABA_ATUAL = aba;
   const fid = aba === "fidelidade";
   document.body.classList.toggle("aba-fid", fid);
-  document.querySelectorAll(".tab-item").forEach(b => b.classList.toggle("active", b.dataset.aba === aba));
   history.replaceState(null, "", location.pathname + location.search + (fid ? "#fidelidade" : ""));
   if(!semRolar) window.scrollTo({ top:0, behavior:"smooth" });
 
@@ -82,11 +96,21 @@ async function iniciarAbas(){
   try{ tem = await fidCarregar(); }catch(err){ console.warn("Fidelidade indisponível:", err); }
   if(!tem) return;
 
-  const bar = document.getElementById("tabbar");
-  bar.hidden = false;
-  document.body.classList.add("com-abas");
-  gsap.fromTo(bar, { y:80 }, { y:0, duration:.5, ease:"power3.out" });
-  bar.querySelectorAll(".tab-item").forEach(b => b.onclick = () => mostrarAba(b.dataset.aba));
+  // cabeçalho do menu com a marca do restaurante
+  const logo = document.getElementById("sideMenuLogo");
+  if(RESTAURANT_CONFIG.logo_url) logo.innerHTML = `<img src="${escHtml(RESTAURANT_CONFIG.logo_url)}" alt="">`;
+  else logo.textContent = (RESTAURANT_CONFIG.nome_exibicao || "R").trim().charAt(0).toUpperCase();
+  document.getElementById("sideMenuNome").textContent = RESTAURANT_CONFIG.nome_exibicao || "";
+
+  const btn = document.getElementById("menuBtn");
+  btn.hidden = false;
+  document.body.classList.add("com-menu");
+  gsap.fromTo(btn, { opacity:0, scale:.7 }, { opacity:1, scale:1, duration:.4, ease:"back.out(1.8)" });
+  btn.onclick = abrirMenu;
+  document.getElementById("sideMenuClose").onclick = fecharMenu;
+  overlay.addEventListener("click", fecharMenu);
+  document.addEventListener("keydown", e => { if(e.key === "Escape") fecharMenu(); });
+  sideMenu.querySelectorAll(".side-item").forEach(b => b.onclick = () => { fecharMenu(); mostrarAba(b.dataset.aba); });
   document.getElementById("fidFab").onclick = fidAbrirResgate;
   fidAtualizarPontinho();
 
