@@ -143,6 +143,11 @@ const ALLOWED_ORIGINS_FIXED = [
   
 ];
 
+function normalizarDominio(v) {
+  const d = String(v || "").trim().toLowerCase().replace(/^https?:\/\//, "").split(/[/?#]/)[0].replace(/\.$/, "");
+  return /^[a-z0-9.-]+(:\d+)?$/.test(d) ? d : "";
+}
+
 let _dominiosCache = null;
 let _dominiosCacheTime = 0;
 
@@ -2124,7 +2129,7 @@ app.get("/admin/restaurants", requireAdmin, async (req, res) => {
     const { q = "" } = req.query;
     let query = supabase
       .from("restaurants")
-      .select("id, name, email, plan, created_at")
+      .select("id, name, email, plan, created_at, cardapio_url, cardapio_delivery_url, fidelidade_url, tracking_url")
       .order("name");
 
     if (q.trim()) query = query.ilike("name", `%${q.trim()}%`);
@@ -2224,6 +2229,17 @@ app.patch("/admin/restaurants/:id/dominios", requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const fields = pick(req.body, ["cardapio_url", "fidelidade_url", "tracking_url", "cardapio_delivery_url"]);
+
+    // domínios ficam sempre no mesmo formato (sem https, minúsculo); tracking_url é um link completo, fica como veio
+    for (const k of ["cardapio_url", "fidelidade_url", "cardapio_delivery_url"]) {
+      if (!(k in fields)) continue;
+      if (!fields[k]) { fields[k] = null; continue; }
+      const d = normalizarDominio(fields[k]);
+      if (!d) return sendError(res, 400, `Domínio inválido: ${fields[k]}`);
+      const { data: outro } = await supabase.from("restaurants").select("name").eq(k, d).neq("id", id).limit(1);
+      if (outro?.[0]) return sendError(res, 409, `O domínio ${d} já está em uso por ${outro[0].name}`);
+      fields[k] = d;
+    }
     if (Object.keys(fields).length === 0) return sendError(res, 400, "nada para atualizar");
 
     const { error } = await supabase.from("restaurants").update(fields).eq("id", id);
@@ -2232,7 +2248,7 @@ app.patch("/admin/restaurants/:id/dominios", requireAdmin, async (req, res) => {
     _dominiosCache = null; // ← zera o cache de 5min do CORS, como combinado
 
     await logAdminAction(req.auth.email, "editar_dominios", { restaurant_id: id, fields });
-    return res.json({ success: true });
+    return res.json({ success: true, dominios: fields });
   } catch (err) {
     return sendError(res, 500, "Erro interno");
   }
@@ -3208,6 +3224,7 @@ app.patch("/api/v1/restaurante/:restaurant_id/dominio", async (req, res) => {
     .eq("id", restaurant_id);
     
   if (error) return sendError(res, 500, "Erro ao salvar domínio");
+  _dominiosCache = null; // domínio novo já passa no CORS na hora
   return res.json({ success: true });
 });
 
@@ -3219,6 +3236,7 @@ app.patch("/api/v1/restaurante/:restaurant_id/dominio-cardapio", async (req, res
     .update({ cardapio_url: dominio })
     .eq("id", restaurant_id);
   if (error) return sendError(res, 500, "Erro ao salvar domínio do cardápio");
+  _dominiosCache = null; // domínio novo já passa no CORS na hora
   return res.json({ success: true });
 });
 
@@ -3234,14 +3252,14 @@ app.get("/api/v1/dominio-cardapio/:dominio", async (req, res) => {
 });
 
 app.get("/api/v1/dominio-delivery/:dominio", async (req, res) => {
-  const { dominio } = req.params;
-  const { data, error } = await supabase
-    .from("restaurants")
-    .select("id")
-    .eq("cardapio_delivery_url", dominio)
-    .single();
-  if (error || !data) return sendError(res, 404, "Domínio não encontrado");
-  return res.json({ restaurant_id: data.id });
+  const dominio = normalizarDominio(req.params.dominio);
+  if (!dominio) return sendError(res, 404, "Domínio não encontrado");
+  // o app de delivery também é o app da fidelidade: responde pelos dois domínios
+  for (const coluna of ["cardapio_delivery_url", "fidelidade_url"]) {
+    const { data } = await supabase.from("restaurants").select("id").eq(coluna, dominio).limit(1);
+    if (data?.[0]) return res.json({ restaurant_id: data[0].id });
+  }
+  return sendError(res, 404, "Domínio não encontrado");
 });
 
 app.patch("/api/v1/restaurante/:restaurant_id/dominio-delivery", async (req, res) => {
@@ -3252,6 +3270,7 @@ app.patch("/api/v1/restaurante/:restaurant_id/dominio-delivery", async (req, res
     .update({ cardapio_delivery_url: dominio })
     .eq("id", restaurant_id);
   if (error) return sendError(res, 500, "Erro ao salvar domínio do delivery");
+  _dominiosCache = null; // domínio novo já passa no CORS na hora
   return res.json({ success: true });
 });
 
