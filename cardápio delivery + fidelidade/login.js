@@ -70,4 +70,108 @@ function loginFechar(){
 }
 
 function loginPassoTelefone(nome, telefone){
-  const
+  const corpo = document.getElementById("loginCorpo");
+  corpo.innerHTML = `
+    <p class="login-txt">Entre com seu WhatsApp para ver seus ${FID.modelo === "selos" ? "selos" : "pontos"} e trocar por prêmios. Você só faz isso uma vez neste aparelho.</p>
+    <div class="field"><label>Seu nome</label><input type="text" id="loginNome" value="${escHtml(nome)}" placeholder="Como podemos te chamar?" autocomplete="name"></div>
+    <div class="field"><label>Telefone (WhatsApp)</label><input type="tel" id="loginTel" value="${escHtml(telefoneMascara(telefone))}" placeholder="(00) 00000-0000" inputmode="tel" autocomplete="tel"></div>
+    <button class="checkout-btn" id="loginEnviar">Receber código no WhatsApp</button>`;
+  const tel = document.getElementById("loginTel");
+  tel.addEventListener("input", () => { tel.value = telefoneMascara(tel.value); });
+  tel.addEventListener("keydown", e => { if(e.key === "Enter") loginSolicitar(); });
+  document.getElementById("loginEnviar").onclick = loginSolicitar;
+  setTimeout(() => (nome ? tel : document.getElementById("loginNome")).focus(), 350);
+}
+
+async function loginSolicitar(){
+  if(LOGIN.enviando) return;
+  const nome = (document.getElementById("loginNome")?.value || LOGIN.nome || "").trim();
+  const telInput = document.getElementById("loginTel");
+  const telefone = String(telInput ? telInput.value : LOGIN.telefone).replace(/\D/g, "");
+  if(telefone.length < 10){ if(telInput) shake("loginTel"); fidToast("Digite o telefone com DDD", true); return; }
+  LOGIN.nome = nome; LOGIN.telefone = telefone;
+
+  const btn = document.getElementById("loginEnviar") || document.getElementById("loginReenviar");
+  LOGIN.enviando = true;
+  if(btn){ btn.disabled = true; btn.dataset.txt = btn.textContent; btn.textContent = "Enviando..."; }
+  try{
+    const r = await fetch(`${CONFIG.API_BASE}/api/v1/cliente/${RESTAURANT_ID}/login/solicitar`, {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ telefone, nome })
+    });
+    const d = await r.json().catch(() => ({}));
+    if(!r.ok) throw new Error(d.error || "Não foi possível enviar o código.");
+    loginPassoCodigo();
+  }catch(err){
+    fidToast(err.message, true);
+    if(btn){ btn.disabled = false; btn.textContent = btn.dataset.txt || "Receber código no WhatsApp"; }
+  }finally{
+    LOGIN.enviando = false;
+  }
+}
+
+function loginPassoCodigo(){
+  const corpo = document.getElementById("loginCorpo");
+  if(!corpo) return;
+  corpo.innerHTML = `
+    <p class="login-txt">Enviamos um código de 6 números para o WhatsApp <b>${escHtml(telefoneMascara(LOGIN.telefone))}</b>.</p>
+    <div class="field"><label>Código</label><input type="text" id="loginCodigo" class="login-codigo" maxlength="6" placeholder="••••••" inputmode="numeric" autocomplete="one-time-code"></div>
+    <button class="checkout-btn" id="loginEntrar">Entrar</button>
+    <div class="login-links">
+      <button id="loginTrocar">Trocar número</button>
+      <button id="loginReenviar" disabled>Reenviar código</button>
+    </div>`;
+  const cod = document.getElementById("loginCodigo");
+  cod.addEventListener("input", () => {
+    cod.value = cod.value.replace(/\D/g, "").slice(0, 6);
+    if(cod.value.length === 6) loginVerificar();
+  });
+  document.getElementById("loginEntrar").onclick = loginVerificar;
+  document.getElementById("loginTrocar").onclick = () => { clearInterval(LOGIN.espera); loginPassoTelefone(LOGIN.nome, LOGIN.telefone); };
+  document.getElementById("loginReenviar").onclick = loginSolicitar;
+  setTimeout(() => cod.focus(), 200);
+
+  // só deixa pedir outro código depois de 45 segundos
+  clearInterval(LOGIN.espera);
+  let s = 45;
+  const re = document.getElementById("loginReenviar");
+  const tick = () => {
+    if(!document.body.contains(re)) return clearInterval(LOGIN.espera);
+    re.disabled = s > 0;
+    re.textContent = s > 0 ? `Reenviar em ${s}s` : "Reenviar código";
+    s--;
+    if(s < -1) clearInterval(LOGIN.espera);
+  };
+  tick(); LOGIN.espera = setInterval(tick, 1000);
+}
+
+async function loginVerificar(){
+  if(LOGIN.enviando) return;
+  const codigo = (document.getElementById("loginCodigo")?.value || "").replace(/\D/g, "");
+  if(codigo.length !== 6){ shake("loginCodigo"); return; }
+  const btn = document.getElementById("loginEntrar");
+  LOGIN.enviando = true; btn.disabled = true; btn.textContent = "Entrando...";
+  try{
+    const r = await fetch(`${CONFIG.API_BASE}/api/v1/cliente/${RESTAURANT_ID}/login/verificar`, {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ telefone: LOGIN.telefone, codigo, nome: LOGIN.nome })
+    });
+    const d = await r.json().catch(() => ({}));
+    if(!r.ok || !d.token) throw new Error(d.error || "Código inválido ou expirado");
+
+    FID.token = d.token;
+    try{ localStorage.setItem(fidTokenKey(), d.token); }catch{}
+    await fidBuscarCliente();
+    loginFechar();
+    fidToast(`Pronto, ${String(FID.cliente?.nome || d.nome || "").split(" ")[0] || "você entrou"}! 🎉`);
+    loginAtualizarBotao();
+    if(ABA_ATUAL === "fidelidade") fidRender(true); else mostrarAba("fidelidade");
+  }catch(err){
+    fidToast(err.message, true);
+    const cod = document.getElementById("loginCodigo");
+    if(cod){ cod.value = ""; shake("loginCodigo"); cod.focus(); }
+    btn.disabled = false; btn.textContent = "Entrar";
+  }finally{
+    LOGIN.enviando = false;
+  }
+}
