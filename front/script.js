@@ -677,6 +677,7 @@ async function selecionarAdminRestaurante(id) {
   // Preenche "Domínios"
   document.getElementById("admin-f-dom-mesa").value = r.cardapio_url || "";
   document.getElementById("admin-f-dom-delivery").value = r.cardapio_delivery_url || "";
+  document.getElementById("admin-f-dom-central").value = r.central_url || "";
   document.getElementById("admin-status-dominios").textContent = "";
 
   // Carrega config (aparência + operação) — rota GET não exige token do próprio restaurante
@@ -891,7 +892,8 @@ async function salvarAdminDominios() {
   const status = document.getElementById("admin-status-dominios");
   const body = {
     cardapio_url: document.getElementById("admin-f-dom-mesa").value.trim(),
-    cardapio_delivery_url: document.getElementById("admin-f-dom-delivery").value.trim()
+    cardapio_delivery_url: document.getElementById("admin-f-dom-delivery").value.trim(),
+    central_url: document.getElementById("admin-f-dom-central").value.trim()
   };
   status.textContent = "Salvando..."; status.style.color = "rgba(252,228,228,0.6)";
   try {
@@ -903,6 +905,7 @@ async function salvarAdminDominios() {
     Object.assign(adminSelectedRestaurant, data.dominios || {});
     document.getElementById("admin-f-dom-mesa").value = adminSelectedRestaurant.cardapio_url || "";
     document.getElementById("admin-f-dom-delivery").value = adminSelectedRestaurant.cardapio_delivery_url || "";
+    document.getElementById("admin-f-dom-central").value = adminSelectedRestaurant.central_url || "";
     status.textContent = "✅ Salvo! Já vale agora."; status.style.color = "rgba(34,197,94,0.9)";
   } catch (e) {
     status.textContent = "❌ " + e.message; status.style.color = "rgba(239,68,68,0.9)";
