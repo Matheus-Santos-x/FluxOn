@@ -678,6 +678,7 @@ async function selecionarAdminRestaurante(id) {
   document.getElementById("admin-f-dom-mesa").value = r.cardapio_url || "";
   document.getElementById("admin-f-dom-delivery").value = r.cardapio_delivery_url || "";
   document.getElementById("admin-f-dom-central").value = r.central_url || "";
+  document.getElementById("admin-f-dom-vouchers").value = r.vouchers_url || "";
   document.getElementById("admin-status-dominios").textContent = "";
   carregarAdminCentral();
   carregarAdminVouchers();
@@ -895,7 +896,8 @@ async function salvarAdminDominios() {
   const body = {
     cardapio_url: document.getElementById("admin-f-dom-mesa").value.trim(),
     cardapio_delivery_url: document.getElementById("admin-f-dom-delivery").value.trim(),
-    central_url: document.getElementById("admin-f-dom-central").value.trim()
+    central_url: document.getElementById("admin-f-dom-central").value.trim(),
+    vouchers_url: document.getElementById("admin-f-dom-vouchers").value.trim()
   };
   status.textContent = "Salvando..."; status.style.color = "rgba(252,228,228,0.6)";
   try {
@@ -908,6 +910,7 @@ async function salvarAdminDominios() {
     document.getElementById("admin-f-dom-mesa").value = adminSelectedRestaurant.cardapio_url || "";
     document.getElementById("admin-f-dom-delivery").value = adminSelectedRestaurant.cardapio_delivery_url || "";
     document.getElementById("admin-f-dom-central").value = adminSelectedRestaurant.central_url || "";
+    document.getElementById("admin-f-dom-vouchers").value = adminSelectedRestaurant.vouchers_url || "";
     status.textContent = "✅ Salvo! Já vale agora."; status.style.color = "rgba(34,197,94,0.9)";
   } catch (e) {
     status.textContent = "❌ " + e.message; status.style.color = "rgba(239,68,68,0.9)";
@@ -1250,7 +1253,7 @@ async function carregarAdminVouchers(msg) {
     const d = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(d.error || "Erro ao carregar");
     if (adminSelectedRestaurant?.id !== rid) return;
-    const dominio = adminSelectedRestaurant.central_url;
+    const dominio = adminSelectedRestaurant.vouchers_url;
     const brl = v => `R$ ${Number(v || 0).toFixed(2).replace(".", ",")}`;
     const caixa = "padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0d0d0d; flex:1; min-width:110px;";
     corpo.innerHTML = `
@@ -1274,8 +1277,8 @@ async function carregarAdminVouchers(msg) {
       <button type="button" class="primary-button" id="admin-btn-save-vouchers">Salvar</button>
       <p id="admin-status-vouchers" style="font-size:13px; min-height:18px; margin:0;"></p>
       ${dominio
-        ? `<a href="https://${_acEsc(dominio)}/vouchers.html" target="_blank" rel="noopener" style="color:rgba(252,228,228,0.7); font-size:13px;">Abrir a página de compra ↗</a>`
-        : `<p style="color:rgba(252,228,228,0.45); font-size:12px; margin:0;">A página de compra fica no domínio da Central: cadastre-o em Domínios.</p>`}
+              ? `<a href="https://${_acEsc(dominio)}" target="_blank" rel="noopener" style="color:rgba(252,228,228,0.7); font-size:13px;">Abrir a página de compra ↗</a>`
+        : `<p style="color:rgba(252,228,228,0.45); font-size:12px; margin:0;">Cadastre o domínio em Domínios → Vouchers para abrir a página de compra.</p>`}
     `;
     document.getElementById("admin-btn-save-vouchers").onclick = salvarAdminVouchers;
     if (msg) {
