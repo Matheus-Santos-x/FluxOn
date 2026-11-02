@@ -159,7 +159,7 @@ async function getDominiosPermitidos() {
   try {
     const { data } = await supabase
       .from("restaurants")
-      .select("cardapio_url, fidelidade_url, tracking_url, cardapio_delivery_url, central_url");
+      .select("cardapio_url, fidelidade_url, tracking_url, cardapio_delivery_url, central_url, vouchers_url");
     
     const dominios = new Set(ALLOWED_ORIGINS_FIXED);
     (data || []).forEach(r => {
