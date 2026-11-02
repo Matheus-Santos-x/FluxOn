@@ -201,4 +201,65 @@ function mostrarPix(){
     try{ await navigator.clipboard.writeText(c.pix_copia_cola); copiar.textContent = "Código copiado ✓"; }
     catch{ const s = getSelection(), rg = document.createRange(); rg.selectNodeContents($("pixCodigo")); s.removeAllRanges(); s.addRange(rg); }
   };
-  $("pixVoltar").onclick = () => {
+  $("pixVoltar").onclick = () => { pararPix(); esquecerPix(); mostrarPasso("passoForm"); if(RS.dia) escolherDia(RS.dia); };
+  mostrarPasso("passoPix");
+
+  const fim = new Date(c.expira_em).getTime();
+  let n = 0, consultando = false;
+  const tick = async () => {
+    const resta = Math.max(0, Math.floor((fim - Date.now()) / 1000));
+    $("pixTimer").textContent = resta > 0 ? `Expira em ${String(Math.floor(resta / 60)).padStart(2, "0")}:${String(resta % 60).padStart(2, "0")}` : "";
+    if(resta <= 0){ pararPix(); expirou(); return; }
+    if(n++ % 3 !== 0 || consultando) return; // pergunta ao servidor a cada 3 segundos
+    consultando = true;
+    try{
+      const r = await fetch(`${API_BASE}/api/v1/pix/${RS.rid}/cobrancas/${c.cobranca_id}/status`);
+      const d = await r.json();
+      if(d.status === "pago"){ pararPix(); await pago(); return; }
+      if(d.status === "expirado"){ pararPix(); expirou(); }
+    }catch{ /* sem internet por um instante: tenta de novo */ }
+    finally{ consultando = false; }
+  };
+  RS.timer = setInterval(tick, 1000);
+  tick();
+}
+
+function expirou(){
+  esquecerPix();
+  $("pixTimer").textContent = "";
+  $("pixStatus").textContent = "Este Pix expirou e a mesa foi liberada. Escolha de novo para reservar.";
+  $("pixCopiar").textContent = "Escolher de novo";
+  $("pixCopiar").onclick = () => $("pixVoltar").click();
+}
+
+async function pago(){
+  esquecerPix();
+  let r = null;
+  for(let i = 0; i < 5 && !r?.pago; i++){
+    try{ r = await (await fetch(`${API_BASE}/api/v1/reservas/${RS.rid}/compra/${RS.cobranca.cobranca_id}`)).json(); }catch{}
+    if(!r?.pago) await new Promise(ok => setTimeout(ok, 1500));
+  }
+  const dados = r?.pago ? { inicio: r.inicio, mesa: r.mesa, pessoas: r.pessoas, nome: r.nome } : RS.resumo;
+  $("okResumo").innerHTML = resumoHTML(dados);
+  $("okTexto").textContent = `Enviamos a confirmação no seu WhatsApp. Os ${moeda(r?.valor_pago ?? RS.cobranca.valor)} que você pagou viram crédito na sua conta. Seguramos a mesa por ${RS.info.tolerancia_min} minutos depois do horário.`;
+  mostrarPasso("passoOk");
+}
+
+(async function iniciar(){
+  try{
+    RS.rid = await descobrirRestaurante();
+    if(!RS.rid) return aviso("Página não encontrada.");
+    const r = await fetch(`${API_BASE}/api/v1/reservas/${encodeURIComponent(RS.rid)}/info`);
+    const d = await r.json().catch(() => ({}));
+    if(!r.ok) return aviso(d.error || "Não foi possível carregar esta página.");
+    if(!d.disponivel) return aviso("Este restaurante não está aceitando reservas pelo site no momento.");
+    RS.info = d;
+    montarTela();
+    // voltou com um Pix ainda valendo: mostra o mesmo Pix
+    const guardado = pixGuardado();
+    if(guardado){ RS.cobranca = guardado.cobranca; RS.resumo = guardado.resumo; mostrarPix(); }
+  }catch(e){
+    console.error("Reservas:", e);
+    aviso("Sem conexão. Verifique sua internet e tente de novo.");
+  }
+})();
