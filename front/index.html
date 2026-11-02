@@ -1574,6 +1574,20 @@ input:focus, textarea:focus, select:focus {
           </div>
         </div>
 
+        <!-- 🏠 CENTRAL DO CLIENTE -->
+        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
+          <button onclick="toggleAccordion('admin-central')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:18px;">🏠</span>
+              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Central do cliente</span>
+            </div>
+            <span id="arrow-admin-central" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
+          </button>
+          <div id="accordion-admin-central" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
+            <div id="admin-central-corpo" style="display:flex; flex-direction:column; gap:14px;"></div>
+          </div>
+        </div>
+
         <!-- 📋 DADOS E OPERAÇÃO -->
         <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
           <button onclick="toggleAccordion('admin-operacao')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
