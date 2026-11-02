@@ -159,7 +159,7 @@ async function getDominiosPermitidos() {
   try {
     const { data } = await supabase
       .from("restaurants")
-      .select("cardapio_url, fidelidade_url, tracking_url, cardapio_delivery_url");
+      .select("cardapio_url, fidelidade_url, tracking_url, cardapio_delivery_url, central_url");
     
     const dominios = new Set(ALLOWED_ORIGINS_FIXED);
     (data || []).forEach(r => {
@@ -167,6 +167,7 @@ async function getDominiosPermitidos() {
       if (r.fidelidade_url) dominios.add(`https://${r.fidelidade_url.replace(/^https?:\/\//, '')}`);
       if (r.tracking_url) dominios.add(`https://${r.tracking_url.replace(/^https?:\/\//, '')}`);
       if (r.cardapio_delivery_url) dominios.add(`https://${r.cardapio_delivery_url.replace(/^https?:\/\//, '')}`);
+      if (r.central_url) dominios.add(`https://${r.central_url.replace(/^https?:\/\//, '')}`);
     });
     
     _dominiosCache = [...dominios];
@@ -2237,7 +2238,7 @@ app.get("/admin/restaurants", requireAdmin, async (req, res) => {
     const { q = "" } = req.query;
     let query = supabase
       .from("restaurants")
-      .select("id, name, email, plan, created_at, cardapio_url, cardapio_delivery_url, fidelidade_url, tracking_url")
+      .select("id, name, email, plan, created_at, cardapio_url, cardapio_delivery_url, fidelidade_url, tracking_url, central_url")
       .order("name");
 
     if (q.trim()) query = query.ilike("name", `%${q.trim()}%`);
@@ -2336,10 +2337,10 @@ app.patch("/admin/restaurants/:id/horarios", requireAdmin, async (req, res) => {
 app.patch("/admin/restaurants/:id/dominios", requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const fields = pick(req.body, ["cardapio_url", "fidelidade_url", "tracking_url", "cardapio_delivery_url"]);
+    const fields = pick(req.body, ["cardapio_url", "fidelidade_url", "tracking_url", "cardapio_delivery_url", "central_url"]);
 
     // domínios ficam sempre no mesmo formato (sem https, minúsculo); tracking_url é um link completo, fica como veio
-    for (const k of ["cardapio_url", "fidelidade_url", "cardapio_delivery_url"]) {
+    for (const k of ["cardapio_url", "fidelidade_url", "cardapio_delivery_url", "central_url"]) {
       if (!(k in fields)) continue;
       if (!fields[k]) { fields[k] = null; continue; }
       const d = normalizarDominio(fields[k]);
@@ -3380,6 +3381,71 @@ app.patch("/api/v1/restaurante/:restaurant_id/dominio-delivery", async (req, res
   if (error) return sendError(res, 500, "Erro ao salvar domínio do delivery");
   _dominiosCache = null; // domínio novo já passa no CORS na hora
   return res.json({ success: true });
+});
+
+/* ========================================
+   🏠 CENTRAL DO CLIENTE (página com os botões do restaurante)
+   Por enquanto monta tudo com o que o restaurante já tem cadastrado:
+   logo, nome, banner (foto de fundo), subtítulo (frase), cor,
+   domínio do delivery, endereço, telefone e Instagram.
+   Botão sem dado cadastrado não aparece.
+======================================== */
+app.get("/api/v1/dominio-central/:dominio", async (req, res) => {
+  const dominio = normalizarDominio(req.params.dominio);
+  if (!dominio) return sendError(res, 404, "Domínio não encontrado");
+  const { data } = await supabase.from("restaurants").select("id").eq("central_url", dominio).limit(1);
+  if (data?.[0]) return res.json({ restaurant_id: data[0].id });
+  return sendError(res, 404, "Domínio não encontrado");
+});
+
+function centralWhatsApp(tel) {
+  let d = String(tel || "").replace(/\D/g, "");
+  if (d.length === 10 || d.length === 11) d = "55" + d;
+  return d.length >= 12 ? `https://wa.me/${d}` : null;
+}
+function centralInstagram(v) {
+  const s = String(v || "").trim();
+  if (!s) return null;
+  const u = s.replace(/^https?:\/\//i, "").replace(/^(www\.)?instagram\.com\//i, "").replace(/^@/, "").split(/[/?#\s]/)[0];
+  return /^[A-Za-z0-9._]{1,30}$/.test(u) ? `https://instagram.com/${u}` : null;
+}
+
+app.get("/api/v1/central/:restaurant_id", async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    const { data: rest } = await supabase.from("restaurants")
+      .select("id, name, cardapio_delivery_url").eq("id", rid).maybeSingle();
+    if (!rest) return sendError(res, 404, "Restaurante não encontrado");
+
+    const { data: cfg } = await supabase.from("restaurante_config")
+      .select("nome_exibicao, logo_url, banner_url, subtitulo, telefone, instagram, endereco, cor_primaria")
+      .eq("restaurant_id", rid).maybeSingle();
+    const { count: premios } = await supabase.from("premios_fidelidade")
+      .select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("ativo", true);
+
+    const delivery = rest.cardapio_delivery_url ? `https://${rest.cardapio_delivery_url}` : null;
+    const whats = centralWhatsApp(cfg?.telefone);
+    const insta = centralInstagram(cfg?.instagram);
+    const botoes = [
+      delivery && { tipo: "cardapio", rotulo: "Cardápio", url: delivery },
+      delivery && premios > 0 && { tipo: "fidelidade", rotulo: "Fidelidade", url: `${delivery}/#fidelidade` },
+      cfg?.endereco && { tipo: "mapa", rotulo: "Como chegar?", url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cfg.endereco)}` },
+      whats && { tipo: "whatsapp", rotulo: "Entre em contato", url: whats },
+      insta && { tipo: "instagram", rotulo: "Instagram", url: insta }
+    ].filter(Boolean);
+
+    return res.json({
+      nome: cfg?.nome_exibicao || rest.name || "",
+      logo_url: cfg?.logo_url || null,
+      fundo_url: cfg?.banner_url || null,
+      frase: cfg?.subtitulo || "",
+      cor: cfg?.cor_primaria || "#d62828",
+      botoes
+    });
+  } catch (err) {
+    console.error("❌ central:", err.message);
+    return sendError(res, 500, "Erro ao carregar a central");
+  }
 });
 
 // GET - Busca config do restaurante (logo, cores, nome)
