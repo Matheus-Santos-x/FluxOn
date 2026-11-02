@@ -674,6 +674,11 @@ async function selecionarAdminRestaurante(id) {
   document.getElementById("admin-f-email").value = r.email || "";
   document.getElementById("admin-f-plan").value = r.plan || "essential";
 
+  // Preenche "Domínios"
+  document.getElementById("admin-f-dom-mesa").value = r.cardapio_url || "";
+  document.getElementById("admin-f-dom-delivery").value = r.cardapio_delivery_url || "";
+  document.getElementById("admin-status-dominios").textContent = "";
+
   // Carrega config (aparência + operação) — rota GET não exige token do próprio restaurante
   try {
     const resp = await fetch(`${API_BASE}/api/v1/restaurante/${r.id}/config`);
@@ -876,6 +881,29 @@ async function salvarAdminOperacao() {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error);
     status.textContent = "✅ Salvo!"; status.style.color = "rgba(34,197,94,0.9)";
+  } catch (e) {
+    status.textContent = "❌ " + e.message; status.style.color = "rgba(239,68,68,0.9)";
+  }
+}
+
+async function salvarAdminDominios() {
+  if (!adminSelectedRestaurant) return;
+  const status = document.getElementById("admin-status-dominios");
+  const body = {
+    cardapio_url: document.getElementById("admin-f-dom-mesa").value.trim(),
+    cardapio_delivery_url: document.getElementById("admin-f-dom-delivery").value.trim()
+  };
+  status.textContent = "Salvando..."; status.style.color = "rgba(252,228,228,0.6)";
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants/${adminSelectedRestaurant.id}/dominios`, {
+      method: "PATCH", headers: buildAdminHeaders(), body: JSON.stringify(body)
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || "Erro ao salvar");
+    Object.assign(adminSelectedRestaurant, data.dominios || {});
+    document.getElementById("admin-f-dom-mesa").value = adminSelectedRestaurant.cardapio_url || "";
+    document.getElementById("admin-f-dom-delivery").value = adminSelectedRestaurant.cardapio_delivery_url || "";
+    status.textContent = "✅ Salvo! Já vale agora."; status.style.color = "rgba(34,197,94,0.9)";
   } catch (e) {
     status.textContent = "❌ " + e.message; status.style.color = "rgba(239,68,68,0.9)";
   }
@@ -4982,6 +5010,7 @@ document.getElementById("admin-btn-save-restaurante")?.addEventListener("click",
 document.getElementById("admin-btn-save-aparencia")?.addEventListener("click", salvarAdminAparencia);
 document.getElementById("admin-btn-save-horarios")?.addEventListener("click", salvarAdminHorarios);
 document.getElementById("admin-btn-save-operacao")?.addEventListener("click", salvarAdminOperacao);
+document.getElementById("admin-btn-save-dominios")?.addEventListener("click", salvarAdminDominios);
 
 const adminSearchInput = document.getElementById("admin-search-restaurant");
 if (adminSearchInput) {
