@@ -913,6 +913,323 @@ async function salvarAdminDominios() {
   }
 }
 
+/* ========================================
+   🏠 CENTRAL DO CLIENTE (Admin) — editor visual
+   Mostra a central como o cliente vê. Tocar num botão edita ícone, nome e link;
+   o "+" adiciona; a frase é editada direto na prévia.
+======================================== */
+let adminCentral = null;
+let _acEditando = null; // índice do botão aberto no editor (-1 = botão novo)
+
+const AC_ICONES = {
+  cardapio:  ["Cardápio", '<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H18a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H5.5A1.5 1.5 0 0 1 4 19.5z"/><path d="M8 8h7M8 12h7M8 16h4"/>'],
+  delivery:  ["Delivery", '<path d="M3 7h10v8H3z"/><path d="M13 10h4l3 3v2h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/>'],
+  fidelidade:["Fidelidade", '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.6l1-5.8L3.5 9.7l5.9-.9z"/>'],
+  reserva:   ["Reserva", '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4M9 14.5l2 2 4-4"/>'],
+  voucher:   ["Vale-presente", '<rect x="3.5" y="8" width="17" height="12.5" rx="1.5"/><path d="M2.5 8h19v4h-19zM12 8v12.5"/><path d="M12 8c-1.8 0-4.5-.7-4.5-2.6S10 3.6 12 8zm0 0c1.8 0 4.5-.7 4.5-2.6S14 3.6 12 8z"/>'],
+  mapa:      ["Localização", '<path d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-5h-6v5H5a1 1 0 0 1-1-1z"/>'],
+  whatsapp:  ["WhatsApp", '<path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6z"/><path d="M9 8.6c.2-.4.5-.5.8-.5h.5c.2 0 .4.1.5.4l.7 1.6c.1.2 0 .5-.1.6l-.5.6c-.1.1-.1.3 0 .5a6 6 0 0 0 2.5 2.4c.2.1.4.1.5 0l.6-.6c.2-.2.4-.2.6-.1l1.6.7c.2.1.4.3.4.5v.5c0 .3-.1.6-.5.8-.6.4-1.5.6-2.4.3a9 9 0 0 1-5-4.9c-.4-1-.2-2 .3-2.7z"/>'],
+  instagram: ["Instagram", '<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r=".9" fill="currentColor" stroke="none"/>'],
+  avaliar:   ["Avaliação", '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.6l1-5.8L3.5 9.7l5.9-.9z"/><path d="M12 8.5v4"/><circle cx="12" cy="14.8" r=".6" fill="currentColor"/>'],
+  link:      ["Link", '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>']
+};
+
+function _acSvg(icone) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${(AC_ICONES[icone] || AC_ICONES.link)[1]}</svg>`;
+}
+function _acEsc(s) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function _acHttps(v) {
+  try { const u = new URL(String(v || "").trim()); return u.protocol === "https:" ? u.href : null; } catch { return null; }
+}
+
+// estilos do editor (entram uma vez só na página)
+function _acEstilos() {
+  if (document.getElementById("ac-estilos")) return;
+  const st = document.createElement("style");
+  st.id = "ac-estilos";
+  st.textContent = `
+    .cped{ display:flex; flex-direction:column; gap:14px; }
+    .cped-aviso{ margin:0; padding:10px 12px; border-radius:8px; background:rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.25); color:rgba(251,191,36,.9); font-size:12px; line-height:1.5; }
+    .cped-grid{ display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start; }
+    .cped-fone{ position:relative; width:300px; max-width:100%; height:600px; border-radius:34px; overflow:hidden; border:6px solid #1c1c1c; box-shadow:0 20px 50px -20px rgba(0,0,0,.9); background:#0b0a09; font-family:"Poppins", system-ui, sans-serif; color:#fff; display:flex; flex-direction:column; justify-content:space-between; flex-shrink:0; }
+    .cped-fundo{ position:absolute; inset:0; background:radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--cor) 38%, #0b0a09), #0b0a09 72%) center/cover no-repeat; }
+    .cped-fundo::after{ content:""; position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.18) 30%, rgba(0,0,0,.18) 52%, rgba(0,0,0,.72) 82%, rgba(0,0,0,.9) 100%); }
+    .cped-topo{ position:relative; z-index:1; padding:56px 16px 0; display:flex; flex-direction:column; align-items:center; text-align:center; }
+    .cped-logo{ width:64px; height:64px; border-radius:50%; background:#141110; border:2px solid rgba(255,255,255,.14); overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:24px; }
+    .cped-logo img{ width:100%; height:100%; object-fit:cover; }
+    .cped-status{ margin-top:10px; display:inline-flex; align-items:center; gap:6px; padding:4px 10px 4px 8px; border-radius:100px; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.12); font-size:9.5px; }
+    .cped-status::before{ content:""; width:6px; height:6px; border-radius:50%; background:#22c55e; }
+    .cped-nome{ margin-top:10px; font-size:22px; font-weight:300; line-height:1.15; text-shadow:0 2px 14px rgba(0,0,0,.6); }
+    .cped-frase{ margin-top:6px; min-width:120px; max-width:240px; font-size:11px; line-height:1.45; color:rgba(255,255,255,.88); padding:3px 6px; border-radius:6px; border:1px dashed rgba(255,255,255,.35); outline:none; cursor:text; }
+    .cped-frase:focus{ border-color:var(--cor); background:rgba(0,0,0,.35); }
+    .cped-frase:empty::before{ content:attr(data-ph); color:rgba(255,255,255,.5); }
+    .cped-painel{ position:relative; z-index:1; margin:0 8px 8px; padding:14px 6px 8px; border-radius:22px; background:rgba(18,14,12,.55); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border:1px solid rgba(255,255,255,.10); }
+    .cped-botoes{ display:flex; flex-wrap:wrap; justify-content:center; row-gap:12px; }
+    .cped-botao{ flex:0 0 25%; display:flex; flex-direction:column; align-items:center; gap:6px; padding:0 2px; background:none; border:none; color:rgba(255,255,255,.92); font-family:inherit; font-size:9.5px; line-height:1.2; cursor:pointer; text-align:center; }
+    .cped-ico{ width:42px; height:42px; border-radius:13px; display:flex; align-items:center; justify-content:center; background:color-mix(in srgb, var(--cor) 34%, rgba(255,255,255,.06)); border:1px solid rgba(255,255,255,.14); transition:transform .15s ease, box-shadow .15s ease; }
+    .cped-ico svg{ width:19px; height:19px; color:#fff; }
+    .cped-botao:hover .cped-ico{ box-shadow:0 0 0 2px var(--cor); }
+    .cped-botao.add .cped-ico{ background:transparent; border:1.5px dashed rgba(255,255,255,.45); font-size:22px; font-weight:300; }
+    .cped-ass{ margin-top:10px; text-align:center; font-size:8.5px; color:rgba(255,255,255,.5); }
+    .cped-lado{ flex:1; min-width:240px; display:flex; flex-direction:column; gap:12px; }
+    .cped-dica{ margin:0; color:rgba(252,228,228,.6); font-size:12.5px; line-height:1.55; }
+    .cped-titulo{ color:rgba(252,228,228,.5); font-size:11px; font-weight:700; text-transform:uppercase; }
+    .cped-linha{ display:flex; gap:8px; flex-wrap:wrap; }
+    .cped-linha > *{ flex:1; }
+    .cped-check{ display:flex; align-items:center; gap:10px; color:rgba(252,228,228,.85); font-size:13px; cursor:pointer; }
+    .cped-check input{ width:18px; height:18px; accent-color:#ef4444; }
+    .cped-modal{ position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; padding:16px; }
+    .cped-modal[hidden]{ display:none; }
+    .cped-sheet{ width:100%; max-width:440px; max-height:90vh; overflow:auto; background:#0f0f0f; border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:18px; display:flex; flex-direction:column; gap:10px; color:rgba(252,228,228,1); }
+    .cped-sheet h3{ margin:0 0 4px; font-size:16px; font-weight:800; }
+    .cped-sheet input{ padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit; width:100%; box-sizing:border-box; }
+    .cped-icones{ display:grid; grid-template-columns:repeat(5, 1fr); gap:8px; }
+    .cped-icone{ display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 2px; border-radius:10px; border:1px solid rgba(255,255,255,.1); background:#0a0a0a; color:rgba(252,228,228,.8); font-size:9.5px; cursor:pointer; font-family:inherit; }
+    .cped-icone svg{ width:20px; height:20px; }
+    .cped-icone.on{ border-color:#ef4444; background:rgba(239,68,68,.12); color:#fff; }
+    .cped-sugs{ display:flex; flex-wrap:wrap; gap:6px; }
+    .cped-sug{ padding:6px 10px; border-radius:100px; border:1px solid rgba(255,255,255,.14); background:#0a0a0a; color:rgba(252,228,228,.8); font-size:11.5px; cursor:pointer; font-family:inherit; }
+    .cped-sug:hover{ border-color:#ef4444; }
+    .cped-erro{ margin:0; min-height:16px; color:rgba(239,68,68,.95); font-size:12px; }
+    .cped-acoes{ display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
+    .cped-acoes button{ padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,.14); background:#0a0a0a; color:rgba(252,228,228,.9); font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; }
+    .cped-acoes button:disabled{ opacity:.35; cursor:default; }
+    .cped-acoes .perigo{ color:rgba(239,68,68,.95); }
+    .cped-acoes .ok{ margin-left:auto; background:#ef4444; border-color:#ef4444; color:#fff; }
+    @media (max-width:560px){ .cped-fone{ margin:0 auto; } .cped-lado{ min-width:100%; } }
+  `;
+  document.head.appendChild(st);
+}
+
+async function carregarAdminCentral(msg) {
+  const corpo = document.getElementById("admin-central-corpo");
+  if (!corpo || !adminSelectedRestaurant) return;
+  _acEstilos();
+  const rid = adminSelectedRestaurant.id;
+  adminCentral = null;
+  corpo.innerHTML = `<p style="color:rgba(252,228,228,0.5); font-size:13px; margin:0;">Carregando...</p>`;
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants/${rid}/central`, { headers: buildAdminHeaders() });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || "Erro ao carregar");
+    if (adminSelectedRestaurant?.id !== rid) return; // trocou de restaurante no meio
+    adminCentral = data;
+    renderAdminCentral();
+    if (msg) _acStatus(msg, "ok");
+  } catch (e) {
+    corpo.innerHTML = `<p style="color:rgba(239,68,68,0.9); font-size:13px; margin:0;">❌ ${_acEsc(e.message)}</p>`;
+  }
+}
+
+function _acStatus(texto, tipo) {
+  const st = document.getElementById("admin-status-central");
+  if (!st) return;
+  st.textContent = texto;
+  st.style.color = tipo === "ok" ? "rgba(34,197,94,0.9)" : tipo === "erro" ? "rgba(239,68,68,0.9)" : "rgba(252,228,228,0.6)";
+}
+function _acMudou() { _acStatus("Alterações não salvas"); }
+
+function renderAdminCentral() {
+  const c = adminCentral, corpo = document.getElementById("admin-central-corpo");
+  if (!c || !corpo) return;
+  const foto = c.fundo_url || c.banner_url;
+  const dominio = adminSelectedRestaurant?.central_url;
+  const logo = _acHttps(c.logo_url);
+
+  corpo.innerHTML = `
+    <div class="cped" style="--cor:${_acEsc(c.cor || "#d62828")}">
+      ${c.plano_ok ? "" : `<p class="cped-aviso">⚠️ A central só fica no ar a partir do plano Advanced. Dá pra deixar tudo configurado antes.</p>`}
+      <div class="cped-grid">
+        <div class="cped-fone">
+          <div class="cped-fundo"${foto ? ` style="background-image:url('${_acEsc(foto)}')"` : ""}></div>
+          <div class="cped-topo">
+            <div class="cped-logo">${logo ? `<img src="${_acEsc(logo)}" alt="">` : _acEsc(String(c.nome || "?").charAt(0).toUpperCase())}</div>
+            ${c.mostrar_aberto ? `<div class="cped-status">Aberto agora · fecha 23:00</div>` : ""}
+            <div class="cped-nome">${_acEsc(c.nome)}</div>
+            <div class="cped-frase" id="cped-frase" contenteditable="plaintext-only" spellcheck="false" data-ph="Toque para escrever uma frase">${_acEsc(c.frase)}</div>
+          </div>
+          <div class="cped-painel">
+            <div class="cped-botoes">
+              ${c.botoes.map((b, i) => `
+                <button type="button" class="cped-botao" data-ac-botao="${i}" title="Editar">
+                  <span class="cped-ico">${_acSvg(b.icone)}</span><span>${_acEsc(b.rotulo)}</span>
+                </button>`).join("")}
+              ${c.botoes.length < 12 ? `<button type="button" class="cped-botao add" id="cped-add" title="Adicionar botão"><span class="cped-ico">+</span><span>Adicionar</span></button>` : ""}
+            </div>
+            <div class="cped-ass">Desenvolvido por <b>FluxON</b></div>
+          </div>
+        </div>
+
+        <div class="cped-lado">
+          <p class="cped-dica">Essa é a central do jeito que o cliente vê. <b>Toque num botão</b> para trocar o ícone, o nome ou o link, mudar de lugar ou excluir. <b>Toque na frase</b> para escrever. O <b>+</b> adiciona um botão.</p>
+
+          <span class="cped-titulo">Foto de fundo</span>
+          <div class="cped-linha">
+            <label class="primary-button" style="text-align:center; cursor:pointer; position:relative; overflow:hidden;">📷 Trocar foto
+              <input type="file" id="admin-central-foto" accept="image/*" style="position:absolute; inset:0; opacity:0; cursor:pointer;">
+            </label>
+            ${c.fundo_url ? `<button type="button" class="primary-button" id="admin-central-tirar-foto">Usar o banner</button>` : ""}
+          </div>
+          <span style="color:rgba(252,228,228,0.4); font-size:11px;">${c.fundo_url ? "Usando a foto da central." : c.banner_url ? "Usando o banner do cardápio." : "Sem foto: fundo na cor do restaurante."} Melhor foto em pé (vertical).</span>
+
+          <label class="cped-check">
+            <input type="checkbox" id="admin-central-aberto" ${c.mostrar_aberto ? "checked" : ""}>
+            Mostrar "Aberto agora / Fechado" (usa os Horários de Funcionamento)
+          </label>
+
+          <button type="button" class="primary-button" id="admin-btn-save-central">Salvar</button>
+          <p id="admin-status-central" style="font-size:13px; min-height:18px; margin:0;"></p>
+          ${dominio
+            ? `<a href="https://${_acEsc(dominio)}" target="_blank" rel="noopener" style="color:rgba(252,228,228,0.7); font-size:13px;">Abrir a central ↗</a>`
+            : `<p style="color:rgba(252,228,228,0.45); font-size:12px; margin:0;">Cadastre o domínio em Domínios → Central do cliente para abrir a central.</p>`}
+        </div>
+      </div>
+      <div class="cped-modal" id="cped-modal" hidden></div>
+    </div>
+  `;
+
+  const frase = document.getElementById("cped-frase");
+  frase.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); frase.blur(); } });
+  frase.addEventListener("input", () => {
+    if (frase.textContent.length > 140) frase.textContent = frase.textContent.slice(0, 140);
+    adminCentral.frase = frase.textContent;
+    _acMudou();
+  });
+  corpo.querySelectorAll("[data-ac-botao]").forEach(b => b.onclick = () => abrirBotaoAdminCentral(Number(b.dataset.acBotao)));
+  const add = document.getElementById("cped-add");
+  if (add) add.onclick = () => abrirBotaoAdminCentral(-1);
+  document.getElementById("admin-central-foto").onchange = function () {
+    if (this.files[0]) enviarFotoAdminCentral(this.files[0]);
+  };
+  const tirar = document.getElementById("admin-central-tirar-foto");
+  if (tirar) tirar.onclick = () => { adminCentral.fundo_url = ""; renderAdminCentral(); _acMudou(); };
+  document.getElementById("admin-central-aberto").onchange = function () {
+    adminCentral.mostrar_aberto = this.checked; renderAdminCentral(); _acMudou();
+  };
+  document.getElementById("admin-btn-save-central").onclick = salvarAdminCentral;
+}
+
+// janelinha de um botão: ícone, nome, link (com sugestões), mover e excluir
+function abrirBotaoAdminCentral(i) {
+  _acEditando = i;
+  const novo = i < 0;
+  const b = novo ? { icone: "link", rotulo: "", url: "" } : { ...adminCentral.botoes[i] };
+  const total = adminCentral.botoes.length;
+  const modal = document.getElementById("cped-modal");
+  modal.innerHTML = `
+    <div class="cped-sheet" role="dialog" aria-modal="true">
+      <h3>${novo ? "Novo botão" : "Editar botão"}</h3>
+      <span class="cped-titulo">Ícone</span>
+      <div class="cped-icones">
+        ${Object.entries(AC_ICONES).map(([k, [nome]]) => `
+          <button type="button" class="cped-icone${k === b.icone ? " on" : ""}" data-ac-icone="${k}">${_acSvg(k)}<span>${nome}</span></button>`).join("")}
+      </div>
+      <span class="cped-titulo">Nome</span>
+      <input id="cped-rotulo" maxlength="30" value="${_acEsc(b.rotulo)}" placeholder="Ex.: Faça sua reserva" autocomplete="off">
+      <span class="cped-titulo">Link</span>
+      <input id="cped-url" value="${_acEsc(b.url)}" placeholder="https://..." autocomplete="off" inputmode="url">
+      ${adminCentral.sugestoes?.length ? `
+        <span style="color:rgba(252,228,228,0.45); font-size:11px;">Links que o sistema já conhece (toque para usar):</span>
+        <div class="cped-sugs">
+          ${adminCentral.sugestoes.map((s, k) => `<button type="button" class="cped-sug" data-ac-sug="${k}">${_acEsc(s.origem)}</button>`).join("")}
+        </div>` : ""}
+      <p class="cped-erro" id="cped-erro"></p>
+      <div class="cped-acoes">
+        ${novo ? "" : `
+          <button type="button" id="cped-esq" ${i === 0 ? "disabled" : ""} title="Mover para a esquerda">◀</button>
+          <button type="button" id="cped-dir" ${i === total - 1 ? "disabled" : ""} title="Mover para a direita">▶</button>
+          <button type="button" class="perigo" id="cped-excluir">Excluir</button>`}
+        <button type="button" id="cped-cancelar">Cancelar</button>
+        <button type="button" class="ok" id="cped-pronto">Pronto</button>
+      </div>
+    </div>`;
+  modal.hidden = false;
+
+  let icone = b.icone;
+  modal.querySelectorAll("[data-ac-icone]").forEach(el => el.onclick = () => {
+    icone = el.dataset.acIcone;
+    modal.querySelectorAll("[data-ac-icone]").forEach(x => x.classList.toggle("on", x === el));
+  });
+  modal.querySelectorAll("[data-ac-sug]").forEach(el => el.onclick = () => {
+    const s = adminCentral.sugestoes[Number(el.dataset.acSug)];
+    document.getElementById("cped-url").value = s.url;
+    const rot = document.getElementById("cped-rotulo");
+    if (!rot.value.trim()) rot.value = s.rotulo;
+    icone = s.icone;
+    modal.querySelectorAll("[data-ac-icone]").forEach(x => x.classList.toggle("on", x.dataset.acIcone === icone));
+  });
+  const fechar = () => { modal.hidden = true; modal.innerHTML = ""; _acEditando = null; };
+  modal.onclick = e => { if (e.target === modal) fechar(); };
+  document.getElementById("cped-cancelar").onclick = fechar;
+
+  const mover = d => {
+    const lista = adminCentral.botoes, j = i + d;
+    [lista[i], lista[j]] = [lista[j], lista[i]];
+    fechar(); renderAdminCentral(); _acMudou();
+  };
+  if (!novo) {
+    document.getElementById("cped-esq").onclick = () => mover(-1);
+    document.getElementById("cped-dir").onclick = () => mover(1);
+    document.getElementById("cped-excluir").onclick = () => {
+      if (!confirm(`Excluir o botão "${adminCentral.botoes[i].rotulo}"?`)) return;
+      adminCentral.botoes.splice(i, 1);
+      fechar(); renderAdminCentral(); _acMudou();
+    };
+  }
+  document.getElementById("cped-pronto").onclick = () => {
+    const rotulo = document.getElementById("cped-rotulo").value.trim();
+    let url = document.getElementById("cped-url").value.trim();
+    if (url && !/^[a-z]+:\/\//i.test(url)) url = "https://" + url; // colou sem o https://
+    const erro = document.getElementById("cped-erro");
+    if (!rotulo) { erro.textContent = "Dê um nome para o botão."; return; }
+    if (!_acHttps(url)) { erro.textContent = "Cole um link que comece com https://"; return; }
+    const item = { icone, rotulo, url: _acHttps(url) };
+    if (novo) adminCentral.botoes.push(item); else adminCentral.botoes[i] = item;
+    fechar(); renderAdminCentral(); _acMudou();
+  };
+  setTimeout(() => document.getElementById(novo ? "cped-rotulo" : "cped-url")?.focus(), 50);
+}
+
+async function enviarFotoAdminCentral(file) {
+  _acStatus("Enviando foto...");
+  try {
+    const formData = new FormData();
+    formData.append("file", file, file.name || "foto.jpg");
+    formData.append("bucket", "restaurante-banners");
+    const resp = await fetch(`${API_BASE}/api/v1/upload-image`, { method: "POST", body: formData });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.url) throw new Error(data.error || "Erro no upload");
+    adminCentral.fundo_url = data.url;
+    renderAdminCentral();
+    _acStatus("Foto pronta. Clique em Salvar para publicar.");
+  } catch (e) {
+    _acStatus("❌ " + e.message, "erro");
+  }
+}
+
+async function salvarAdminCentral() {
+  if (!adminCentral || !adminSelectedRestaurant) return;
+  const body = {
+    fundo_url: adminCentral.fundo_url || null,
+    frase: adminCentral.frase || "",
+    mostrar_aberto: !!adminCentral.mostrar_aberto,
+    botoes: adminCentral.botoes.map(b => ({ icone: b.icone, rotulo: b.rotulo, url: b.url }))
+  };
+  _acStatus("Salvando...");
+  try {
+    const resp = await fetch(`${ADMIN_URL}/restaurants/${adminSelectedRestaurant.id}/central`, {
+      method: "PATCH", headers: buildAdminHeaders(), body: JSON.stringify(body)
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || "Erro ao salvar");
+    await carregarAdminCentral("✅ Salvo! Já vale agora.");
+  } catch (e) {
+    _acStatus("❌ " + e.message, "erro");
+  }
+}
+
 async function salvarAdminHorarios() {
   if (!adminSelectedRestaurant) return;
   const status = document.getElementById("admin-status-horarios");
