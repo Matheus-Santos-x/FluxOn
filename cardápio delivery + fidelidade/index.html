@@ -98,18 +98,31 @@
   <div class="cart-fab-total" id="fidFabTotal">0 pts</div>
 </button>
 
-<!-- abas: Cardápio / Fidelidade (só aparece se o restaurante usa fidelidade) -->
-<nav class="tabbar" id="tabbar" hidden>
-  <button class="tab-item active" data-aba="cardapio" aria-label="Cardápio">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v8a2 2 0 0 0 2 2v8"/><path d="M5 3v5a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V3"/><path d="M9 3v4"/><path d="M18 21V3c-2 1-3.5 3.5-3.5 7v3H18"/></svg>
-    <span>Cardápio</span>
-  </button>
-  <button class="tab-item" data-aba="fidelidade" aria-label="Fidelidade">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="5" rx="1.2"/><path d="M5 13v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/><path d="M12 8v13"/><path d="M12 8c-1.5-3.5-5.5-4-5.5-1.5S10 8 12 8z"/><path d="M12 8c1.5-3.5 5.5-4 5.5-1.5S14 8 12 8z"/></svg>
-    <span>Fidelidade</span>
-    <i class="tab-dot" id="fidTabDot"></i>
-  </button>
-</nav>
+<!-- menu (três risquinhos) — só aparece se o restaurante usa fidelidade -->
+<button class="menu-btn" id="menuBtn" aria-label="Abrir menu" hidden>
+  <span></span><span></span><span></span>
+  <i class="menu-alerta" id="menuDot"></i>
+</button>
+
+<aside class="side-menu" id="sideMenu" aria-hidden="true">
+  <div class="side-menu-head">
+    <div class="side-menu-logo" id="sideMenuLogo">R</div>
+    <div class="side-menu-nome" id="sideMenuNome"></div>
+    <button class="drawer-close" id="sideMenuClose" aria-label="Fechar menu">←</button>
+  </div>
+  <nav class="side-menu-nav">
+    <button class="side-item active" data-aba="cardapio">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v8a2 2 0 0 0 2 2v8"/><path d="M5 3v5a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V3"/><path d="M9 3v4"/><path d="M18 21V3c-2 1-3.5 3.5-3.5 7v3H18"/></svg>
+      <span class="side-item-txt"><b>Cardápio</b><small>Faça seu pedido</small></span>
+    </button>
+    <button class="side-item" data-aba="fidelidade">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="5" rx="1.2"/><path d="M5 13v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/><path d="M12 8v13"/><path d="M12 8c-1.5-3.5-5.5-4-5.5-1.5S10 8 12 8z"/><path d="M12 8c1.5-3.5 5.5-4 5.5-1.5S14 8 12 8z"/></svg>
+      <span class="side-item-txt"><b>Fidelidade</b><small id="sideFidSub">Pontos e prêmios</small></span>
+      <i class="menu-alerta" id="sideFidDot"></i>
+    </button>
+  </nav>
+  <p class="side-menu-foot">Feito com FluxON</p>
+</aside>
 
 <!-- overlay -->
 <div class="overlay" id="overlay"></div>
