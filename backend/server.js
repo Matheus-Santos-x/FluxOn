@@ -148,6 +148,9 @@ function normalizarDominio(v) {
   return /^[a-z0-9.-]+(:\d+)?$/.test(d) ? d : "";
 }
 
+// colunas de domínio em restaurants: CORS, Admin e /api/v1/dominio/:servico/:dominio usam esta lista
+const DOMINIOS_COLUNAS = ["cardapio_url", "fidelidade_url", "cardapio_delivery_url", "central_url", "vouchers_url", "reservas_url"];
+
 let _dominiosCache = null;
 let _dominiosCacheTime = 0;
 
@@ -159,10 +162,11 @@ async function getDominiosPermitidos() {
   try {
     const { data } = await supabase
       .from("restaurants")
-      .select("cardapio_url, fidelidade_url, tracking_url, cardapio_delivery_url, central_url, vouchers_url");
+      .select(["tracking_url", ...DOMINIOS_COLUNAS].join(", "));
     
     const dominios = new Set(ALLOWED_ORIGINS_FIXED);
     (data || []).forEach(r => {
+      for (const c of DOMINIOS_COLUNAS) if (r[c]) dominios.add(`https://${String(r[c]).replace(/^https?:\/\//, "")}`);
       if (r.cardapio_url) dominios.add(`https://${r.cardapio_url.replace(/^https?:\/\//, '')}`);
       if (r.fidelidade_url) dominios.add(`https://${r.fidelidade_url.replace(/^https?:\/\//, '')}`);
       if (r.tracking_url) dominios.add(`https://${r.tracking_url.replace(/^https?:\/\//, '')}`);
@@ -1672,6 +1676,276 @@ app.patch("/admin/restaurants/:id/vouchers", requireAdmin, async (req, res) => {
   }
 });
 
+/* ========================================
+   📅 RESERVA DE MESA
+   O cliente escolhe pessoas, dia, horário e a mesa na página de Reservas,
+   paga um valor fixo no Pix (vira crédito na conta no dia) e recebe a
+   confirmação no WhatsApp. Horários de 30 em 30 min dentro do funcionamento.
+======================================== */
+const RESERVA_FUSO = "-03:00"; // horário de Brasília
+const RESERVA_OPCOES = {
+  duracao: [60, 90, 120, 150, 180, 240],
+  bloqueio: [0, 30, 60, 90, 120, 180],
+  tolerancia: [10, 15, 20, 30, 45],
+  antecedencia: [30, 60, 120, 180, 360, 720, 1440],
+  dias: [7, 15, 30, 60, 90]
+};
+const reservaMoeda = (v) => `R$ ${Number(v).toFixed(2).replace(".", ",")}`;
+const reservaMin = (h) => { const [a, b] = String(h).slice(0, 5).split(":").map(Number); return a * 60 + b; };
+const reservaHHMM = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const reservaHoje = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // AAAA-MM-DD
+const reservaQuando = (iso) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+async function reservaConfig(rid) {
+  const { data: c } = await supabase.from("restaurante_config")
+    .select("num_mesas, reserva_ativo, reserva_valor, reserva_duracao_min, reserva_bloqueio_min, reserva_tolerancia_min, reserva_antecedencia_min, reserva_dias, reserva_mesas")
+    .eq("restaurant_id", rid).maybeSingle();
+  const total = Math.max(0, Math.min(200, Number(c?.num_mesas) || 10));
+  const salvas = Array.isArray(c?.reserva_mesas) ? c.reserva_mesas : [];
+  // todas as mesas do restaurante (1..num_mesas), com lugares e se aceitam reserva
+  const mesas = Array.from({ length: total }, (_, i) => {
+    const s = salvas.find(m => Number(m.numero) === i + 1) || {};
+    return { numero: i + 1, lugares: Math.max(1, Number(s.lugares) || 4), reservavel: s.reservavel !== false };
+  });
+  return {
+    ativo: !!c?.reserva_ativo,
+    valor: Number(c?.reserva_valor) || 50,
+    duracao: Number(c?.reserva_duracao_min) || 120,
+    bloqueio: c?.reserva_bloqueio_min ?? 90,
+    tolerancia: Number(c?.reserva_tolerancia_min) || 15,
+    antecedencia: Number(c?.reserva_antecedencia_min) || 120,
+    dias: Number(c?.reserva_dias) || 30,
+    mesas
+  };
+}
+
+// reservas que ocupam mesa (pagas ou com Pix ainda dentro do prazo)
+async function reservaOcupadas(rid, de, ate) {
+  const { data } = await supabase.from("reservas_mesa")
+    .select("id, mesa, inicio, fim, status, pix_expira_em, criado_em")
+    .eq("restaurant_id", rid).in("status", ["aguardando", "confirmada", "chegou"])
+    .lt("inicio", ate.toISOString()).gt("fim", de.toISOString());
+  const agora = new Date();
+  return (data || []).filter(r => r.status !== "aguardando" || new Date(r.pix_expira_em) > agora);
+}
+
+// horários de um dia, cada um com as mesas livres
+async function reservaHorarios(rid, cfg, dataDia) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataDia)) return [];
+  const hoje = reservaHoje();
+  const limite = new Date(Date.parse(`${hoje}T12:00:00${RESERVA_FUSO}`) + cfg.dias * 864e5).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  if (dataDia < hoje || dataDia > limite) return [];
+
+  const diaSemana = new Date(`${dataDia}T12:00:00${RESERVA_FUSO}`).getUTCDay();
+  const { data: hs } = await supabase.from("restaurante_horarios")
+    .select("abertura, fechamento").eq("restaurant_id", rid).eq("ativo", true).eq("dia_semana", diaSemana);
+
+  const minimo = Date.now() + cfg.antecedencia * 60 * 1000;
+  const inicios = new Set();
+  for (const h of hs || []) {
+    const ab = reservaMin(h.abertura);
+    let fe = reservaMin(h.fechamento);
+    if (fe <= ab) fe += 1440; // passa da meia-noite
+    for (let t = ab; t <= fe - 60 && t < 1440; t += 30) inicios.add(t); // última entrada 1h antes de fechar
+  }
+  const slots = [...inicios].sort((a, b) => a - b)
+    .map(t => ({ hora: reservaHHMM(t), inicio: new Date(`${dataDia}T${reservaHHMM(t)}:00${RESERVA_FUSO}`) }))
+    .filter(s => s.inicio.getTime() >= minimo);
+  if (!slots.length) return [];
+
+  const dur = cfg.duracao * 60 * 1000;
+  const ocupadas = await reservaOcupadas(rid, slots[0].inicio, new Date(slots[slots.length - 1].inicio.getTime() + dur));
+  const livres = cfg.mesas.filter(m => m.reservavel);
+  return slots.map(s => {
+    const fim = new Date(s.inicio.getTime() + dur);
+    const mesas = livres.filter(m => !ocupadas.some(r => r.mesa === m.numero && new Date(r.inicio) < fim && new Date(r.fim) > s.inicio));
+    return { hora: s.hora, inicio: s.inicio.toISOString(), mesas: mesas.map(({ numero, lugares }) => ({ numero, lugares })) };
+  }).filter(s => s.mesas.length);
+}
+
+// WhatsApp do cliente pelo webhook de mensagens do restaurante (sem ele, pelo do FluxON)
+async function reservaWhatsApp(rid, nome, telefone, mensagem) {
+  try {
+    const tel = String(telefone || "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+    if (tel.length < 10) return false;
+    const crm = await getIntegracao(rid, "webhook_crm");
+    const url = crm?.webhook_url || OWNER_OTP_WEBHOOK_URL;
+    if (!url) { console.error("❌ reserva: nenhum webhook de WhatsApp configurado"); return false; }
+    const { data: r } = await supabase.from("restaurants").select("name").eq("id", rid).maybeSingle();
+    const corpo = crm?.webhook_url
+      ? { restaurant_id: rid, restaurant_name: r?.name || null, client_name: nome || null, client_phone: tel,
+          client_phone_whatsapp: `55${tel}`, message: mensagem, sent_at: new Date().toISOString(), source: "reserva_mesa" }
+      : { tipo: "reserva_mesa", nome: nome || null, telefone: `55${tel}`, mensagem };
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(!crm?.webhook_url && OWNER_OTP_WEBHOOK_SECRET ? { "x-fluxon-secret": OWNER_OTP_WEBHOOK_SECRET } : {}) },
+      body: JSON.stringify(corpo), signal: AbortSignal.timeout(10000)
+    });
+    if (!resp.ok) console.error(`❌ reserva: webhook respondeu ${resp.status}`);
+    return resp.ok;
+  } catch (err) {
+    console.error("❌ reserva WhatsApp:", err.message);
+    return false;
+  }
+}
+
+PIX_TIPOS.reserva_mesa = {
+  publico: true,
+  async preparar({ restaurant_id, dados, pagador, expira }) {
+    const cfg = await reservaConfig(restaurant_id);
+    if (!cfg.ativo) throw new PixErro(400, "Este restaurante não está aceitando reservas");
+    const pessoas = parseInt(dados.pessoas) || 0;
+    const mesa = parseInt(dados.mesa) || 0;
+    const slot = (await reservaHorarios(restaurant_id, cfg, String(dados.data || ""))).find(s => s.hora === dados.hora);
+    if (!slot) throw new PixErro(409, "Esse horário não está mais disponível. Escolha outro.");
+    const m = slot.mesas.find(x => x.numero === mesa);
+    if (!m) throw new PixErro(409, "Essa mesa acabou de ser reservada. Escolha outra.");
+    if (pessoas < 1 || pessoas > m.lugares) throw new PixErro(400, `A mesa ${mesa} é para até ${m.lugares} pessoas`);
+
+    const inicio = new Date(slot.inicio), fim = new Date(inicio.getTime() + cfg.duracao * 60 * 1000);
+    const { data: reserva, error } = await supabase.from("reservas_mesa").insert([{
+      restaurant_id, mesa, pessoas, inicio: inicio.toISOString(), fim: fim.toISOString(),
+      nome: pagador.nome, telefone: pagador.telefone,
+      observacao: String(dados.observacao || "").trim().slice(0, 200) || null,
+      status: "aguardando", pix_expira_em: expira.toISOString()
+    }]).select().single();
+    if (error) throw error;
+
+    // confere de novo: se duas pessoas pegaram a mesma mesa ao mesmo tempo, fica quem chegou primeiro
+    const concorrentes = (await reservaOcupadas(restaurant_id, inicio, fim))
+      .filter(r => r.mesa === mesa && r.id !== reserva.id && new Date(r.criado_em) <= new Date(reserva.criado_em));
+    if (concorrentes.length) {
+      await supabase.from("reservas_mesa").delete().eq("id", reserva.id);
+      throw new PixErro(409, "Essa mesa acabou de ser reservada. Escolha outra.");
+    }
+    return {
+      valor: cfg.valor,
+      descricao: `Reserva Mesa ${mesa} - ${reservaQuando(inicio)} - ${pagador.nome}`.slice(0, 200),
+      referencia_id: String(reserva.id)
+    };
+  },
+  async aoPagar({ cobranca }) {
+    const { data: r } = await supabase.from("reservas_mesa")
+      .update({ status: "confirmada", pago_em: new Date().toISOString(), valor_pago: cobranca.valor })
+      .eq("id", cobranca.referencia_id).eq("restaurant_id", cobranca.restaurant_id).eq("status", "aguardando")
+      .select().maybeSingle();
+    if (!r) throw new Error("a reserva não estava mais aguardando pagamento");
+    const cfg = await reservaConfig(r.restaurant_id);
+    io.to(r.restaurant_id).emit("reserva_atualizada", r); // o Operacional fica sabendo na hora
+    await reservaWhatsApp(r.restaurant_id, r.nome, r.telefone,
+      `✅ Reserva confirmada, ${r.nome}!\n\n📅 ${reservaQuando(r.inicio)}\n🪑 Mesa ${r.mesa} · ${r.pessoas} ${r.pessoas === 1 ? "pessoa" : "pessoas"}\n\n` +
+      `Os ${reservaMoeda(r.valor_pago)} que você pagou viram crédito na sua conta. Seguramos a mesa por ${cfg.tolerancia} minutos depois do horário.`);
+  },
+  async aoFalhar({ restaurant_id, referencia_id }) {
+    await supabase.from("reservas_mesa").delete()
+      .eq("id", referencia_id).eq("restaurant_id", restaurant_id).eq("status", "aguardando");
+  }
+};
+
+// página de reservas: regras e aparência
+app.get("/api/v1/reservas/:restaurant_id/info", async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    const { data: rest } = await supabase.from("restaurants").select("id, name, central_url").eq("id", rid).maybeSingle();
+    if (!rest) return sendError(res, 404, "Restaurante não encontrado");
+    const [cfg, { data: visual }, pix] = await Promise.all([
+      reservaConfig(rid),
+      supabase.from("restaurante_config").select("nome_exibicao, logo_url, cor_primaria").eq("restaurant_id", rid).maybeSingle(),
+      pixConfig(rid)
+    ]);
+    const reservaveis = cfg.mesas.filter(m => m.reservavel);
+    return res.json({
+      disponivel: cfg.ativo && !!pix && reservaveis.length > 0,
+      nome: visual?.nome_exibicao || rest.name || "",
+      logo_url: visual?.logo_url || null,
+      cor: visual?.cor_primaria || "#d62828",
+      valor: cfg.valor, duracao_min: cfg.duracao, tolerancia_min: cfg.tolerancia, dias: cfg.dias,
+      max_pessoas: Math.max(0, ...reservaveis.map(m => m.lugares)),
+      hoje: reservaHoje(),
+      central_url: rest.central_url ? `https://${rest.central_url}` : null
+    });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao carregar as reservas");
+  }
+});
+
+// horários livres de um dia: /api/v1/reservas/:id/horarios?data=2026-11-07
+app.get("/api/v1/reservas/:restaurant_id/horarios", async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    const cfg = await reservaConfig(rid);
+    if (!cfg.ativo) return res.json({ horarios: [] });
+    return res.json({ horarios: await reservaHorarios(rid, cfg, String(req.query.data || "")) });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao buscar horários");
+  }
+});
+
+// depois de pago, a página mostra o resumo da reserva
+app.get("/api/v1/reservas/:restaurant_id/compra/:cobranca_id", async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    const { data: c } = await supabase.from("cobrancas_pix").select("tipo, status, referencia_id")
+      .eq("id", req.params.cobranca_id).eq("restaurant_id", rid).maybeSingle();
+    if (!c || c.tipo !== "reserva_mesa") return sendError(res, 404, "Reserva não encontrada");
+    if (c.status !== "pago") return res.json({ pago: false });
+    const { data: r } = await supabase.from("reservas_mesa")
+      .select("mesa, pessoas, inicio, valor_pago, nome").eq("id", c.referencia_id).eq("restaurant_id", rid).maybeSingle();
+    if (!r) return sendError(res, 404, "Reserva não encontrada");
+    return res.json({ pago: true, ...r });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao consultar a reserva");
+  }
+});
+
+// Admin: regras da reserva, lugares de cada mesa e as próximas reservas
+app.get("/admin/restaurants/:id/reservas", requireAdmin, async (req, res) => {
+  try {
+    const cfg = await reservaConfig(req.params.id);
+    const { data: proximas } = await supabase.from("reservas_mesa")
+      .select("mesa, pessoas, inicio, nome, telefone, status")
+      .eq("restaurant_id", req.params.id).in("status", ["confirmada", "chegou"])
+      .gt("inicio", new Date(Date.now() - 6 * 3600e3).toISOString()).order("inicio").limit(20);
+    return res.json({ ...cfg, opcoes: RESERVA_OPCOES, pix_online: !!(await pixConfig(req.params.id)), proximas: proximas || [] });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao carregar as reservas");
+  }
+});
+
+app.patch("/admin/restaurants/:id/reservas", requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const num = (v) => Number(v);
+    const valor = Math.round(num(b.valor) * 100) / 100;
+    if (!(valor >= 1 && valor <= 1000)) return sendError(res, 400, "Valor da reserva entre R$ 1 e R$ 1.000");
+    for (const k of ["duracao", "bloqueio", "tolerancia", "antecedencia", "dias"])
+      if (!RESERVA_OPCOES[k].includes(num(b[k]))) return sendError(res, 400, `Valor inválido em ${k}`);
+    const mesas = (Array.isArray(b.mesas) ? b.mesas : []).slice(0, 200).map(m => ({
+      numero: parseInt(m.numero) || 0, lugares: Math.max(1, Math.min(30, parseInt(m.lugares) || 4)), reservavel: m.reservavel !== false
+    })).filter(m => m.numero > 0);
+    const { error } = await supabase.from("restaurante_config").upsert({
+      restaurant_id: req.params.id, reserva_ativo: !!b.ativo, reserva_valor: valor,
+      reserva_duracao_min: num(b.duracao), reserva_bloqueio_min: num(b.bloqueio), reserva_tolerancia_min: num(b.tolerancia),
+      reserva_antecedencia_min: num(b.antecedencia), reserva_dias: num(b.dias), reserva_mesas: mesas
+    }, { onConflict: "restaurant_id" });
+    if (error) return sendError(res, 500, "Erro ao salvar: " + error.message);
+    await logAdminAction(req.auth.email, "editar_reservas", { restaurant_id: req.params.id, ativo: !!b.ativo });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// qualquer serviço com domínio próprio descobre o restaurante aqui: /api/v1/dominio/reservas/seudominio.com.br
+app.get("/api/v1/dominio/:servico/:dominio", async (req, res) => {
+  const coluna = DOMINIOS_COLUNAS.find(c => c === `${req.params.servico}_url`);
+  const dominio = normalizarDominio(req.params.dominio);
+  if (!coluna || !dominio) return sendError(res, 404, "Domínio não encontrado");
+  const { data } = await supabase.from("restaurants").select("id").eq(coluna, dominio).limit(1);
+  if (data?.[0]) return res.json({ restaurant_id: data[0].id });
+  return sendError(res, 404, "Domínio não encontrado");
+});
+
 /* ---- motor ---- */
 async function pixCriarCobranca({ restaurant_id, tipo, dados, pagador }) {
   const def = PIX_TIPOS[tipo];
@@ -2512,7 +2786,7 @@ app.get("/admin/restaurants", requireAdmin, async (req, res) => {
     const { q = "" } = req.query;
     let query = supabase
       .from("restaurants")
-      .select("id, name, email, plan, created_at, cardapio_url, cardapio_delivery_url, fidelidade_url, tracking_url, central_url, vouchers_url")
+      .select(["id, name, email, plan, created_at, tracking_url", ...DOMINIOS_COLUNAS].join(", "))
       .order("name");
 
     if (q.trim()) query = query.ilike("name", `%${q.trim()}%`);
@@ -2611,10 +2885,10 @@ app.patch("/admin/restaurants/:id/horarios", requireAdmin, async (req, res) => {
 app.patch("/admin/restaurants/:id/dominios", requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const fields = pick(req.body, ["cardapio_url", "fidelidade_url", "tracking_url", "cardapio_delivery_url", "central_url", "vouchers_url"]);
+       const fields = pick(req.body, ["tracking_url", ...DOMINIOS_COLUNAS]);
 
     // domínios ficam sempre no mesmo formato (sem https, minúsculo); tracking_url é um link completo, fica como veio
-    for (const k of ["cardapio_url", "fidelidade_url", "cardapio_delivery_url", "central_url", "vouchers_url"]) {
+    for (const k of DOMINIOS_COLUNAS) {
       if (!(k in fields)) continue;
       if (!fields[k]) { fields[k] = null; continue; }
       const d = normalizarDominio(fields[k]);
