@@ -9,7 +9,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="vouchers.css">
 </head>
 <body>
@@ -17,7 +16,7 @@
 <div class="fundo on" id="fundo"></div>
 
 <main class="vp" id="vp" hidden>
-  <a class="vp-voltar" href="./">‹ Voltar</a>
+  <a class="vp-voltar" id="voltar" href="#" hidden>‹ Voltar</a>
 
   <header class="vp-topo">
     <div class="logo" id="logo"></div>
@@ -76,7 +75,7 @@
       <small id="okValidade"></small>
     </div>
     <button type="button" class="vp-btn" id="okCopiar">Copiar código</button>
-    <a class="vp-btn vp-btn-2" href="./">Voltar ao início</a>
+    <a class="vp-btn vp-btn-2" id="okVoltar" href="#" hidden>Voltar ao início</a>
   </section>
 
   <p class="assinatura">Desenvolvido por <b>FluxON</b></p>
