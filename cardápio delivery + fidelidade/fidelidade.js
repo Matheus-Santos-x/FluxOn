@@ -130,7 +130,8 @@ function fidCartao(){
         <li><span>2</span>Acumule ${FID.modelo === "selos" ? "selos" : "pontos"} a cada pedido</li>
         <li><span>3</span>Troque por prêmios aqui</li>
       </ol>
-      <p class="fid-anon-nota">Já é cliente? Abra o link da fidelidade que ${nomeRest || "o restaurante"} enviou no seu WhatsApp para ver seu saldo aqui.</p>
+      <button class="fid-entrar" id="fidEntrarBtn">Entrar com WhatsApp</button>
+      <p class="fid-anon-nota">Já é cliente de ${nomeRest || "nós"}? Entre com o mesmo número dos seus pedidos para ver seu saldo.</p>
     </section>`;
   }
 
@@ -283,8 +284,12 @@ function fidRender(animar){
   const sair = document.getElementById("fidSairBtn");
   if(sair) sair.onclick = () => { fidEsquecer(); fidRecarregarAnonimo(); };
 
+  const entrar = document.getElementById("fidEntrarBtn");
+  if(entrar) entrar.onclick = loginAbrir;
+
   fidAtualizarFab();
   fidAtualizarPontinho();
+  loginAtualizarBotao();
 
   if(animar){
     gsap.fromTo(el.querySelectorAll(".fid-card, .fid-subnav, .fid-heading, .fid-premio, .fid-resgate"),
