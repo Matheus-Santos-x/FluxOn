@@ -3410,41 +3410,146 @@ function centralInstagram(v) {
   return /^[A-Za-z0-9._]{1,30}$/.test(u) ? `https://instagram.com/${u}` : null;
 }
 
+function centralLinkHttps(v) {
+  try { const u = new URL(String(v || "").trim()); return u.protocol === "https:" ? u.href : null; } catch { return null; }
+}
+
+// ícones que um botão da central pode ter
+const CENTRAL_ICONES = ["cardapio", "delivery", "fidelidade", "reserva", "voucher", "mapa", "whatsapp", "instagram", "avaliar", "link"];
+
+// junta tudo que a central usa: restaurante, configuração, prêmios e a configuração própria da central
+async function centralDados(rid) {
+  const { data: rest } = await supabase.from("restaurants")
+    .select("id, name, plan, cardapio_delivery_url").eq("id", rid).maybeSingle();
+  if (!rest) return null;
+  const [{ data: cfg }, { count: premios }, { data: central }] = await Promise.all([
+    supabase.from("restaurante_config")
+      .select("nome_exibicao, logo_url, banner_url, subtitulo, telefone, instagram, endereco, cor_primaria")
+      .eq("restaurant_id", rid).maybeSingle(),
+    supabase.from("premios_fidelidade")
+      .select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("ativo", true),
+    supabase.from("central_cliente").select("*").eq("restaurant_id", rid).maybeSingle()
+  ]);
+  return { rest, cfg: cfg || {}, premios: premios || 0, central: central || null };
+}
+
+// links que o sistema já sabe montar sozinho (aparecem como sugestão no editor)
+function centralSugestoes({ rest, cfg, premios }) {
+  const delivery = rest.cardapio_delivery_url ? `https://${rest.cardapio_delivery_url}` : null;
+  return [
+    delivery && { icone: "cardapio", rotulo: "Cardápio", url: delivery, origem: "Cardápio delivery" },
+    delivery && premios > 0 && { icone: "fidelidade", rotulo: "Fidelidade", url: `${delivery}/#fidelidade`, origem: "Fidelidade do cardápio" },
+    cfg.endereco && { icone: "mapa", rotulo: "Como chegar?", url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cfg.endereco)}`, origem: "Endereço cadastrado" },
+    centralWhatsApp(cfg.telefone) && { icone: "whatsapp", rotulo: "Entre em contato", url: centralWhatsApp(cfg.telefone), origem: "WhatsApp cadastrado" },
+    centralInstagram(cfg.instagram) && { icone: "instagram", rotulo: "Instagram", url: centralInstagram(cfg.instagram), origem: "Instagram cadastrado" }
+  ].filter(Boolean);
+}
+
+// botões da central: os salvos no Admin; se a central nunca foi salva, os sugeridos
+function centralBotoes(dados) {
+  if (dados.central) {
+    return (Array.isArray(dados.central.botoes) ? dados.central.botoes : [])
+      .filter(b => CENTRAL_ICONES.includes(b?.icone) && centralLinkHttps(b?.url))
+      .map(b => ({ icone: b.icone, rotulo: String(b.rotulo || "").slice(0, 30), url: centralLinkHttps(b.url) }));
+  }
+  return centralSugestoes(dados).map(({ icone, rotulo, url }) => ({ icone, rotulo, url }));
+}
+
+// "Aberto agora · fecha 23:00" / "Fechado · abre 18:00" (aceita horário que passa da meia-noite)
+async function centralStatus(rid) {
+  const { data } = await supabase.from("restaurante_horarios")
+    .select("dia_semana, abertura, fechamento").eq("restaurant_id", rid).eq("ativo", true);
+  const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  const dia = agora.getDay(), hora = agora.toTimeString().slice(0, 5), ontem = (dia + 6) % 7;
+  for (const h of data || []) {
+    const ab = h.abertura.slice(0, 5), fe = h.fechamento.slice(0, 5), vira = fe <= ab;
+    if ((h.dia_semana === dia && hora >= ab && (vira || hora <= fe)) || (vira && h.dia_semana === ontem && hora <= fe))
+      return { aberto: true, texto: `Aberto agora · fecha ${fe}` };
+  }
+  const prox = (data || []).filter(h => h.dia_semana === dia && h.abertura.slice(0, 5) > hora)
+    .map(h => h.abertura.slice(0, 5)).sort()[0];
+  return { aberto: false, texto: prox ? `Fechado · abre ${prox}` : "Fechado agora" };
+}
+
 app.get("/api/v1/central/:restaurant_id", async (req, res) => {
   try {
-    const rid = req.params.restaurant_id;
-    const { data: rest } = await supabase.from("restaurants")
-      .select("id, name, cardapio_delivery_url").eq("id", rid).maybeSingle();
-    if (!rest) return sendError(res, 404, "Restaurante não encontrado");
-
-    const { data: cfg } = await supabase.from("restaurante_config")
-      .select("nome_exibicao, logo_url, banner_url, subtitulo, telefone, instagram, endereco, cor_primaria")
-      .eq("restaurant_id", rid).maybeSingle();
-    const { count: premios } = await supabase.from("premios_fidelidade")
-      .select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("ativo", true);
-
-    const delivery = rest.cardapio_delivery_url ? `https://${rest.cardapio_delivery_url}` : null;
-    const whats = centralWhatsApp(cfg?.telefone);
-    const insta = centralInstagram(cfg?.instagram);
-    const botoes = [
-      delivery && { tipo: "cardapio", rotulo: "Cardápio", url: delivery },
-      delivery && premios > 0 && { tipo: "fidelidade", rotulo: "Fidelidade", url: `${delivery}/#fidelidade` },
-      cfg?.endereco && { tipo: "mapa", rotulo: "Como chegar?", url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cfg.endereco)}` },
-      whats && { tipo: "whatsapp", rotulo: "Entre em contato", url: whats },
-      insta && { tipo: "instagram", rotulo: "Instagram", url: insta }
-    ].filter(Boolean);
-
+    const dados = await centralDados(req.params.restaurant_id);
+    if (!dados) return sendError(res, 404, "Restaurante não encontrado");
+    if (!hasPlan(dados.rest.plan, "advanced")) return sendError(res, 403, "Página indisponível");
+    const { rest, cfg, central } = dados;
     return res.json({
-      nome: cfg?.nome_exibicao || rest.name || "",
-      logo_url: cfg?.logo_url || null,
-      fundo_url: cfg?.banner_url || null,
-      frase: cfg?.subtitulo || "",
-      cor: cfg?.cor_primaria || "#d62828",
-      botoes
+      nome: cfg.nome_exibicao || rest.name || "",
+      logo_url: cfg.logo_url || null,
+      fundo_url: central?.fundo_url || cfg.banner_url || null,
+      frase: central ? (central.frase || "") : (cfg.subtitulo || ""),
+      cor: cfg.cor_primaria || "#d62828",
+      status: central?.mostrar_aberto ? await centralStatus(rest.id) : null,
+      botoes: centralBotoes(dados).map(b => ({ tipo: b.icone, rotulo: b.rotulo, url: b.url }))
     });
   } catch (err) {
     console.error("❌ central:", err.message);
     return sendError(res, 500, "Erro ao carregar a central");
+  }
+});
+
+// Admin → Central do cliente: tudo que o editor precisa (prévia + sugestões de link)
+app.get("/admin/restaurants/:id/central", requireAdmin, async (req, res) => {
+  try {
+    const dados = await centralDados(req.params.id);
+    if (!dados) return sendError(res, 404, "Restaurante não encontrado");
+    const { rest, cfg, central } = dados;
+    return res.json({
+      plano_ok: hasPlan(rest.plan, "advanced"),
+      nome: cfg.nome_exibicao || rest.name || "",
+      logo_url: cfg.logo_url || "",
+      cor: cfg.cor_primaria || "#d62828",
+      banner_url: cfg.banner_url || "",
+      fundo_url: central?.fundo_url || "",
+      frase: central ? (central.frase || "") : (cfg.subtitulo || ""),
+      mostrar_aberto: !!central?.mostrar_aberto,
+      botoes: centralBotoes(dados),
+      sugestoes: centralSugestoes(dados)
+    });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao carregar a central");
+  }
+});
+
+// Admin → Central do cliente: salva foto, frase, aberto/fechado e os botões (ícone, nome e link, na ordem)
+app.patch("/admin/restaurants/:id/central", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fundo_url, frase, mostrar_aberto, botoes } = req.body || {};
+    const { data: rest } = await supabase.from("restaurants").select("id").eq("id", id).maybeSingle();
+    if (!rest) return sendError(res, 404, "Restaurante não encontrado");
+
+    const fundo = fundo_url ? centralLinkHttps(fundo_url) : null;
+    if (fundo_url && !fundo) return sendError(res, 400, "Foto de fundo inválida");
+    if (!Array.isArray(botoes) || botoes.length > 12) return sendError(res, 400, "Use até 12 botões");
+
+    const lista = [];
+    for (const b of botoes) {
+      const rotulo = String(b?.rotulo || "").trim().slice(0, 30);
+      const url = centralLinkHttps(b?.url);
+      if (!rotulo) return sendError(res, 400, "Todo botão precisa de um nome");
+      if (!url) return sendError(res, 400, `Link inválido em "${rotulo}" (precisa começar com https://)`);
+      lista.push({ icone: CENTRAL_ICONES.includes(b.icone) ? b.icone : "link", rotulo, url });
+    }
+
+    const { error } = await supabase.from("central_cliente").upsert({
+      restaurant_id: id,
+      fundo_url: fundo,
+      frase: String(frase || "").trim().slice(0, 140),
+      mostrar_aberto: !!mostrar_aberto,
+      botoes: lista,
+      atualizado_em: new Date().toISOString()
+    }, { onConflict: "restaurant_id" });
+    if (error) return sendError(res, 500, "Erro ao salvar a central: " + error.message);
+
+    await logAdminAction(req.auth.email, "editar_central", { restaurant_id: id });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
   }
 });
 
