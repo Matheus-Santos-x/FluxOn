@@ -168,6 +168,7 @@ async function getDominiosPermitidos() {
       if (r.tracking_url) dominios.add(`https://${r.tracking_url.replace(/^https?:\/\//, '')}`);
       if (r.cardapio_delivery_url) dominios.add(`https://${r.cardapio_delivery_url.replace(/^https?:\/\//, '')}`);
       if (r.central_url) dominios.add(`https://${r.central_url.replace(/^https?:\/\//, '')}`);
+      if (r.vouchers_url) dominios.add(`https://${r.vouchers_url.replace(/^https?:\/\//, '')}`);
     });
     
     _dominiosCache = [...dominios];
