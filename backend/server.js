@@ -304,7 +304,10 @@ app.use("/api/v1/fidelidade/premios", requireAuth);
 app.use("/api/v1/fidelidade/:restaurant_id/clientes", requireAuth);
 app.use("/api/v1/pedidos", (req, res, next) => {
   const criando = req.method === "POST" && req.path === "/" && !req.body?.order_id;
-  return criando ? next() : requireAuth(req, res, next);
+  // o cardápio delivery atualiza o próprio rascunho sem login (a rota confere que ainda é rascunho)
+  const rascunhoDelivery = req.method === "POST" && req.path === "/" && !!req.body?.order_id
+    && req.body?.origin === "cardapio_delivery" && ["draft", "pending"].includes(req.body?.status);
+  return (criando || rascunhoDelivery) ? next() : requireAuth(req, res, next);
 });
 
 // ===== RATE LIMITING =====
@@ -1324,8 +1327,74 @@ const PIX_TIPOS = {
         .eq("id", referencia_id).eq("restaurant_id", restaurant_id).eq("status", "aguardando");
     }
   }
-  // pedido: { publico: true, preparar, aoPagar, aoFalhar }          ← próximo
   // reserva_mesa: { publico: true, preparar, aoPagar, aoFalhar }    ← depois
+};
+
+/* ---- Pix do delivery: cobra o rascunho (status draft) criado pelo cardápio ---- */
+async function pedidoFidelizar(rid, phone, nome, total) {
+  try {
+    if (!phone) return;
+    const ganho = fidelidadeGanho(await configFidelidade(rid), total);
+    if (!(ganho.qtd > 0)) return;
+    const { data: perfil } = await supabase.from("base_clientes").select("*")
+      .eq("restaurant_id", rid).eq("numero", phone).maybeSingle();
+    if (perfil) {
+      await supabase.from("base_clientes").update({ [ganho.coluna]: (perfil[ganho.coluna] || 0) + ganho.qtd }).eq("id", perfil.id);
+    } else {
+      const token = (Math.random().toString(36).substring(2, 8) + Math.random().toString(36).substring(2, 8)).substring(0, 12);
+      await supabase.from("base_clientes").insert([{
+        restaurant_id: rid, nome: nome || "", numero: phone,
+        pontos: ganho.coluna === "pontos" ? ganho.qtd : 0, selos: ganho.coluna === "selos" ? ganho.qtd : 0,
+        pontos_resgatados: 0, token_fidelidade: token, Status: "ATIVO"
+      }]);
+    }
+  } catch (err) { console.error("⚠️ fidelização (pix pedido):", err.message); }
+}
+
+PIX_TIPOS.pedido = {
+  publico: true,
+  async preparar({ restaurant_id, dados, pagador }) {
+    const { data: ped } = await supabase.from("orders")
+      .select("id, order_number, status, origin, itens, total_price, taxa_entrega, address, client_phone")
+      .eq("id", dados.order_id).eq("restaurant_id", restaurant_id).maybeSingle();
+    if (!ped || ped.status !== "draft" || ped.origin !== "cardapio_delivery")
+      throw new PixErro(404, "Pedido não encontrado ou já confirmado");
+    if (!ped.address || !Array.isArray(ped.itens) || !ped.itens.length)
+      throw new PixErro(400, "Complete os dados do pedido antes de pagar");
+    if (normalizePhone(ped.client_phone) !== pagador.telefone)
+      throw new PixErro(403, "O telefone não confere com o do pedido");
+
+    const valor = Math.round(Number(ped.total_price) * 100) / 100;
+    const { data: cfg } = await supabase.from("restaurante_config")
+      .select("pedido_minimo").eq("restaurant_id", restaurant_id).maybeSingle();
+    const minimo = Number(cfg?.pedido_minimo) || 0;
+    if (minimo > 0 && valor - (Number(ped.taxa_entrega) || 0) < minimo)
+      throw new PixErro(400, `Pedido mínimo: R$ ${minimo.toFixed(2).replace(".", ",")}`);
+
+    // um Pix aberto por pedido: evita pagar duas vezes o mesmo pedido
+    const { count } = await supabase.from("cobrancas_pix").select("id", { count: "exact", head: true })
+      .eq("restaurant_id", restaurant_id).eq("tipo", "pedido").eq("referencia_id", String(ped.id))
+      .eq("status", "aguardando").gt("expira_em", new Date().toISOString());
+    if (count > 0) throw new PixErro(409, "Já existe um Pix em aberto para este pedido. Pague por ele ou aguarde expirar.");
+
+    return { valor, descricao: `Pedido #${ped.order_number} - ${pagador.nome}`.slice(0, 200), referencia_id: String(ped.id) };
+  },
+  async aoPagar({ cobranca }) {
+    const { data: ped } = await supabase.from("orders").select("id, notes, client_name, client_phone, total_price, taxa_entrega")
+      .eq("id", cobranca.referencia_id).eq("restaurant_id", cobranca.restaurant_id).eq("status", "draft").maybeSingle();
+    if (!ped) throw new Error("o pedido não estava mais aguardando pagamento");
+    if (Number(cobranca.valor) + 0.009 < Number(ped.total_price)) throw new Error("valor pago menor que o total do pedido");
+    const notes = [ped.notes, "✅ PAGO ONLINE (Pix)"].filter(Boolean).join(" | ");
+    const { data: ok } = await supabase.from("orders")
+      .update({ status: "pending", payment_method: "Pix", notes, update_at: new Date().toISOString() })
+      .eq("id", ped.id).eq("status", "draft").select().maybeSingle();
+    if (!ok) throw new Error("outra confirmação chegou primeiro");
+    // pontos/selos contam só os itens, sem a taxa de entrega
+    await pedidoFidelizar(cobranca.restaurant_id, normalizePhone(ped.client_phone), ped.client_name,
+      (Number(ped.total_price) || 0) - (Number(ped.taxa_entrega) || 0));
+    emitOrderUpdate(cobranca.restaurant_id, ok);
+  },
+  async aoFalhar() { /* o rascunho continua; o cliente pode tentar de novo */ }
 };
 
 /* ---- motor ---- */
@@ -1830,7 +1899,25 @@ app.post("/api/v1/pedidos", async (req, res) => {
 
     // 💰 Pedido público (sem login nem chave): o servidor confere o total pelo cardápio
     let total_price = total_price_cliente;
-    if (!readAuth(req) && !order_id && finalOrigin !== "fidelidade" && normalizedItems.length > 0) {
+    let taxa_entrega = 0;
+    let eraRascunho = false;
+    const publico = !readAuth(req);
+    const ehDeliveryPublico = publico && finalOrigin !== "fidelidade"
+      && (finalOrigin === "cardapio_delivery" || String(service_type || "").toLowerCase() === "delivery");
+
+    if (ehDeliveryPublico) {
+      // o cardápio delivery só cria rascunho (draft) ou confirma (pending)
+      if (!["draft", "pending"].includes(finalStatus)) return sendError(res, 400, "Status inválido");
+      if (order_id) {
+        // o cliente só altera o próprio rascunho, nunca um pedido já confirmado
+        const { data: atual } = await supabase.from("orders").select("id, status")
+          .eq("id", order_id).eq("restaurant_id", restaurant_id).maybeSingle();
+        if (!atual || atual.status !== "draft") return sendError(res, 403, "Este pedido não pode mais ser alterado");
+        eraRascunho = true;
+      }
+    }
+
+    if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0 && (ehDeliveryPublico || !order_id)) {
       const { total: totalServidor, naoEncontrados } = await calcularTotalServidor(restaurant_id, normalizedItems);
       const diverge = Math.abs(totalServidor - (parseFloat(total_price_cliente) || 0)) > 0.01;
       if (naoEncontrados.length > 0 || diverge) {
@@ -1838,8 +1925,21 @@ app.post("/api/v1/pedidos", async (req, res) => {
         if (AUTH_MODE === "enforce") {
           if (naoEncontrados.length > 0) return sendError(res, 400, `Item fora do cardápio: ${naoEncontrados[0]}`);
           total_price = totalServidor;
+        } else if (ehDeliveryPublico && naoEncontrados.length === 0) {
+          total_price = totalServidor; // delivery nunca aceita preço vindo do navegador
         }
       }
+    }
+
+    if (ehDeliveryPublico) {
+      const { data: cfgEnt } = await supabase.from("restaurante_config")
+        .select("taxa_entrega, pedido_minimo").eq("restaurant_id", restaurant_id).maybeSingle();
+      const subtotal = parseFloat(total_price) || 0;
+      const minimo = Number(cfgEnt?.pedido_minimo) || 0;
+      if (finalStatus === "pending" && minimo > 0 && subtotal < minimo)
+        return sendError(res, 400, `Pedido mínimo: R$ ${minimo.toFixed(2).replace(".", ",")}`);
+      taxa_entrega = Math.max(0, Number(cfgEnt?.taxa_entrega) || 0);
+      total_price = Math.round((subtotal + taxa_entrega) * 100) / 100;
     }
 
     const now = new Date().toISOString();
@@ -1911,6 +2011,13 @@ const nextNumber = numData || 1;
   resultData = data;
 }
 
+    // 🛵 grava a taxa de entrega no pedido (delivery do cardápio)
+    if (ehDeliveryPublico && resultData?.id) {
+      const { error: errTaxa } = await supabase.from("orders").update({ taxa_entrega }).eq("id", resultData.id);
+      if (errTaxa) console.error("⚠️ taxa_entrega não gravada:", errTaxa.message);
+      else resultData.taxa_entrega = taxa_entrega;
+    }
+
     // Gera código único: primeiros 8 caracteres do restaurant_id + order_number
 let trackingCode = resultData.tracking_token;
 if (!trackingCode) {
@@ -1931,9 +2038,10 @@ const trackingLink = baseUrl ? `${baseUrl}?code=${trackingCode}` : null;
     
 // ⭐ FIDELIZAÇÃO
 try {
-  if (phone && !order_id && finalOrigin !== "fidelidade") {
+  if (phone && finalStatus !== "draft" && (!order_id || eraRascunho) && finalOrigin !== "fidelidade") {
     const cfgFid = await configFidelidade(restaurant_id);
-    const ganho = fidelidadeGanho(cfgFid, total_price);
+    // pontos/selos contam só os itens, sem a taxa de entrega
+    const ganho = fidelidadeGanho(cfgFid, (parseFloat(total_price) || 0) - taxa_entrega);
     const pontosGanhos = ganho.qtd;
 
     if (pontosGanhos > 0) {
@@ -3291,6 +3399,8 @@ app.get("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
       .eq("restaurant_id", restaurant_id)
       .single();
 
+     const cfgFid = await configFidelidade(restaurant_id);
+
             return res.json({
       nome_exibicao: config?.nome_exibicao || "",
             logo_url: config?.logo_url || null,
@@ -3314,7 +3424,10 @@ app.get("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
       pedido_minimo: config?.pedido_minimo ?? 0,
       endereco: config?.endereco || "",
       pagamento_online: config?.pagamento_online || [],
-      pagamento_entrega: config?.pagamento_entrega || []
+      pagamento_entrega: config?.pagamento_entrega || [],
+      taxa_entrega: Number(config?.taxa_entrega) || 0,
+      pix_online: !!(await pixConfig(restaurant_id)),
+      fidelidade: { modelo: cfgFid.modelo, valor_selo: cfgFid.valorSelo, pontos_por_real: cfgFid.pontosPorReal }
     });
   } catch (err) {
     return sendError(res, 500, "Erro ao buscar configuração");
@@ -5308,6 +5421,146 @@ app.post("/api/v1/restaurante/:restaurant_id/crm-mensagem", async (req, res) => 
     return res.json({ success: true });
   } catch (err) {
     return sendError(res, 502, "Não foi possível enviar para o webhook: " + err.message);
+  }
+});
+
+/* ========================================
+   👤 LOGIN DO CLIENTE (cardápio delivery + fidelidade)
+   Telefone + código de 6 dígitos no WhatsApp. O código fica só na memória
+   do servidor por 10 minutos (sem tabela). Sai pelo webhook de mensagens
+   do restaurante (webhook_crm); se ele não tiver, pelo webhook do FluxON
+   (OWNER_OTP_WEBHOOK_URL). Ao confirmar, devolve o token da fidelidade,
+   que o app guarda no aparelho do cliente.
+======================================== */
+const CLIENTE_OTP_MINUTOS = 10;
+const CLIENTE_OTP_MAX_TENTATIVAS = 5;
+const clienteLimitSolicitar = rateLimit({
+  windowMs: 10 * 60 * 1000, max: 8,
+  message: { error: "Muitas tentativas. Aguarde alguns minutos." },
+  standardHeaders: true, legacyHeaders: false
+});
+const clienteLimitVerificar = rateLimit({
+  windowMs: 10 * 60 * 1000, max: 20,
+  message: { error: "Muitas tentativas. Aguarde alguns minutos." },
+  standardHeaders: true, legacyHeaders: false
+});
+
+const clienteHash = (rid, tel, codigo) =>
+  crypto.createHmac("sha256", process.env.JWT_SECRET || "fluxon-cliente").update(`${rid}:${tel}:${codigo}`).digest("hex");
+
+// códigos abertos: "restaurante:telefone" → { hash, expira, tentativas, pedidos: [horários] }
+const clienteCodigos = new Map();
+setInterval(() => {
+  const agora = Date.now();
+  for (const [k, v] of clienteCodigos) {
+    v.pedidos = v.pedidos.filter(t => agora - t < 60 * 60 * 1000);
+    if (v.expira < agora && !v.pedidos.length) clienteCodigos.delete(k);
+  }
+}, 10 * 60 * 1000).unref();
+
+// "(11) 99999-8888" ou "5511999998888" → "11999998888"
+function telefoneLocal(v) {
+  let d = String(v || "").replace(/\D/g, "");
+  if (d.length >= 12 && d.startsWith("55")) d = d.slice(2);
+  return d.length === 10 || d.length === 11 ? d : null;
+}
+
+app.post("/api/v1/cliente/:restaurant_id/login/solicitar", clienteLimitSolicitar, async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    const tel = telefoneLocal(req.body?.telefone);
+    if (!tel) return sendError(res, 400, "Informe um telefone com DDD");
+    if (!(await restaurantExists(rid))) return sendError(res, 404, "Restaurante não encontrado");
+
+    const chave = `${rid}:${tel}`;
+    const agora = Date.now();
+    const reg = clienteCodigos.get(chave) || { hash: null, expira: 0, tentativas: 0, pedidos: [] };
+    reg.pedidos = reg.pedidos.filter(t => agora - t < 60 * 60 * 1000);
+    if (reg.pedidos.length >= 5) return sendError(res, 429, "Muitos códigos pedidos. Tente de novo mais tarde.");
+    if (reg.pedidos.length && agora - reg.pedidos[reg.pedidos.length - 1] < 45 * 1000)
+      return sendError(res, 429, "Aguarde alguns segundos para pedir outro código.");
+
+    const crm = await getIntegracao(rid, "webhook_crm");
+    const url = crm?.webhook_url || OWNER_OTP_WEBHOOK_URL;
+    if (!url) {
+      console.error("❌ login cliente: nenhum webhook de WhatsApp configurado");
+      return sendError(res, 503, "Entrar pelo WhatsApp ainda não está disponível neste restaurante");
+    }
+
+    const codigo = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+    reg.hash = clienteHash(rid, tel, codigo);
+    reg.expira = agora + CLIENTE_OTP_MINUTOS * 60 * 1000;
+    reg.tentativas = 0;
+    reg.pedidos.push(agora);
+    clienteCodigos.set(chave, reg);
+
+    const { data: rest } = await supabase.from("restaurants").select("name").eq("id", rid).maybeSingle();
+    const mensagem = `Seu código para entrar no cardápio ${rest?.name || ""} é *${codigo}*. Vale por ${CLIENTE_OTP_MINUTOS} minutos. Não compartilhe com ninguém.`;
+    const corpo = crm?.webhook_url
+      ? { restaurant_id: rid, restaurant_name: rest?.name || null, client_name: String(req.body?.nome || "").slice(0, 80) || null,
+          client_phone: tel, client_phone_whatsapp: `55${tel}`, message: mensagem, sent_at: new Date().toISOString(), source: "login_cliente" }
+      : { tipo: "cliente_otp", nome: String(req.body?.nome || "").slice(0, 80) || null, telefone: `55${tel}`, codigo,
+          expira_em_minutos: CLIENTE_OTP_MINUTOS, mensagem };
+
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(!crm?.webhook_url && OWNER_OTP_WEBHOOK_SECRET ? { "x-fluxon-secret": OWNER_OTP_WEBHOOK_SECRET } : {})
+      },
+      body: JSON.stringify(corpo),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!r.ok) {
+      console.error(`❌ login cliente: webhook respondeu ${r.status}`);
+      return sendError(res, 502, "Não foi possível enviar o código agora. Tente de novo.");
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("❌ login cliente/solicitar:", err.message);
+    return sendError(res, 500, "Erro ao enviar o código");
+  }
+});
+
+app.post("/api/v1/cliente/:restaurant_id/login/verificar", clienteLimitVerificar, async (req, res) => {
+  const invalido = () => sendError(res, 401, "Código inválido ou expirado");
+  try {
+    const rid = req.params.restaurant_id;
+    const tel = telefoneLocal(req.body?.telefone);
+    const codigo = String(req.body?.codigo || "").replace(/\D/g, "");
+    if (!tel || codigo.length !== 6) return invalido();
+
+    const chave = `${rid}:${tel}`;
+    const reg = clienteCodigos.get(chave);
+    if (!reg || !reg.hash || reg.expira < Date.now() || reg.tentativas >= CLIENTE_OTP_MAX_TENTATIVAS) return invalido();
+    if (!safeEqual(clienteHash(rid, tel, codigo), reg.hash)) {
+      reg.tentativas++;
+      return invalido();
+    }
+    reg.hash = null; // código usado não vale de novo
+
+    // acha o cliente pelo telefone (com ou sem 55); se não existir, cria o cadastro
+    const { data: achados } = await supabase.from("base_clientes").select("id, nome, token_fidelidade")
+      .eq("restaurant_id", rid).in("numero", [tel, `55${tel}`]).limit(1);
+    let cliente = achados?.[0];
+    if (!cliente) {
+      const { data: novo, error } = await supabase.from("base_clientes").insert([{
+        restaurant_id: rid, nome: String(req.body?.nome || "").trim().slice(0, 80), numero: tel,
+        pontos: 0, selos: 0, pontos_resgatados: 0,
+        token_fidelidade: crypto.randomBytes(9).toString("hex"), Status: "ATIVO"
+      }]).select("id, nome, token_fidelidade").single();
+      if (error) throw error;
+      cliente = novo;
+    }
+    if (!cliente.token_fidelidade) {
+      const t = crypto.randomBytes(9).toString("hex");
+      await supabase.from("base_clientes").update({ token_fidelidade: t }).eq("id", cliente.id);
+      cliente.token_fidelidade = t;
+    }
+    return res.json({ success: true, token: cliente.token_fidelidade, nome: cliente.nome || "" });
+  } catch (err) {
+    console.error("❌ login cliente/verificar:", err.message);
+    return sendError(res, 500, "Erro ao entrar");
   }
 });
 
