@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vale-presente</title>
+<meta name="theme-color" content="#0b0a09">
+<link rel="icon" id="favicon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="vale-presente.css">
+</head>
+<body>
+
+<div class="fundo on" id="fundo"></div>
+
+<main class="vp" id="vp" hidden>
+  <a class="vp-voltar" href="./">‹ Voltar</a>
+
+  <header class="vp-topo">
+    <div class="logo" id="logo"></div>
+    <p class="vp-rest" id="nome"></p>
+    <h1>Vale-presente</h1>
+    <p class="vp-sub">Dê de presente um momento especial. Quem ganha usa como quiser, até aos poucos.</p>
+  </header>
+
+  <!-- 1) escolher e preencher -->
+  <section class="vp-card" id="passoForm">
+    <h2><span>1</span> Escolha o valor</h2>
+    <div class="vp-valores" id="valores"></div>
+
+    <h2><span>2</span> Para quem é?</h2>
+    <div class="vp-seg">
+      <button type="button" class="on" data-presente="1">🎁 É presente</button>
+      <button type="button" data-presente="0">É pra mim</button>
+    </div>
+    <div class="vp-campos" id="camposPresente">
+      <label>Nome de quem vai ganhar<input id="destNome" maxlength="80" autocomplete="off" placeholder="Ex.: Maria"></label>
+      <label>WhatsApp de quem vai ganhar<input id="destTel" inputmode="tel" placeholder="(00) 00000-0000"></label>
+      <label>Mensagem (opcional)<textarea id="mensagem" maxlength="200" rows="2" placeholder="Ex.: Feliz aniversário! Aproveite 💛"></textarea></label>
+    </div>
+
+    <h2><span>3</span> Seus dados</h2>
+    <div class="vp-campos">
+      <label>Seu nome<input id="nomeComprador" maxlength="80" autocomplete="name" placeholder="Como você se chama?"></label>
+      <label>Seu WhatsApp<input id="telComprador" inputmode="tel" autocomplete="tel" placeholder="(00) 00000-0000"></label>
+    </div>
+
+    <p class="vp-info" id="info"></p>
+    <p class="vp-erro" id="erro"></p>
+    <button type="button" class="vp-btn" id="pagar" disabled>Escolha um valor</button>
+  </section>
+
+  <!-- 2) Pix -->
+  <section class="vp-card vp-centro" id="passoPix" hidden>
+    <h2 class="vp-h2-centro">Pague com Pix</h2>
+    <div class="vp-total" id="pixValor"></div>
+    <img class="vp-qr" id="pixQr" alt="QR Code Pix" hidden>
+    <div class="vp-timer" id="pixTimer"></div>
+    <div class="vp-copia" id="pixCodigo"></div>
+    <button type="button" class="vp-btn" id="pixCopiar">Copiar código Pix</button>
+    <button type="button" class="vp-btn vp-btn-2" id="pixVoltar">Voltar</button>
+    <p class="vp-info" id="pixStatus">Aguardando o pagamento. Assim que você pagar, o vale é enviado sozinho.</p>
+  </section>
+
+  <!-- 3) pronto -->
+  <section class="vp-card vp-centro" id="passoOk" hidden>
+    <div class="vp-ok">✓</div>
+    <h2 class="vp-h2-centro">Vale-presente pago!</h2>
+    <p class="vp-info" id="okTexto"></p>
+    <div class="vp-cupom">
+      <span>Código</span>
+      <strong id="okCodigo"></strong>
+      <small id="okValidade"></small>
+    </div>
+    <button type="button" class="vp-btn" id="okCopiar">Copiar código</button>
+    <a class="vp-btn vp-btn-2" href="./">Voltar ao início</a>
+  </section>
+
+  <p class="assinatura">Desenvolvido por <b>FluxON</b></p>
+</main>
+
+<div class="aviso" id="aviso" hidden></div>
+
+<script src="vale-presente.js"></script>
+</body>
+</html>
