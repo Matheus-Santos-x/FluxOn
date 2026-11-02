@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reservar mesa</title>
+<meta name="theme-color" content="#0b0a09">
+<link rel="icon" id="favicon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="fundo" id="fundo"></div>
+
+<main class="vp" id="vp" hidden>
+  <a class="vp-voltar" id="voltar" href="#" hidden>‹ Voltar</a>
+
+  <header class="vp-topo">
+    <div class="logo" id="logo"></div>
+    <p class="vp-rest" id="nome"></p>
+    <h1>Reservar mesa</h1>
+    <p class="vp-sub">Escolha o dia, o horário e a sua mesa. A gente guarda ela pra você.</p>
+  </header>
+
+  <!-- 1) escolher -->
+  <section class="vp-card" id="passoForm">
+    <h2><span>1</span> Quantas pessoas?</h2>
+    <div class="rs-stepper">
+      <button type="button" id="menos" aria-label="Menos uma pessoa">−</button>
+      <strong id="pessoas">2<small>pessoas</small></strong>
+      <button type="button" id="mais" aria-label="Mais uma pessoa">+</button>
+    </div>
+
+    <h2><span>2</span> Qual dia?</h2>
+    <div class="rs-dias" id="dias"></div>
+
+    <h2><span>3</span> Qual horário?</h2>
+    <div id="horas"><p class="rs-vazio">Escolha um dia.</p></div>
+
+    <h2><span>4</span> Escolha a mesa</h2>
+    <div id="mesas"><p class="rs-vazio">Escolha um horário.</p></div>
+
+    <h2><span>5</span> Seus dados</h2>
+    <div class="vp-campos">
+      <label>Seu nome<input id="nomeCliente" maxlength="80" autocomplete="name" placeholder="Em nome de quem fica a reserva?"></label>
+      <label>Seu WhatsApp<input id="telCliente" inputmode="tel" autocomplete="tel" placeholder="(00) 00000-0000"></label>
+      <label>Observação (opcional)<textarea id="observacao" maxlength="200" rows="2" placeholder="Ex.: aniversário, cadeirinha de bebê..."></textarea></label>
+    </div>
+
+    <p class="vp-info" id="info"></p>
+    <p class="vp-erro" id="erro"></p>
+    <button type="button" class="vp-btn" id="pagar" disabled>Escolha a mesa</button>
+  </section>
+
+  <!-- 2) Pix -->
+  <section class="vp-card vp-centro" id="passoPix" hidden>
+    <h2 class="vp-h2-centro">Pague com Pix</h2>
+    <div class="vp-total" id="pixValor"></div>
+    <div class="rs-resumo" id="pixResumo"></div>
+    <img class="vp-qr" id="pixQr" alt="QR Code Pix" hidden>
+    <div class="vp-timer" id="pixTimer"></div>
+    <div class="vp-copia" id="pixCodigo"></div>
+    <button type="button" class="vp-btn" id="pixCopiar">Copiar código Pix</button>
+    <button type="button" class="vp-btn vp-btn-2" id="pixVoltar">Escolher outra mesa</button>
+    <p class="vp-info" id="pixStatus">A mesa fica guardada pra você enquanto o Pix estiver valendo. Assim que você pagar, a reserva é confirmada sozinha.</p>
+  </section>
+
+  <!-- 3) pronto -->
+  <section class="vp-card vp-centro" id="passoOk" hidden>
+    <div class="vp-ok">✓</div>
+    <h2 class="vp-h2-centro">Reserva confirmada!</h2>
+    <div class="rs-resumo" id="okResumo"></div>
+    <p class="vp-info" id="okTexto"></p>
+    <a class="vp-btn vp-btn-2" id="okVoltar" href="#" hidden>Voltar ao início</a>
+  </section>
+
+  <p class="assinatura">Desenvolvido por <b>FluxON</b></p>
+</main>
+
+<div class="aviso" id="aviso" hidden></div>
+
+<script src="script.js"></script>
+</body>
+</html>
