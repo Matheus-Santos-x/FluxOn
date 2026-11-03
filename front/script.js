@@ -680,6 +680,7 @@ async function selecionarAdminRestaurante(id) {
   document.getElementById("admin-f-dom-central").value = r.central_url || "";
   document.getElementById("admin-f-dom-vouchers").value = r.vouchers_url || "";
   document.getElementById("admin-f-dom-reservas").value = r.reservas_url || "";
+  document.getElementById("admin-f-dom-avaliacao").value = r.avaliacao_url || "";
   document.getElementById("admin-status-dominios").textContent = "";
   carregarAdminCentral();
   carregarAdminVouchers();
@@ -701,6 +702,7 @@ async function selecionarAdminRestaurante(id) {
     document.getElementById("admin-f-telefone").value = cfg.telefone || "";
     document.getElementById("admin-f-instagram").value = cfg.instagram || "";
     document.getElementById("admin-f-endereco").value = cfg.endereco || "";
+    document.getElementById("admin-f-google-avaliacao").value = cfg.google_avaliacao_url || "";
     document.getElementById("admin-f-mesas").value = cfg.num_mesas ?? 10;
     document.getElementById("admin-f-pedido-minimo").value = cfg.pedido_minimo ?? 0;
     document.getElementById("admin-f-entrega-min").value = cfg.tempo_entrega_min ?? "";
@@ -873,6 +875,7 @@ async function salvarAdminOperacao() {
     telefone: document.getElementById("admin-f-telefone").value.trim(),
     instagram: document.getElementById("admin-f-instagram").value.trim(),
     endereco: document.getElementById("admin-f-endereco").value.trim(),
+    google_avaliacao_url: document.getElementById("admin-f-google-avaliacao").value.trim(),
     num_mesas: parseInt(document.getElementById("admin-f-mesas").value) || 0,
     pedido_minimo: parseFloat(document.getElementById("admin-f-pedido-minimo").value) || 0,
     tempo_entrega_min: document.getElementById("admin-f-entrega-min").value ? parseInt(document.getElementById("admin-f-entrega-min").value) : null,
@@ -900,7 +903,8 @@ async function salvarAdminDominios() {
     cardapio_delivery_url: document.getElementById("admin-f-dom-delivery").value.trim(),
     central_url: document.getElementById("admin-f-dom-central").value.trim(),
     vouchers_url: document.getElementById("admin-f-dom-vouchers").value.trim(),
-    reservas_url: document.getElementById("admin-f-dom-reservas").value.trim()
+    reservas_url: document.getElementById("admin-f-dom-reservas").value.trim(),
+    avaliacao_url: document.getElementById("admin-f-dom-avaliacao").value.trim()
   };
   status.textContent = "Salvando..."; status.style.color = "rgba(252,228,228,0.6)";
   try {
@@ -915,6 +919,7 @@ async function salvarAdminDominios() {
     document.getElementById("admin-f-dom-central").value = adminSelectedRestaurant.central_url || "";
     document.getElementById("admin-f-dom-vouchers").value = adminSelectedRestaurant.vouchers_url || "";
     document.getElementById("admin-f-dom-reservas").value = adminSelectedRestaurant.reservas_url || "";
+    document.getElementById("admin-f-dom-avaliacao").value = adminSelectedRestaurant.avaliacao_url || "";
     status.textContent = "✅ Salvo! Já vale agora."; status.style.color = "rgba(34,197,94,0.9)";
   } catch (e) {
     status.textContent = "❌ " + e.message; status.style.color = "rgba(239,68,68,0.9)";
