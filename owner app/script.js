@@ -84,6 +84,16 @@
       rows.sort((a, b) => b.revenue - a.revenue);
       return { period, totals: { revenue: total, orders: ped, ticket: total / ped, growth_revenue: 6.1, growth_orders: null, units: 3 }, ranking: rows.map((r, i) => ({ position: i + 1, share: (r.revenue / total) * 100, ...r })) };
     }
+    if (path.includes("/avaliacoes")) {
+      const ag = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+      return { period, total: 38, media: 4.21, boas: 30, medias: 5, ruins: 3,
+        categorias: [{ id: "comida", nome: "Comida" }, { id: "atendimento", nome: "Atendimento" }, { id: "ambiente", nome: "Ambiente" }, { id: "tempo", nome: "Rapidez" }],
+        por_item: { comida: 4.5, atendimento: 4.3, ambiente: 4.4, tempo: 2.9 },
+        comentarios: [
+          { id: "a1", nota: 1.75, notas: { comida: 2, atendimento: 2, ambiente: 2, tempo: 1 }, comentario: "Esperei 1 hora e o lanche chegou frio.", cliente_nome: "Ana", cliente_telefone: "14999991111", ia_acionada: true, vista: false, criado_em: ag(3) },
+          { id: "a2", nota: 3.5, notas: { comida: 4, atendimento: 4, ambiente: 3, tempo: 3 }, comentario: "Poderia ter mais opções vegetarianas.", cliente_nome: null, cliente_telefone: null, ia_acionada: false, vista: true, criado_em: ag(30) }
+        ] };
+    }
     const id = decodeURIComponent((/restaurants\/([^/]+)/.exec(path) || [])[1] || "d1");
     const l = lojas.find((x) => x.id === id) || lojas[0], t = tl(l.f), s = soma(t);
     const peso = [1, 1, 1, 1, 1, 1, 2, 3, 4, 3, 3, 12, 18, 14, 8, 5, 4, 6, 14, 22, 20, 12, 5, 2];
@@ -302,7 +312,7 @@ if (st.view === "overview") {
 
 const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos", fidmodelo: "fidelidade", fidpiso: "fidelidade" };
   const SEM_PERIODO = ["home", "custos", "cuing", "cufichas", "cudesp", "fidelidade", "fidmodelo", "fidpiso"];
-  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", fidmodelo: "Modelo de fidelidade", fidpiso: "Piso dos prêmios", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF" };
+  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", fidmodelo: "Modelo de fidelidade", fidpiso: "Piso dos prêmios", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF", avaliacoes: "Avaliações" };
   function render() {
     const ov = st.view === "overview";
     $("back").classList.toggle("hidden", ov || st.screen === "home");
@@ -311,7 +321,7 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
     if (ov) { $("title").textContent = "Visão geral"; $("content").innerHTML = telaOverview(st.ov); return; }
     const d = st.dash;
     $("title").textContent = st.screen === "home" ? d.restaurant.name : TITULOS[st.screen];
-    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, fidmodelo: telaFidModelo, fidpiso: telaFidPiso, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
+    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, fidmodelo: telaFidModelo, fidpiso: telaFidPiso, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf, avaliacoes: telaAvaliacoes }[st.screen];cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
     $("content").innerHTML = T(d);
     if (st.screen === "pdf") bindPdf(d);
   }
@@ -499,7 +509,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
     const card = (go, icone, t, rec) => { const ok = !rec || pode(d, rec); return `<li><button class="tile" data-go="${go}"><span class="tile-ic">${ic(icone)}</span><b>${t}</b>${ok ? "" : `<span class="tag red">${planoDe(d, rec)}</span>`}</button></li>`; };
     const grupo = (t, itens) => `<section class="grp"><h2>${t}</h2><ul class="tiles">${itens.join("")}</ul></section>`;
     return grupo("Dinheiro", [card("dre", "wallet", "Lucro e operação"), card("custos", "box", "Custos e estoque", "custos"), card("canais", "pie", "Rentabilidade por canal", "canais"), card("caixa", "file", "Vendas por dia", "vendas")]) +
-      grupo("Clientes", [card("clientes", "users", "Clientes e origem", "clientes"), card("fidelidade", "star", "Fidelidade", "fidelidade")]) +
+      grupo("Clientes", [card("clientes", "users", "Clientes e origem", "clientes"), card("fidelidade", "star", "Fidelidade", "fidelidade"), card("avaliacoes", "chat", "Avaliações")]) +
       grupo("Mais", [card("operacao", "bolt", "Operação e IA", "operacao"), card("previsao", "trend", "Previsão de demanda", "previsao"), card("pdf", "print", "Exportar PDF", "pdf")]);
   }
 
@@ -725,6 +735,76 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
         } catch (e) { toast(e.message); }
         b.disabled = false; b.textContent = "Salvar";
       }));
+    }).catch((e) => {
+      if (my !== st.reqId) return;
+      $("content").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`;
+    });
+    return `<div class="skeleton"></div><div class="skeleton"></div>`;
+  }
+
+  /* ---------- avaliações (só visualizar e compartilhar) ---------- */
+  const avNum = (n) => (Math.floor(Number(n) * 10) / 10).toFixed(1).replace(".", ",");
+  const avTel = (t) => { const d = String(t || "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, ""); return d.length === 11 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}` : d; };
+  const avQuando = (iso) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " ·");
+  function avTexto(a, cats) {
+    const ruim = Number(a.nota) < 3;
+    return [
+      `${ruim ? "⚠️ Reclamação" : "💡 Sugestão"} — ${st.dash?.restaurant?.name || ""}`,
+      `${avQuando(a.criado_em)} · Média ★ ${avNum(a.nota)}`,
+      cats.map((c) => `${c.nome}: ${a.notas?.[c.id] ?? "-"}/5`).join(" · "),
+      a.comentario ? `"${a.comentario}"` : "",
+      a.cliente_nome || a.cliente_telefone ? `Cliente: ${[a.cliente_nome, avTel(a.cliente_telefone)].filter(Boolean).join(" · ")}` : ""
+    ].filter(Boolean).join("\n");
+  }
+  function telaAvaliacoes() {
+    const my = ++st.reqId, base = `/owner/restaurants/${encodeURIComponent(st.view)}/avaliacoes`;
+    api(`${base}?` + qs()).then((d) => {
+      if (my !== st.reqId || st.screen !== "avaliacoes") return;
+      const cats = d.categorias || [];
+      const itens = cats.map((c) => {
+        const v = d.por_item?.[c.id];
+        return `<div class="kpi"><span class="label">${esc(c.nome)}</span><span class="value">${v === null || v === undefined ? "—" : "★ " + avNum(v)}</span>${v ? `<div class="bar${v < 3 ? " amber" : ""}"><i style="width:${(v / 5) * 100}%"></i></div>` : ""}</div>`;
+      }).join("");
+      const lista = (d.comentarios || []).map((a, i) => {
+        const ruim = Number(a.nota) < 3;
+        return `<li class="av-op${a.vista ? "" : " nova"}">
+          <div class="av-op-top">
+            <span class="pill ${ruim ? "down" : "amber"}">★ ${avNum(a.nota)}</span>
+            <span class="muted av-op-dt">${esc(avQuando(a.criado_em))}</span>
+            ${a.vista ? "" : '<span class="tag red">Nova</span>'}
+          </div>
+          <div class="av-op-notas">${cats.map((c) => `<span>${esc(c.nome)} <b>${esc(a.notas?.[c.id] ?? "-")}</b></span>`).join("")}</div>
+          ${a.comentario ? `<p class="av-op-txt">${esc(a.comentario)}</p>` : `<p class="av-op-txt muted">Sem comentário.</p>`}
+          ${a.cliente_nome || a.cliente_telefone ? `<p class="av-op-cli">${esc([a.cliente_nome, avTel(a.cliente_telefone)].filter(Boolean).join(" · "))}</p>` : ""}
+          <div class="av-op-pe">
+            ${a.ia_acionada ? '<span class="tag">IA entrou em contato</span>' : "<span></span>"}
+            <button class="btn small" data-share="${i}">Compartilhar</button>
+          </div>
+        </li>`;
+      }).join("");
+      $("content").innerHTML = nota(d.period) + `
+        <section class="hero"><span class="label">Média geral</span>
+          <span class="value">${d.total ? "★ " + avNum(d.media) : "—"}</span>
+          <span class="delta flat">${int(d.total)} ${d.total === 1 ? "avaliação" : "avaliações"} no período</span>
+        </section>
+        <section class="grid4">${itens}</section>
+        <section class="grid4 av-cont">
+          <div class="kpi"><span class="label">Boas (4 ou mais)</span><span class="value" style="color:var(--up)">${int(d.boas)}</span></div>
+          <div class="kpi"><span class="label">Sugestões (3 a 3,9)</span><span class="value" style="color:var(--amber)">${int(d.medias)}</span></div>
+          <div class="kpi"><span class="label">Reclamações (abaixo de 3)</span><span class="value" style="color:var(--down)">${int(d.ruins)}</span></div>
+        </section>
+        <section class="card"><h2>Reclamações e sugestões</h2>${lista
+          ? `<ul class="list">${lista}</ul>`
+          : `<div class="empty">Nenhuma reclamação ou sugestão neste período.</div>`}</section>`;
+      $("content").querySelectorAll("[data-share]").forEach((b) => b.addEventListener("click", async () => {
+        const texto = avTexto(d.comentarios[Number(b.dataset.share)], cats);
+        try {
+          if (navigator.share) { await navigator.share({ text: texto }); return; }
+          await navigator.clipboard.writeText(texto); toast("Copiado. Cole onde quiser.");
+        } catch (e) { if (e && e.name !== "AbortError") toast("Não foi possível compartilhar."); }
+      }));
+      if ((d.comentarios || []).some((a) => !a.vista) && !DEMO)
+        api(`${base}/vistas`, { method: "POST" }).then(atualizarSino).catch(() => {});
     }).catch((e) => {
       if (my !== st.reqId) return;
       $("content").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`;
