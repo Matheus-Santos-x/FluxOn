@@ -321,7 +321,7 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
     if (ov) { $("title").textContent = "Visão geral"; $("content").innerHTML = telaOverview(st.ov); return; }
     const d = st.dash;
     $("title").textContent = st.screen === "home" ? d.restaurant.name : TITULOS[st.screen];
-    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, fidmodelo: telaFidModelo, fidpiso: telaFidPiso, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf, avaliacoes: telaAvaliacoes }[st.screen];cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf }[st.screen];
+    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, fidmodelo: telaFidModelo, fidpiso: telaFidPiso, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf, avaliacoes: telaAvaliacoes }[st.screen];
     $("content").innerHTML = T(d);
     if (st.screen === "pdf") bindPdf(d);
   }
