@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Avalie seu pedido</title>
+<meta name="theme-color" content="#0b0a09">
+<meta name="robots" content="noindex">
+<link rel="icon" id="favicon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="fundo"></div>
+
+<main class="vp" id="vp" hidden>
+  <header class="vp-topo">
+    <div class="logo" id="logo"></div>
+    <p class="vp-rest" id="nome"></p>
+    <h1>Sua opinião</h1>
+  </header>
+
+  <!-- 1) estrelas -->
+  <section class="vp-card" id="passoNota">
+    <p class="av-pergunta" id="pergunta"></p>
+    <div class="av-estrelas" id="estrelas"></div>
+    <p class="av-legenda" id="legenda">Toque nas estrelas</p>
+    <div class="vp-campos" id="campoComentario" hidden>
+      <label>O que podemos melhorar?<textarea id="comentario" maxlength="500" rows="4" placeholder="Conta pra gente o que aconteceu. Lemos todas as mensagens."></textarea></label>
+    </div>
+    <p class="vp-erro" id="erro"></p>
+    <button type="button" class="vp-btn" id="enviar" hidden>Enviar</button>
+  </section>
+
+  <!-- 2) obrigado -->
+  <section class="vp-card vp-centro" id="passoFim" hidden>
+    <div class="vp-ok">✓</div>
+    <h2 class="vp-h2-centro" id="fimTitulo">Obrigado!</h2>
+    <p class="vp-info" id="fimTexto"></p>
+    <a class="vp-btn av-google" id="google" href="#" target="_blank" rel="noopener" hidden>
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.6l1-5.8L3.5 9.7l5.9-.9z"/></svg>
+      Avaliar no Google
+    </a>
+  </section>
+
+  <p class="assinatura">Desenvolvido por <b>FluxON</b></p>
+</main>
+
+<div class="aviso" id="aviso" hidden></div>
+
+<script src="script.js"></script>
+</body>
+</html>
