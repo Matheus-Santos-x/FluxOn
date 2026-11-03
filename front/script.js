@@ -3233,6 +3233,15 @@ async function loadSettingsData() {
     console.error("Erro ao carregar webhook CRM:", e);
   }
 
+  // Webhook reclamações das avaliações
+  try {
+    const whRecResp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/webhook-reclamacao`, { headers: buildHeaders() });
+    const whRecData = await whRecResp.json();
+    document.getElementById("settings-webhook-reclamacao").value = whRecData.webhook_url || "";
+  } catch (e) {
+    console.error("Erro ao carregar webhook de reclamações:", e);
+  }
+
   // Mesas & Automação — carrega do banco
   try {
     const respConfig = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/config`);
@@ -3362,6 +3371,24 @@ document.getElementById("btn-salvar-webhook-crm")?.addEventListener("click", asy
     });
     const data = await resp.json();
     if (status) status.textContent = data.success ? "✅ Webhook salvo!" : `❌ ${data.error || "Erro ao salvar."}`;
+  } catch (e) {
+    if (status) status.textContent = "❌ Erro de conexão.";
+  }
+});
+
+// ===== SALVAR WEBHOOK RECLAMAÇÕES =====
+document.getElementById("btn-salvar-webhook-reclamacao")?.addEventListener("click", async () => {
+  const rid = getRestaurantId();
+  const url = document.getElementById("settings-webhook-reclamacao")?.value?.trim();
+  const status = document.getElementById("settings-webhook-reclamacao-status");
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/webhook-reclamacao`, {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify({ webhook_url: url || "" })
+    });
+    const data = await resp.json();
+    if (status) status.textContent = data.success ? (url ? "✅ Webhook salvo!" : "✅ Webhook removido.") : `❌ ${data.error || "Erro ao salvar."}`;
   } catch (e) {
     if (status) status.textContent = "❌ Erro de conexão.";
   }
