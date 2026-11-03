@@ -288,7 +288,7 @@ app.use("/api/v1/caixa/:restaurant_id", requireAuth);
 app.use("/api/v1/rodizio/:restaurant_id", requireAuth);
 app.use("/orders", requireAuth); // só login: aqui o :id pode ser de pedido, não de restaurante
 for (const p of ["integracao", "impressora", "fiscal", "marketplace", "mp", "tracking-url",
-  "webhook-satisfaction", "webhook-fechamento", "webhook-crm", "crm-mensagem",
+  "webhook-satisfaction", "webhook-fechamento", "webhook-crm", "webhook-reclamacao", "crm-mensagem",
   "imprimir-pedido", "reimprimir-pedido"]) {
   app.use(`/api/v1/restaurante/:restaurant_id/${p}`, requireAuth);
 }
@@ -6009,6 +6009,41 @@ async function avaliacaoRestaurante(rid) {
   };
 }
 
+const AVALIACAO_NOMES = { comida: "Comida", atendimento: "Atendimento", ambiente: "Ambiente", tempo: "Rapidez" };
+
+// reclamação (média abaixo de 3) com WhatsApp: manda pro webhook de reclamações do restaurante,
+// onde a IA conversa com o cliente. Marca ia_acionada quando o webhook aceitou.
+async function avaliacaoReclamacao(av, nomeRest) {
+  try {
+    const cfg = await getIntegracao(av.restaurant_id, "webhook_reclamacao");
+    if (!cfg?.webhook_url) return;
+    const tel = String(av.cliente_telefone).replace(/^55(?=\d{10,11}$)/, "");
+    const r = await fetch(cfg.webhook_url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: "avaliacao_reclamacao",
+        avaliacao_id: av.id,
+        restaurant_id: av.restaurant_id,
+        restaurant_name: nomeRest || null,
+        client_name: av.cliente_nome || null,
+        client_phone: tel,
+        client_phone_whatsapp: `55${tel}`,
+        media: Number(av.nota),
+        notas: av.notas,
+        notas_texto: Object.entries(av.notas || {}).map(([k, v]) => `${AVALIACAO_NOMES[k] || k}: ${v}/5`).join(" · "),
+        comentario: av.comentario || null,
+        criado_em: av.criado_em
+      }),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!r.ok) { console.error(`❌ reclamação: webhook respondeu ${r.status}`); return; }
+    await supabase.from("avaliacoes").update({ ia_acionada: true }).eq("id", av.id);
+  } catch (err) {
+    console.error("❌ reclamação webhook:", err.message);
+  }
+}
+
 // categorias da avaliação (a página mostra na mesma ordem)
 const AVALIACAO_CATEGORIAS = ["comida", "atendimento", "ambiente", "tempo"];
 
@@ -6044,13 +6079,14 @@ app.post("/api/v1/avaliacao/:restaurant_id", avaliacaoLimite, async (req, res) =
     const media = Math.round(Object.values(notas).reduce((a, b) => a + b, 0) / AVALIACAO_CATEGORIAS.length * 100) / 100;
     const boa = media >= 4;
     const texto = (v, max) => String(v || "").trim().slice(0, max) || null;
-    const { error } = await supabase.from("avaliacoes").insert([{
+    const { data: salva, error } = await supabase.from("avaliacoes").insert([{
       restaurant_id: rid, nota: media, notas,
       comentario: boa ? null : texto(req.body?.comentario, 500),
       cliente_nome: boa ? null : texto(req.body?.nome, 80),
       cliente_telefone: boa ? null : (normalizePhone(req.body?.telefone) || null)
-    }]);
+    }]).select().single();
     if (error) throw error;
+    if (media < 3 && salva?.cliente_telefone) avaliacaoReclamacao(salva, r.nome); // não espera: o cliente não fica aguardando
     return res.json({ success: true, media, google_url: boa ? r.google : null });
   } catch (err) {
     console.error("❌ avaliação:", err.message);
@@ -6177,6 +6213,33 @@ app.post("/api/v1/restaurante/:restaurant_id/webhook-crm", async (req, res) => {
       return sendError(res, 400, "A URL deve começar com http:// ou https://");
     await supabase.from("integracoes").upsert({
       restaurant_id, tipo: "webhook_crm",
+      dados: { webhook_url: webhook_url || null }, ativo: true,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "restaurant_id,tipo" });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// ===== WEBHOOK RECLAMAÇÕES (avaliação abaixo de 3 com WhatsApp → IA no n8n) =====
+app.get("/api/v1/restaurante/:restaurant_id/webhook-reclamacao", async (req, res) => {
+  try {
+    const dados = await getIntegracao(req.params.restaurant_id, "webhook_reclamacao");
+    return res.json({ success: true, webhook_url: dados?.webhook_url || "" });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+app.post("/api/v1/restaurante/:restaurant_id/webhook-reclamacao", async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const webhook_url = String(req.body?.webhook_url || "").trim();
+    if (webhook_url && !/^https?:\/\//i.test(webhook_url))
+      return sendError(res, 400, "A URL deve começar com http:// ou https://");
+    await supabase.from("integracoes").upsert({
+      restaurant_id, tipo: "webhook_reclamacao",
       dados: { webhook_url: webhook_url || null }, ativo: true,
       updated_at: new Date().toISOString()
     }, { onConflict: "restaurant_id,tipo" });
@@ -7433,10 +7496,74 @@ app.get("/owner/restaurants/:restaurant_id/notificacoes",
         texto: `${count} prêmio${count > 1 ? "s" : ""} sem valor mínimo. Enquanto isso, ${count > 1 ? "eles não podem" : "ele não pode"} ser resgatado${count > 1 ? "s" : ""}.`
       });
     }
+     const { count: reclamacoes } = await supabase.from("avaliacoes")
+      .select("id", { count: "exact", head: true })
+      .eq("restaurant_id", restaurant_id).eq("vista", false).lt("nota", 3);
+    if (reclamacoes > 0) {
+      itens.push({
+        id: "avaliacoes", tipo: "avaliacoes", gravidade: "alta", ir: "avaliacoes",
+        titulo: reclamacoes > 1 ? `${reclamacoes} reclamações novas` : "1 reclamação nova",
+        texto: "Veja o que os clientes disseram na avaliação."
+      });
+    }
     return res.json({ total: itens.length, itens });
   } catch (err) {
     console.error("❌ GET /owner/.../notificacoes:", err.message);
     return res.status(500).json({ error: "Erro ao carregar os avisos" });
+  }
+});
+
+/* ---------- avaliações (o dono só vê; reclamações com WhatsApp a IA atende) ---------- */
+app.get("/owner/restaurants/:restaurant_id/avaliacoes",
+  ownerLimitDados, requireOwnerScope, requireOwnerRestaurante, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const per = ownerPeriodo(req.query);
+    const lista = [];
+    for (let i = 0; i < 20; i++) {
+      const { data, error } = await supabase.from("avaliacoes")
+        .select("id, nota, notas, comentario, cliente_nome, cliente_telefone, ia_acionada, vista, criado_em")
+        .eq("restaurant_id", restaurant_id)
+        .gte("criado_em", per.from.toISOString()).lt("criado_em", per.to.toISOString())
+        .order("criado_em", { ascending: false })
+        .range(i * 1000, i * 1000 + 999);
+      if (error) throw error;
+      lista.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    const media = (vals) => vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 100) / 100 : null;
+    const por_item = {};
+    for (const c of AVALIACAO_CATEGORIAS)
+      por_item[c] = media(lista.map((a) => Number(a.notas?.[c])).filter((n) => n >= 1));
+    const notas = lista.map((a) => Number(a.nota));
+    return res.json({
+      period: ownerPeriodoJson(per),
+      categorias: AVALIACAO_CATEGORIAS.map((id) => ({ id, nome: AVALIACAO_NOMES[id] || id })),
+      total: lista.length,
+      media: media(notas),
+      boas: notas.filter((n) => n >= 4).length,
+      medias: notas.filter((n) => n >= 3 && n < 4).length,
+      ruins: notas.filter((n) => n < 3).length,
+      por_item,
+      // reclamações e sugestões (as boas não têm texto)
+      comentarios: lista.filter((a) => Number(a.nota) < 4).slice(0, 300)
+    });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    console.error("❌ GET /owner/.../avaliacoes:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar as avaliações" });
+  }
+});
+
+// o dono abriu a tela: as reclamações saem do sino
+app.post("/owner/restaurants/:restaurant_id/avaliacoes/vistas",
+  ownerLimitDados, requireOwnerScope, requireOwnerRestaurante, async (req, res) => {
+  try {
+    await supabase.from("avaliacoes").update({ vista: true })
+      .eq("restaurant_id", req.params.restaurant_id).eq("vista", false);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: "Erro ao marcar as avaliações" });
   }
 });
 
