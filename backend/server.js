@@ -5983,30 +5983,16 @@ const statusResp = await fetch(
 });
 
 /* ========================================
-   ⭐ AVALIAÇÃO DO PEDIDO
-   A mensagem de satisfação leva o link_avaliacao (página de Avaliação).
+   ⭐ AVALIAÇÃO DO RESTAURANTE
+   Página própria (Admin → Domínios → Avaliação). Qualquer cliente avalia.
    4 ou 5 estrelas → convida pro Google; 1 a 3 → o comentário fica guardado
-   aqui (o dono vai ver no Owner). Cada pedido avalia uma vez só.
-   O domínio da página fica em Admin → Domínios → Avaliação (avaliacao_url).
+   aqui (o dono vai ver no Owner). A mensagem de satisfação leva o link_avaliacao.
 ======================================== */
 async function avaliacaoLink(order) {
-  if (!order?.id) return null;
+  if (!order?.restaurant_id) return null;
   const { data: rest } = await supabase.from("restaurants").select("avaliacao_url").eq("id", order.restaurant_id).maybeSingle();
   const dominio = normalizarDominio(rest?.avaliacao_url);
-  if (!dominio) return null;
-  let token = order.tracking_token;
-  if (!token) {
-    token = crypto.randomBytes(10).toString("hex");
-    await supabase.from("orders").update({ tracking_token: token }).eq("id", order.id);
-  }
-  return `https://${dominio}/?p=${token}`;
-}
-
-async function avaliacaoPedido(token) {
-  if (!/^[a-f0-9]{16,64}$/i.test(String(token || ""))) return null;
-  const { data } = await supabase.from("orders")
-    .select("id, restaurant_id, order_number, client_name, client_phone").eq("tracking_token", token).maybeSingle();
-  return data || null;
+  return dominio ? `https://${dominio}/` : null;
 }
 
 async function avaliacaoRestaurante(rid) {
@@ -6014,50 +6000,48 @@ async function avaliacaoRestaurante(rid) {
     supabase.from("restaurante_config").select("nome_exibicao, logo_url, cor_primaria, google_avaliacao_url").eq("restaurant_id", rid).maybeSingle(),
     supabase.from("restaurants").select("name").eq("id", rid).maybeSingle()
   ]);
+  if (!rest) return null;
   return {
-    nome: cfg?.nome_exibicao || rest?.name || "",
+    nome: cfg?.nome_exibicao || rest.name || "",
     logo_url: cfg?.logo_url || null,
     cor: cfg?.cor_primaria || "#d62828",
-    google: centralLinkHttps(cfg?.google_avaliacao_url)
+    google: centralLinkHttps(String(cfg?.google_avaliacao_url || "").trim().replace(/^(?!https?:\/\/)(?=.)/i, "https://"))
   };
 }
 
-// a página abre com o pedido do link
-app.get("/api/v1/avaliacao/:token", async (req, res) => {
+const avaliacaoLimite = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 5,
+  message: { error: "Você já enviou avaliações demais. Tente mais tarde." },
+  standardHeaders: true, legacyHeaders: false
+});
+
+// a página abre com o nome, logo e cor do restaurante
+app.get("/api/v1/avaliacao/:restaurant_id", async (req, res) => {
   try {
-    const o = await avaliacaoPedido(req.params.token);
-    if (!o) return sendError(res, 404, "Link de avaliação inválido");
-    const [r, { data: feita }] = await Promise.all([
-      avaliacaoRestaurante(o.restaurant_id),
-      supabase.from("avaliacoes").select("nota").eq("order_id", String(o.id)).maybeSingle()
-    ]);
-    return res.json({
-      nome: r.nome, logo_url: r.logo_url, cor: r.cor,
-      cliente: String(o.client_name || "").trim().split(/\s+/)[0] || "",
-      pedido: o.order_number,
-      ja_avaliou: !!feita, nota: feita?.nota ?? null,
-      google_url: feita && feita.nota >= 4 ? r.google : null
-    });
+    const r = await avaliacaoRestaurante(req.params.restaurant_id);
+    if (!r) return sendError(res, 404, "Restaurante não encontrado");
+    return res.json({ nome: r.nome, logo_url: r.logo_url, cor: r.cor });
   } catch (err) {
     return sendError(res, 500, "Erro ao abrir a avaliação");
   }
 });
 
-// o cliente manda a nota (e o comentário, se quiser)
-app.post("/api/v1/avaliacao/:token", async (req, res) => {
+// o cliente manda a nota (e, se for ruim, o comentário e o contato)
+app.post("/api/v1/avaliacao/:restaurant_id", avaliacaoLimite, async (req, res) => {
   try {
-    const o = await avaliacaoPedido(req.params.token);
-    if (!o) return sendError(res, 404, "Link de avaliação inválido");
+    const rid = req.params.restaurant_id;
+    const r = await avaliacaoRestaurante(rid);
+    if (!r) return sendError(res, 404, "Restaurante não encontrado");
     const nota = parseInt(req.body?.nota);
     if (!(nota >= 1 && nota <= 5)) return sendError(res, 400, "Escolha de 1 a 5 estrelas");
+    const texto = (v, max) => String(v || "").trim().slice(0, max) || null;
     const { error } = await supabase.from("avaliacoes").insert([{
-      restaurant_id: o.restaurant_id, order_id: String(o.id), nota,
-      comentario: String(req.body?.comentario || "").trim().slice(0, 500) || null,
-      cliente_nome: o.client_name || null, cliente_telefone: o.client_phone || null
+      restaurant_id: rid, nota,
+      comentario: nota <= 3 ? texto(req.body?.comentario, 500) : null,
+      cliente_nome: nota <= 3 ? texto(req.body?.nome, 80) : null,
+      cliente_telefone: nota <= 3 ? (normalizePhone(req.body?.telefone) || null) : null
     }]);
-    if (error?.code === "23505") return sendError(res, 409, "Este pedido já foi avaliado. Obrigado!");
     if (error) throw error;
-    const r = await avaliacaoRestaurante(o.restaurant_id);
     return res.json({ success: true, google_url: nota >= 4 ? r.google : null });
   } catch (err) {
     console.error("❌ avaliação:", err.message);
