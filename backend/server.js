@@ -149,7 +149,7 @@ function normalizarDominio(v) {
 }
 
 // colunas de domínio em restaurants: CORS, Admin e /api/v1/dominio/:servico/:dominio usam esta lista
-const DOMINIOS_COLUNAS = ["cardapio_url", "fidelidade_url", "cardapio_delivery_url", "central_url", "vouchers_url", "reservas_url"];
+const DOMINIOS_COLUNAS = ["cardapio_url", "fidelidade_url", "cardapio_delivery_url", "central_url", "vouchers_url", "reservas_url", "avaliacao_url"];
 
 let _dominiosCache = null;
 let _dominiosCacheTime = 0;
@@ -437,7 +437,7 @@ function normalizePhone(input) {
 }
 
 const pick = (obj = {}, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
-const CONFIG_CAMPOS = ["nome_exibicao","logo_url","logo_fisico_url","banner_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega"];
+const CONFIG_CAMPOS = ["nome_exibicao","logo_url","logo_fisico_url","banner_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega","google_avaliacao_url"];
 
 
 /* ========================================
@@ -4155,6 +4155,7 @@ app.get("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
       pagamento_entrega: config?.pagamento_entrega || [],
       taxa_entrega: Number(config?.taxa_entrega) || 0,
       pix_online: !!(await pixConfig(restaurant_id)),
+      google_avaliacao_url: config?.google_avaliacao_url || "",
       fidelidade: { modelo: cfgFid.modelo, valor_selo: cfgFid.valorSelo, pontos_por_real: cfgFid.pontosPorReal }
     });
   } catch (err) {
@@ -5981,6 +5982,89 @@ const statusResp = await fetch(
   }
 });
 
+/* ========================================
+   ⭐ AVALIAÇÃO DO PEDIDO
+   A mensagem de satisfação leva o link_avaliacao (página de Avaliação).
+   4 ou 5 estrelas → convida pro Google; 1 a 3 → o comentário fica guardado
+   aqui (o dono vai ver no Owner). Cada pedido avalia uma vez só.
+   O domínio da página fica em Admin → Domínios → Avaliação (avaliacao_url).
+======================================== */
+async function avaliacaoLink(order) {
+  if (!order?.id) return null;
+  const { data: rest } = await supabase.from("restaurants").select("avaliacao_url").eq("id", order.restaurant_id).maybeSingle();
+  const dominio = normalizarDominio(rest?.avaliacao_url);
+  if (!dominio) return null;
+  let token = order.tracking_token;
+  if (!token) {
+    token = crypto.randomBytes(10).toString("hex");
+    await supabase.from("orders").update({ tracking_token: token }).eq("id", order.id);
+  }
+  return `https://${dominio}/?p=${token}`;
+}
+
+async function avaliacaoPedido(token) {
+  if (!/^[a-f0-9]{16,64}$/i.test(String(token || ""))) return null;
+  const { data } = await supabase.from("orders")
+    .select("id, restaurant_id, order_number, client_name, client_phone").eq("tracking_token", token).maybeSingle();
+  return data || null;
+}
+
+async function avaliacaoRestaurante(rid) {
+  const [{ data: cfg }, { data: rest }] = await Promise.all([
+    supabase.from("restaurante_config").select("nome_exibicao, logo_url, cor_primaria, google_avaliacao_url").eq("restaurant_id", rid).maybeSingle(),
+    supabase.from("restaurants").select("name").eq("id", rid).maybeSingle()
+  ]);
+  return {
+    nome: cfg?.nome_exibicao || rest?.name || "",
+    logo_url: cfg?.logo_url || null,
+    cor: cfg?.cor_primaria || "#d62828",
+    google: centralLinkHttps(cfg?.google_avaliacao_url)
+  };
+}
+
+// a página abre com o pedido do link
+app.get("/api/v1/avaliacao/:token", async (req, res) => {
+  try {
+    const o = await avaliacaoPedido(req.params.token);
+    if (!o) return sendError(res, 404, "Link de avaliação inválido");
+    const [r, { data: feita }] = await Promise.all([
+      avaliacaoRestaurante(o.restaurant_id),
+      supabase.from("avaliacoes").select("nota").eq("order_id", String(o.id)).maybeSingle()
+    ]);
+    return res.json({
+      nome: r.nome, logo_url: r.logo_url, cor: r.cor,
+      cliente: String(o.client_name || "").trim().split(/\s+/)[0] || "",
+      pedido: o.order_number,
+      ja_avaliou: !!feita, nota: feita?.nota ?? null,
+      google_url: feita && feita.nota >= 4 ? r.google : null
+    });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao abrir a avaliação");
+  }
+});
+
+// o cliente manda a nota (e o comentário, se quiser)
+app.post("/api/v1/avaliacao/:token", async (req, res) => {
+  try {
+    const o = await avaliacaoPedido(req.params.token);
+    if (!o) return sendError(res, 404, "Link de avaliação inválido");
+    const nota = parseInt(req.body?.nota);
+    if (!(nota >= 1 && nota <= 5)) return sendError(res, 400, "Escolha de 1 a 5 estrelas");
+    const { error } = await supabase.from("avaliacoes").insert([{
+      restaurant_id: o.restaurant_id, order_id: String(o.id), nota,
+      comentario: String(req.body?.comentario || "").trim().slice(0, 500) || null,
+      cliente_nome: o.client_name || null, cliente_telefone: o.client_phone || null
+    }]);
+    if (error?.code === "23505") return sendError(res, 409, "Este pedido já foi avaliado. Obrigado!");
+    if (error) throw error;
+    const r = await avaliacaoRestaurante(o.restaurant_id);
+    return res.json({ success: true, google_url: nota >= 4 ? r.google : null });
+  } catch (err) {
+    console.error("❌ avaliação:", err.message);
+    return sendError(res, 500, "Erro ao enviar a avaliação");
+  }
+});
+
 // ===== WEBHOOK SATISFAÇÃO =====
 async function dispararWebhookSatisfacao(order) {
   try {
@@ -6017,6 +6101,7 @@ async function dispararWebhookSatisfacao(order) {
         total_price: order.total_price,
         itens: order.itens,
         finished_at: order.delivered_at,
+        link_avaliacao: await avaliacaoLink(order),
         triggered_at: new Date().toISOString()
       })
     });
