@@ -6009,6 +6009,9 @@ async function avaliacaoRestaurante(rid) {
   };
 }
 
+// categorias da avaliação (a página mostra na mesma ordem)
+const AVALIACAO_CATEGORIAS = ["comida", "atendimento", "ambiente", "tempo"];
+
 const avaliacaoLimite = rateLimit({
   windowMs: 60 * 60 * 1000, max: 5,
   message: { error: "Você já enviou avaliações demais. Tente mais tarde." },
@@ -6032,17 +6035,23 @@ app.post("/api/v1/avaliacao/:restaurant_id", avaliacaoLimite, async (req, res) =
     const rid = req.params.restaurant_id;
     const r = await avaliacaoRestaurante(rid);
     if (!r) return sendError(res, 404, "Restaurante não encontrado");
-    const nota = parseInt(req.body?.nota);
-    if (!(nota >= 1 && nota <= 5)) return sendError(res, 400, "Escolha de 1 a 5 estrelas");
+    const notas = {};
+    for (const c of AVALIACAO_CATEGORIAS) {
+      const n = parseInt(req.body?.notas?.[c]);
+      if (!(n >= 1 && n <= 5)) return sendError(res, 400, "Dê de 1 a 5 estrelas em cada item");
+      notas[c] = n;
+    }
+    const media = Math.round(Object.values(notas).reduce((a, b) => a + b, 0) / AVALIACAO_CATEGORIAS.length * 100) / 100;
+    const boa = media >= 4;
     const texto = (v, max) => String(v || "").trim().slice(0, max) || null;
     const { error } = await supabase.from("avaliacoes").insert([{
-      restaurant_id: rid, nota,
-      comentario: nota <= 3 ? texto(req.body?.comentario, 500) : null,
-      cliente_nome: nota <= 3 ? texto(req.body?.nome, 80) : null,
-      cliente_telefone: nota <= 3 ? (normalizePhone(req.body?.telefone) || null) : null
+      restaurant_id: rid, nota: media, notas,
+      comentario: boa ? null : texto(req.body?.comentario, 500),
+      cliente_nome: boa ? null : texto(req.body?.nome, 80),
+      cliente_telefone: boa ? null : (normalizePhone(req.body?.telefone) || null)
     }]);
     if (error) throw error;
-    return res.json({ success: true, google_url: nota >= 4 ? r.google : null });
+    return res.json({ success: true, media, google_url: boa ? r.google : null });
   } catch (err) {
     console.error("❌ avaliação:", err.message);
     return sendError(res, 500, "Erro ao enviar a avaliação");
