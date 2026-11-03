@@ -23,16 +23,19 @@
     <h1>Sua opinião</h1>
   </header>
 
-  <!-- 1) estrelas -->
+  <!-- 1) estrelas por categoria -->
   <section class="vp-card" id="passoNota">
-    <p class="av-pergunta" id="pergunta"></p>
-    <div class="av-estrelas" id="estrelas"></div>
-    <p class="av-legenda" id="legenda">Toque nas estrelas</p>
+    <p class="av-pergunta">Como foi a sua experiência com a gente?</p>
+    <div class="av-itens" id="itens"></div>
+    <p class="av-media" id="media" hidden></p>
     <div class="vp-campos" id="campoComentario" hidden>
-      <label>O que podemos melhorar?<textarea id="comentario" maxlength="500" rows="4" placeholder="Conta pra gente o que aconteceu. Lemos todas as mensagens."></textarea></label>
+      <label><span id="rotuloComentario">O que podemos melhorar?</span><textarea id="comentario" maxlength="500" rows="4" placeholder="Conta pra gente o que aconteceu. Lemos todas as mensagens."></textarea></label>
+      <p class="vp-info">Quer que o restaurante fale com você? Deixe seu contato (opcional).</p>
+      <label>Nome<input id="nomeCliente" maxlength="80" autocomplete="name"></label>
+      <label>WhatsApp<input id="telefone" type="tel" inputmode="tel" maxlength="20" autocomplete="tel" placeholder="(00) 00000-0000"></label>
     </div>
     <p class="vp-erro" id="erro"></p>
-    <button type="button" class="vp-btn" id="enviar" hidden>Enviar</button>
+    <button type="button" class="vp-btn" id="enviar" disabled>Avalie todos os itens</button>
   </section>
 
   <!-- 2) obrigado -->
