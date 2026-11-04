@@ -1236,6 +1236,51 @@ backdrop-filter:blur(10px);
     border-bottom-color:rgba(30,42,64,.08);
   }
 
+  /* ================= CARTÃO DA LOJA CENTRALIZADO (logo grande no meio) ================= */
+  .store-card{
+    margin:-50px 20px 0;
+    padding:0;
+    background:none; border:none; border-radius:0; box-shadow:none;
+    display:flex; flex-direction:column; align-items:center;
+    text-align:center;
+  }
+  .store-card .store-logo{
+    width:96px; height:96px; border-radius:26px;
+    margin:0;
+    background:var(--surface);
+    border:3px solid var(--bg);
+    font-size:34px;
+    box-shadow:0 14px 30px -12px rgba(0,0,0,.5);
+  }
+  .store-card h1{
+    font-family:var(--font-display);
+    font-size:22px; line-height:1.15;
+    color:var(--text);
+    margin-top:12px;
+  }
+  .store-card .store-status{ justify-content:center; margin:4px 0 0; }
+  .store-card .store-address{ margin-top:4px; max-width:320px; color:var(--muted-2); line-height:1.35; }
+  .store-card .store-address:empty{ display:none; }
+  .store-card .store-meta-row{
+    flex-wrap:wrap; justify-content:center; gap:8px;
+    margin-top:14px; padding-top:0; border-top:none;
+  }
+  .store-card .store-meta{
+    flex:none;
+    display:inline-flex; align-items:center; gap:6px;
+    padding:8px 13px; border-radius:100px;
+    background:var(--surface); border:1px solid var(--line);
+    font-size:12.5px;
+  }
+  .store-card .store-meta svg{ width:16px; height:16px; color:var(--red-glow); flex-shrink:0; }
+  .store-card .meta-label{
+    display:inline; margin:0;
+    font-size:12.5px; color:var(--muted);
+    text-transform:none; letter-spacing:0;
+  }
+  .store-card .meta-label[hidden]{ display:none; }
+  .store-card .meta-value{ display:inline; font-size:12.5px; }
+
   /* ================= FOTOS MAIORES ================= */
   .item-thumb{ width:112px; height:112px; border-radius:12px; font-size:30px; }
   .bs-card{ width:136px; }
