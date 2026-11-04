@@ -123,6 +123,18 @@ async function iniciarAbas(){
   if(location.hash === "#fidelidade") mostrarAba("fidelidade", true);
 }
 
+/* barra de categorias presa no topo → body.nav-presa (o Entrar some) */
+(function(){
+  const nav = document.getElementById("catNav");
+  let presa = false;
+  const ver = () => {
+    const p = nav.offsetParent !== null && nav.getBoundingClientRect().top <= 56;
+    if(p !== presa){ presa = p; document.body.classList.toggle("nav-presa", p); }
+  };
+  window.addEventListener("scroll", ver, { passive:true });
+  window.addEventListener("resize", ver);
+})();
+
 /* app instalável (PWA) — o service worker não guarda nada em cache,
    então uma atualização do cardápio aparece na hora */
 if("serviceWorker" in navigator){
