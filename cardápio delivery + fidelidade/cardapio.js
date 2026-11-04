@@ -571,6 +571,7 @@ function closeOverlay(){
 function openDrawer(){
   openOverlay();
   gsap.to(drawer, { x:0, duration:.5, ease:"power3.out" });
+  iaNoCarrinho(); // balãozinho "vi que você não adicionou bebida..." (uma vez por visita)
   document.getElementById("receiptDate").textContent = new Date().toLocaleDateString("pt-BR");
 }
 function closeDrawer(){
