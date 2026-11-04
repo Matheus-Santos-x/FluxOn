@@ -87,18 +87,22 @@ function appendSuggestedItems(itens){
   if(!itens || itens.length === 0) return;
   const wrap = document.createElement("div");
   wrap.className = "ai-suggested-items";
-  wrap.innerHTML = itens.map(it => `
-    <button class="ai-suggested-item" data-ai-add="${it.id}">
+  wrap.innerHTML = itens.map(s => {
+    const it = MENU.find(m => String(m.id) === String(s.id)) || s;
+    const temOpcoes = Array.isArray(it.opcoes) && it.opcoes.length > 0;
+    return `
+    <button class="ai-suggested-item" data-ai-add="${it.id}" data-ai-opcoes="${temOpcoes ? 1 : 0}">
       <span>${escHtml(it.nome)}</span>
-      <span class="ai-item-price">${money(parseFloat(it.preco || 0))}</span>
-    </button>
-  `).join("");
+      <span class="ai-item-price">${temOpcoes ? "A partir de " : ""}${money(precoMinimo(it))}</span>
+    </button>`;
+  }).join("");
   aiMessagesEl.appendChild(wrap);
   aiMessagesEl.scrollTop = aiMessagesEl.scrollHeight;
   gsap.fromTo(wrap, { opacity:0, y:8 }, { opacity:1, y:0, duration:.35, ease:"power2.out" });
 
   wrap.querySelectorAll("[data-ai-add]").forEach(btn => {
     btn.addEventListener("click", e => {
+      if(btn.dataset.aiOpcoes === "1"){ closeAiChat(); openItemDetail(btn.dataset.aiAdd); return; }
       addToCart(btn.dataset.aiAdd, e);
       btn.disabled = true;
       btn.innerHTML = `<span>✓ Adicionado ao carrinho</span>`;
