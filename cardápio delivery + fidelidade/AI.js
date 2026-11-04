@@ -110,6 +110,103 @@ function appendSuggestedItems(itens){
   });
 }
 
+// botões de resposta rápida (ex.: "Refrigerantes", "Sucos", "Não, obrigado")
+function appendQuickReplies(opcoes){
+  if(!Array.isArray(opcoes) || !opcoes.length) return;
+  const wrap = document.createElement("div");
+  wrap.className = "ai-quick-replies";
+  wrap.innerHTML = opcoes.map(o => `<button type="button" class="ai-quick">${escHtml(o)}</button>`).join("");
+  aiMessagesEl.appendChild(wrap);
+  aiMessagesEl.scrollTop = aiMessagesEl.scrollHeight;
+  wrap.querySelectorAll(".ai-quick").forEach(b => b.onclick = () => {
+    wrap.remove();
+    aiInputEl.value = b.textContent;
+    sendAiMessage();
+  });
+}
+
+// categoria grande (mais de 10 itens): botão que fecha o chat e desce até ela no cardápio
+function appendIrCategoria(cat){
+  if(!cat || !cat.ir) return;
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "ai-ir-cat";
+  b.textContent = `Ver todas as opções de ${cat.nome} (${cat.total}) →`;
+  b.onclick = () => {
+    closeAiChat();
+    closeDrawer();
+    setTimeout(() => document.getElementById("sec-" + slug(cat.nome))?.scrollIntoView({ behavior:"smooth", block:"start" }), 350);
+  };
+  aiMessagesEl.appendChild(b);
+  aiMessagesEl.scrollTop = aiMessagesEl.scrollHeight;
+}
+
+/* ---- balão no carrinho: ao abrir o carrinho, a IA vê se faltou algo
+   (bebida, sobremesa...) e conversa ali mesmo, num balãozinho em cima da lista.
+   Mesma lógica do chat: primeiro os tipos, depois os itens (ou o atalho pra categoria).
+   Uma vez por visita. ---- */
+let AI_CARRINHO_FEITO = false;
+async function iaPerguntar(mensagem){
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 9000);
+  try{
+    const res = await fetch(`${CONFIG.API_BASE}/api/v1/ia/sugestao`, {
+      method:"POST", headers:{ "Content-Type":"application/json" }, signal: ctrl.signal,
+      body: JSON.stringify({ restaurant_id: RESTAURANT_ID, mensagem, historico: AI_HISTORY.slice(-6), carrinho: carrinhoParaIA() })
+    });
+    return res.ok ? await res.json() : null;
+  }catch(err){ console.warn("IA:", err); return null; }
+  finally{ clearTimeout(t); }
+}
+function balaoDesenhar(balao, data){
+  const it = (s) => MENU.find(m => String(m.id) === String(s.id)) || s;
+  const itens = (data.itens || []).map(it);
+  balao.innerHTML = `
+    <div class="ai-cart-balao-top"><span class="ai-avatar">✨</span><p>${escHtml(data.resposta)}</p>
+      <button type="button" class="ai-cart-balao-x" aria-label="Fechar">✕</button></div>
+    ${itens.length ? `<div class="ai-cart-balao-itens">${itens.map(i => {
+      const op = Array.isArray(i.opcoes) && i.opcoes.length > 0;
+      return `<button type="button" class="ai-suggested-item" data-id="${i.id}" data-op="${op ? 1 : 0}"><span>${escHtml(i.nome)}</span><span class="ai-item-price">${op ? "A partir de " : ""}${money(precoMinimo(i))}</span></button>`;
+    }).join("")}</div>` : ""}
+    ${data.categoria && data.categoria.ir ? `<button type="button" class="ai-ir-cat" data-cat="${escHtml(data.categoria.nome)}">Ver todas as opções de ${escHtml(data.categoria.nome)} (${data.categoria.total}) →</button>` : ""}
+    ${(data.opcoes_rapidas || []).length ? `<div class="ai-cart-balao-ops">${data.opcoes_rapidas.map(o => `<button type="button">${escHtml(o)}</button>`).join("")}</div>` : ""}`;
+  balao.querySelector(".ai-cart-balao-x").onclick = () => balao.remove();
+  balao.querySelectorAll(".ai-suggested-item").forEach(b => b.onclick = (e) => {
+    if(b.dataset.op === "1"){ openItemDetail(b.dataset.id); return; }
+    addToCart(b.dataset.id, e);
+    b.disabled = true; b.innerHTML = "<span>✓ Adicionado</span>";
+  });
+  const ir = balao.querySelector(".ai-ir-cat");
+  if(ir) ir.onclick = () => {
+    closeDrawer();
+    setTimeout(() => document.getElementById("sec-" + slug(ir.dataset.cat))?.scrollIntoView({ behavior:"smooth", block:"start" }), 350);
+  };
+  balao.querySelectorAll(".ai-cart-balao-ops button").forEach(b => b.onclick = async () => {
+    const texto = b.textContent.trim();
+    if(/^n[aã]o/i.test(texto)){ balao.remove(); return; }
+    AI_HISTORY.push({ role:"user", content:texto });
+    balao.querySelector(".ai-cart-balao-ops")?.remove();
+    balao.querySelector(".ai-cart-balao-top p").innerHTML = `<span class="ai-typing-dot"></span><span class="ai-typing-dot"></span><span class="ai-typing-dot"></span>`;
+    const d = await iaPerguntar(texto);
+    if(!d || !d.resposta){ balao.remove(); return; }
+    AI_HISTORY.push({ role:"assistant", content:d.resposta });
+    balaoDesenhar(balao, d);
+  });
+}
+async function iaNoCarrinho(){
+  if(IS_DEMO || !CART.length || AI_CARRINHO_FEITO) return;
+  AI_CARRINHO_FEITO = true;
+  const data = await iaPerguntar("__carrinho__");
+  if(!data || data.pular || !data.resposta) return;
+  if(!data.opcoes_rapidas || !data.opcoes_rapidas.length) data.opcoes_rapidas = ["Sim", "Não, obrigado"];
+  AI_HISTORY.push({ role:"assistant", content:data.resposta });
+  document.getElementById("aiCartBalao")?.remove();
+  const balao = document.createElement("div");
+  balao.id = "aiCartBalao"; balao.className = "ai-cart-balao";
+  document.querySelector("#drawer .drawer-head").after(balao);
+  balaoDesenhar(balao, data);
+  gsap.fromTo(balao, { opacity:0, y:-8 }, { opacity:1, y:0, duration:.35, ease:"back.out(1.6)" });
+}
+
 // manda o carrinho atual junto — é isso que deixa a IA sugerir
 // complementos (bebida, sobremesa etc) em vez de sugestões soltas
 function carrinhoParaIA(){
