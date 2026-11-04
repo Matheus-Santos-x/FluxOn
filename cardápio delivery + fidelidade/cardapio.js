@@ -32,7 +32,7 @@ function groupByCategory(items){
 
 function renderMenu(){
   const { groups, order } = groupByCategory(MENU);
-  const catNav = document.getElementById("catNav");
+  const catNav = document.getElementById("catNavScroll");
   const main = document.getElementById("menuMain");
   catNav.innerHTML = "";
   main.innerHTML = "";
@@ -125,7 +125,7 @@ function renderMenu(){
    acompanha horizontalmente pra manter o pill ativo visível)
    ============================================================ */
 function scrollPillIntoView(pill){
-  const nav = document.getElementById("catNav");
+  const nav = document.getElementById("catNavScroll");
   const navRect = nav.getBoundingClientRect();
   const pillRect = pill.getBoundingClientRect();
   const delta = (pillRect.left - navRect.left) - (navRect.width / 2) + (pillRect.width / 2);
