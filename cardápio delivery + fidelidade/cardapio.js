@@ -30,6 +30,39 @@ function groupByCategory(items){
   return { groups, order };
 }
 
+/* ---------- dois sabores (opção "texto livre" do cadastro) ---------- */
+const semAcento = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+// sabores possíveis: itens da mesma categoria (com o filtro da opção, ex.: "grande")
+function saboresDoItem(item, op){
+  const f = semAcento(op.filtro);
+  return MENU.filter(i => String(i.id) !== String(item.id) && i.ativo !== false && i.categoria === item.categoria
+    && (!f || semAcento(i.nome).includes(f) || (Array.isArray(i.opcoes) && i.opcoes.some(v => semAcento(v.nome).includes(f)))));
+}
+// preço de um sabor no tamanho da opção (sem filtro, o preço do item)
+function precoDoSabor(nome, op){
+  const it = MENU.find(i => i.nome === nome);
+  if(!it) return 0;
+  const f = semAcento(op.filtro);
+  if(f && Array.isArray(it.opcoes)){
+    const v = it.opcoes.find(v => semAcento(v.nome).includes(f));
+    if(v) return parseFloat(v.preco) || 0;
+  }
+  return parseFloat(it.preco) || 0;
+}
+// menor preço possível do item (o "A partir de" do card)
+function precoMinimo(item){
+  const ops = Array.isArray(item.opcoes) ? item.opcoes : [];
+  if(!ops.length) return parseFloat(item.preco || 0);
+  const vals = ops.map(op => {
+    if(op.texto_livre && !(parseFloat(op.preco) > 0)){
+      const ps = saboresDoItem(item, op).map(s => precoDoSabor(s.nome, op)).filter(v => v > 0).sort((a, b) => a - b);
+      return ps[1] ?? ps[0] ?? 0; // 2 sabores: o mais barato possível é o 2º mais barato
+    }
+    return parseFloat(op.preco || 0);
+  }).filter(v => v > 0);
+  return vals.length ? Math.min(...vals) : parseFloat(item.preco || 0);
+}
+
 function renderMenu(){
   const { groups, order } = groupByCategory(MENU);
   const catNav = document.getElementById("catNavScroll");
@@ -67,9 +100,7 @@ function renderMenu(){
       <div class="item-grid">
         ${items.map(item => {
           const temVariacao = Array.isArray(item.opcoes) && item.opcoes.length > 0;
-          const precoExibido = temVariacao
-            ? Math.min(...item.opcoes.map(o => parseFloat(o.preco || 0)))
-            : parseFloat(item.preco || 0);
+         const precoExibido = precoMinimo(item);
           const fotoUrl = getPrimeiraFoto(item);
           return `
           <div class="item-card" data-id="${item.id}">
@@ -206,7 +237,7 @@ function renderBestsellers(items){
 
   scroll.innerHTML = items.map((item, i) => {
     const temVariacao = Array.isArray(item.opcoes) && item.opcoes.length > 0;
-    const preco = temVariacao ? Math.min(...item.opcoes.map(o => parseFloat(o.preco||0))) : parseFloat(item.preco || 0);
+    const preco = precoMinimo(item);
     const foto = getPrimeiraFoto(item);
     return `
     <div class="bs-card" data-id="${item.id}">
@@ -286,9 +317,14 @@ function openItemDetail(itemId){
           ${opcoes.map((op, i) => `
             <button class="variation-opt${i === 0 ? " selected" : ""}" data-idx="${i}">
               <span>${escHtml(op.nome)}</span>
-              <span class="variation-opt-price">${money(parseFloat(op.preco || 0))}</span>
+              <span class="variation-opt-price">${op.texto_livre && !(parseFloat(op.preco) > 0) ? "2 sabores" : money(parseFloat(op.preco || 0))}</span>
             </button>
-          `).join("")}
+                    `).join("")}
+        </div>` : ""}
+        ${opcoes.some(op => op.texto_livre) ? `
+        <div class="sabores-box" id="detailSabores" hidden>
+          <div class="sabores-titulo">Escolha 2 sabores <span id="saboresCont">0/2</span></div>
+          <div class="sabores-lista" id="saboresLista"></div>
         </div>` : ""}
         <div class="detail-footer">
           <span class="detail-price" id="detailPrice">${money(temVariacao ? parseFloat(opcoes[0].preco || 0) : parseFloat(item.preco || 0))}</span>
