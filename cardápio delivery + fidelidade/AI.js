@@ -337,6 +337,10 @@ if(window.matchMedia("(max-width:640px)").matches && window.visualViewport){
   };
   vv.addEventListener("resize", ajustar);
   vv.addEventListener("scroll", ajustar);
+  window.addEventListener("resize", ajustar);
+  // o teclado demora um pouco pra terminar de abrir/fechar: recalcula depois
+  aiInputEl.addEventListener("focus", () => { [100, 300, 600].forEach(ms => setTimeout(ajustar, ms)); });
+  aiInputEl.addEventListener("blur", () => { [100, 300].forEach(ms => setTimeout(ajustar, ms)); });
   ajustar();
 }else{
   bindKeyboardAwarePanel(aiModal, {
