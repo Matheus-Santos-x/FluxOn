@@ -21,9 +21,9 @@
     set(k, v) { try { localStorage.setItem(k, v); } catch {} },
     del(k) { try { localStorage.removeItem(k); } catch {} }
   };
-  function toast(msg) {
+  function toast(msg, ms = 2800) {
     const t = $("toast"); t.textContent = msg; t.classList.remove("hidden");
-    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add("hidden"), 2800);
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add("hidden"), ms);
   }
   const iniciais = (nome) => String(nome || "?").trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "?";
   const fmtData = (iso) => { const [y, m, d] = iso.split("-"); return `${d}/${m}`; };
@@ -220,6 +220,24 @@
     if (!f || !t || f > t) { toast("Confira as datas."); return; }
     st.from = f; st.to = t; carregar();
   });
+  
+  /* ---------- instalar o app (PWA) ---------- */
+  let pedidoInstalar = null; // o Android/Chrome entrega isso quando o app pode ser instalado
+  const instalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const ehIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const podeInstalar = () => !instalado() && (!!pedidoInstalar || ehIOS);
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedidoInstalar = e; if (st.owner) montarAvatar(); });
+  window.addEventListener("appinstalled", () => { pedidoInstalar = null; toast("App instalado! Abra pelo ícone na tela inicial."); if (st.owner) montarAvatar(); });
+  async function instalarApp() {
+    if (pedidoInstalar) {
+      const p = pedidoInstalar; pedidoInstalar = null;
+      p.prompt(); await p.userChoice.catch(() => null);
+      if (st.owner) montarAvatar();
+      return;
+    }
+    if (ehIOS) toast("No iPhone: toque em Compartilhar (quadrado com a seta) e depois em \"Adicionar à Tela de Início\".", 9000);
+  }
+
   function montarAvatar() {
     const a = $("avatar"); a.textContent = iniciais(st.owner.nome);
     a.setAttribute("aria-label", "Contas de " + st.owner.nome);
@@ -229,7 +247,9 @@
     st.restaurants.forEach((r) => itens.push(`<button data-v="${esc(r.id)}" class="${st.view === r.id ? "on" : ""}" role="menuitem"><span class="dot">${esc(iniciais(r.name))}</span><span class="name">${esc(r.name)}</span>${st.view === r.id ? '<span class="tick">✓</span>' : ""}</button>`));
     $("menu").innerHTML =
       `<div class="who"><b>${esc(st.owner.nome)}</b><span class="muted">Dono${multi ? ` · ${st.restaurants.length} unidades` : ""}</span></div>` + itens.join("") +
-      `<div class="sec">Conta</div><button data-act="sair" role="menuitem"><span class="name">Sair</span></button>` +
+      `<div class="sec">Conta</div>` +
+      (podeInstalar() ? `<button data-act="instalar" role="menuitem"><span class="name">📲 Instalar app no celular</span></button>` : "") +
+      `<button data-act="sair" role="menuitem"><span class="name">Sair</span></button>` +
       `<button class="danger" data-act="sair-todos" role="menuitem"><span class="name">Sair de todos os aparelhos</span></button>`;
   }
   const abrirMenu = (abrir) => { $("menu").classList.toggle("hidden", !abrir); $("avatar").setAttribute("aria-expanded", String(abrir)); };
@@ -239,6 +259,7 @@
   $("menu").addEventListener("click", async (e) => {
     const b = e.target.closest("button"); if (!b) return;
     if (b.dataset.v) { irPara(b.dataset.v); abrirMenu(false); return; }
+    if (b.dataset.act === "instalar") { abrirMenu(false); instalarApp(); return; }
     if (b.dataset.act === "sair") { abrirMenu(false); sair(); }
     if (b.dataset.act === "sair-todos") { abrirMenu(false); try { await api("/owner/auth/sair-todos", { method: "POST" }); } catch {} sair(); }
   });
