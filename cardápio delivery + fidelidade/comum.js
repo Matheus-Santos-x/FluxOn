@@ -246,6 +246,8 @@ const tema = RESTAURANT_CONFIG.tema || "light";
   if(metaMinimoEl){
     const minimo = parseFloat(RESTAURANT_CONFIG.pedido_minimo || 0);
     metaMinimoEl.textContent = minimo > 0 ? money(minimo) : "Sem mínimo";
+    const minLabel = document.getElementById("metaMinimoLabel");
+    if(minLabel) minLabel.hidden = !(minimo > 0);
   }
 
   // tempo de entrega
