@@ -248,6 +248,8 @@ async function sendAiMessage(){
     appendChatMessage("assistant", resposta);
     AI_HISTORY.push({ role:"assistant", content:resposta });
     appendSuggestedItems(data.itens);
+    appendIrCategoria(data.categoria);
+    appendQuickReplies(data.opcoes_rapidas);
   }catch(err){
     console.error("Erro no chat da IA:", err);
     typingBubble.remove();
@@ -281,6 +283,8 @@ async function sendAiAutoSuggestion(){
     appendChatMessage("assistant", resposta);
     AI_HISTORY.push({ role:"assistant", content:resposta });
     appendSuggestedItems(data.itens);
+    appendIrCategoria(data.categoria);
+    appendQuickReplies(data.opcoes_rapidas);
   }catch(err){
     console.error("Erro na sugestão automática:", err);
     typingBubble.remove();
@@ -323,15 +327,23 @@ function bindKeyboardAwarePanel(panel, opts = {}){
   sync();
 }
 
-bindKeyboardAwarePanel(aiModal, {
-  maxHeightWhenOpen: 520,
-  onSync: () => { aiMessagesEl.scrollTop = aiMessagesEl.scrollHeight; }
-});
-// OBS: o checkout (sheet) agora é página cheia (inset:0, do topo até
-// o rodapé), então NÃO usamos bindKeyboardAwarePanel nele — encolher
-// a borda de baixo pra abrir espaço do teclado fazia o cardápio
-// aparecer por trás. Página cheia não precisa desse ajuste; o próprio
-// scroll interno do formulário já resolve.
+if(window.matchMedia("(max-width:640px)").matches && window.visualViewport){
+  // celular: tela cheia do tamanho da área visível — com o teclado aberto, o campo fica colado nele
+  const vv = window.visualViewport;
+  const ajustar = () => {
+    aiModal.style.top = vv.offsetTop + "px";
+    aiModal.style.height = vv.height + "px";
+    aiMessagesEl.scrollTop = aiMessagesEl.scrollHeight;
+  };
+  vv.addEventListener("resize", ajustar);
+  vv.addEventListener("scroll", ajustar);
+  ajustar();
+}else{
+  bindKeyboardAwarePanel(aiModal, {
+    maxHeightWhenOpen: 520,
+    onSync: () => { aiMessagesEl.scrollTop = aiMessagesEl.scrollHeight; }
+  });
+}
 
 function openAiChat(){
   hideAiTooltip();
