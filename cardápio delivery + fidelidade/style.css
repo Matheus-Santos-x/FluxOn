@@ -1020,6 +1020,26 @@ backdrop-filter:blur(10px);
     color:var(--red-glow);
     font-weight:700;
   }
+  /* dois sabores */
+  .sabores-box{ margin-top:16px; padding:12px; border-radius:12px; border:1px dashed var(--line); transition:border-color .2s ease; }
+  .sabores-box[hidden]{ display:none; }
+  .sabores-box.erro{ border-color:var(--red); }
+  .sabores-titulo{ display:flex; justify-content:space-between; align-items:center; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:10px; }
+  .sabores-titulo span{ font-family:var(--font-mono); color:var(--red-glow); }
+  .sabores-lista{ display:flex; flex-direction:column; gap:6px; max-height:260px; overflow-y:auto; }
+  .sabor-opt{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    padding:11px 12px; border-radius:10px;
+    background:var(--surface); border:1px solid var(--line);
+    font-size:13.5px; font-weight:600; color:var(--text);
+    transition:border-color .2s ease, background .2s ease;
+  }
+  .sabor-opt .sabor-nome{ flex:1; }
+  .sabor-check{ width:18px; height:18px; border-radius:6px; border:1.5px solid var(--line); flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .sabor-opt.on{ border-color:var(--red); background:linear-gradient(90deg, color-mix(in srgb, var(--red) 12%, transparent), transparent); }
+  .sabor-opt.on .sabor-check{ background:var(--red); border-color:var(--red); }
+  .sabor-opt.on .sabor-check::after{ content:"✓"; color:#fff; font-size:12px; font-weight:800; }
+  .sabores-vazio{ font-size:13px; color:var(--muted); }
 
   /* ================= AI MODAL (stub) ================= */
   .ai-modal{
