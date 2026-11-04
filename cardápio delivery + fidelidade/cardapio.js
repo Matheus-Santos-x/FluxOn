@@ -421,6 +421,7 @@ function openItemDetail(itemId){
       updateCartUI();
     }
     flyToCart(e.currentTarget);
+    wrap.dataset.adicionado = "1";
     closeItemDetail(wrap);
   };
 
@@ -431,6 +432,14 @@ function openItemDetail(itemId){
 function closeItemDetail(wrap){
   gsap.to(wrap.querySelector(".detail-panel"), { scale:.92, opacity:0, duration:.22, ease:"power2.in" });
   gsap.to(wrap, { opacity:0, duration:.25, onComplete: () => wrap.remove() });
+  // veio de uma sugestão da IA: volta pro chat (e marca o botão se adicionou)
+  if(window._voltarChat){
+    const b = window._voltarChat; window._voltarChat = null;
+    setTimeout(() => {
+      openAiChat();
+      if(wrap.dataset.adicionado){ b.disabled = true; b.innerHTML = `<span>✓ Adicionado ao carrinho</span>`; }
+    }, 300);
+  }
 }
 
 function addVariationToCart(item, opcao, sabores, preco){
