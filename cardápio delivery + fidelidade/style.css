@@ -1249,7 +1249,7 @@ backdrop-filter:blur(10px);
   }
   .store-card .store-logo{
     grid-row:1 / 3;
-    width:84px; height:95px; border-radius:50%;
+    width:95px; height:95px; border-radius:50%;
     margin:0;
     background:var(--surface);
     border:none;
