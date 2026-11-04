@@ -192,15 +192,16 @@ function applyBranding(){
 
   // ===== TEMA — troca TODAS as variáveis de superfície/texto, igual o cardápio presencial =====
 const tema = RESTAURANT_CONFIG.tema || "light";
+    document.body.classList.toggle("tema-gelo", tema === "light");
   if(tema === "light"){
-    document.documentElement.style.setProperty("--bg",        "#ffffff");
-    document.documentElement.style.setProperty("--surface",   "#f5f5f5");
-    document.documentElement.style.setProperty("--surface-2", "#ebebeb");
+    document.documentElement.style.setProperty("--bg",        "#eef1f5");
+    document.documentElement.style.setProperty("--surface",   "#ffffff");
+    document.documentElement.style.setProperty("--surface-2", "#f1f3f6");
     document.documentElement.style.setProperty("--line",      "rgba(0,0,0,0.1)");
     document.documentElement.style.setProperty("--text",      "#1a1814");
     document.documentElement.style.setProperty("--muted",     "#555555");
     document.documentElement.style.setProperty("--muted-2",   "#8a8a8a");
-    document.body.style.background = "#ffffff";
+    document.body.style.background = "#eef1f5";
   }else{
     document.documentElement.style.setProperty("--bg",        "#0a0908");
     document.documentElement.style.setProperty("--surface",   "#17140f");
