@@ -3657,9 +3657,56 @@ function validarItensCardapio(cardapio, itens) {
     return variacao ? parseFloat(variacao.preco || 0) : parseFloat(item.preco || 0);
   }
 
+  // formato que os cardápios mandam: "Item — Opção" ou "Item Opção — Sabor 1 + Sabor 2"
+  // (o preço sai da opção cadastrada; 2 sabores sem preço na opção = o sabor mais caro, com o filtro da opção)
+  const buscarExato = (nome) => { const q = normalizarNome(nome); return cardapio.find(i => normalizarNome(i.nome) === q); };
+  const precoSabor = (it, filtro) => {
+    const f = normalizarNome(filtro);
+    if (f && Array.isArray(it.opcoes)) {
+      const v = it.opcoes.find(o => normalizarNome(o.nome).includes(f));
+      if (v) return parseFloat(v.preco) || 0;
+    }
+    return parseFloat(it.preco) || 0;
+  };
+  function precoPeloFormato(nomeCompleto) {
+    const partes = nomeCompleto.split(/\s+—\s+/);
+    if (partes.length !== 2) return null;
+    const [base, resto] = partes;
+    const sabores = resto.split(/\s+\+\s+/);
+    if (sabores.length === 2) {
+      for (const it of cardapio) {
+        for (const op of (Array.isArray(it.opcoes) ? it.opcoes : []).filter(o => o.texto_livre)) {
+          const nItem = normalizarNome(it.nome), nOp = normalizarNome(op.nome);
+          const esperado = nItem.includes(nOp) ? nItem : normalizarNome(`${it.nome} ${op.nome}`);
+          if (esperado !== normalizarNome(base) && nItem !== normalizarNome(base)) continue;
+          if (parseFloat(op.preco) > 0) return { item: it, preco: parseFloat(op.preco) };
+          const s1 = buscarExato(sabores[0]), s2 = buscarExato(sabores[1]);
+          if (!s1 || !s2) return null;
+          return { item: it, preco: Math.max(precoSabor(s1, op.filtro), precoSabor(s2, op.filtro)) };
+        }
+      }
+      return null;
+    }
+    const it = buscarExato(base);
+    const op = it && Array.isArray(it.opcoes) ? it.opcoes.find(o => normalizarNome(o.nome) === normalizarNome(resto)) : null;
+    return op ? { item: it, preco: parseFloat(op.preco) || 0 } : null;
+  }
+
   const resultados = itens.map(item => {
     const nomeCompleto = String(item.nome || "");
     const precoCliente = parseFloat(item.preco || 0);
+
+    const formato = precoPeloFormato(nomeCompleto);
+    if (formato) {
+      return {
+        nome_cliente: nomeCompleto,
+        nome_cardapio: formato.item.nome,
+        encontrado: true,
+        preco_correto: formato.preco,
+        preco_cliente: precoCliente,
+        ok: Math.abs(formato.preco - precoCliente) < 0.01
+      };
+    }
 
     // Detecta padrão "Algo — Sabor1 + Sabor2"
     const matchDoisSabores = nomeCompleto.match(/^(.+?)\s*[—\-]+\s*(.+?)\s*\+\s*(.+)$/);
