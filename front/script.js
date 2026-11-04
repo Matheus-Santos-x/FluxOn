@@ -3995,6 +3995,144 @@ function regressStatus(orderId) {
   closeOrderModal();
 }
 
+/* ========================================
+   🎁 VALE-PRESENTE NO CAIXA
+   Home: consultar o saldo de um vale. Pagamento: "Vale-presente" como forma
+   de pagamento — confere o código, limita ao saldo e desconta ao finalizar.
+======================================== */
+const VP_SITUACAO = {
+  valido: ["Válido", "#22c55e"], usado: ["Já foi todo usado", "#a1a1aa"],
+  vencido: ["Vencido", "#f87171"], cancelado: ["Cancelado", "#f87171"], nao_pago: ["Ainda não foi pago", "#fbbf24"]
+};
+function vpCodigo(v) {
+  const s = String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^VP/, "");
+  return s.length === 12 ? `VP-${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8)}` : null;
+}
+function vpMascara(input) {
+  const s = input.value.toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^VP/, "").slice(0, 12);
+  input.value = s ? "VP-" + s.match(/.{1,4}/g).join("-") : "";
+}
+const vpData = (iso) => iso ? new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—";
+async function vpConsultar(codigo) {
+  const c = vpCodigo(codigo);
+  if (!c) throw new Error("Código inválido. Ele tem o formato VP-XXXX-XXXX-XXXX");
+  const resp = await fetch(`${API_BASE}/api/v1/vouchers/${getRestaurantId()}/consultar/${encodeURIComponent(c)}`, { headers: buildHeaders() });
+  const d = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(d.error || "Não foi possível consultar o vale");
+  return d;
+}
+
+// Home: botão "Consultar vale-presente"
+function abrirConsultaVale() {
+  document.getElementById("vale-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.id = "vale-modal";
+  modal.className = "modal-backdrop open";
+  modal.innerHTML = `
+    <div class="modal confirm-modal" style="max-width:440px;">
+      <div class="modal-header"><h3>🎁 Consultar vale-presente</h3></div>
+      <div class="modal-body">
+        <div style="display:flex; gap:8px;">
+          <input id="vale-cod" placeholder="VP-XXXX-XXXX-XXXX" autocomplete="off" maxlength="17" oninput="vpMascara(this)"
+            style="flex:1; padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:15px; font-family:ui-monospace,monospace; letter-spacing:.04em; outline:none;" />
+          <button class="primary-button" id="vale-consultar">Consultar</button>
+        </div>
+        <div id="vale-resultado" style="margin-top:14px;"></div>
+      </div>
+      <div class="modal-actions"><button class="ghost-button" id="vale-fechar">Fechar</button></div>
+    </div>`;
+  document.body.appendChild(modal);
+  const inp = document.getElementById("vale-cod"), out = document.getElementById("vale-resultado");
+  const consultar = async () => {
+    const b = document.getElementById("vale-consultar");
+    b.disabled = true; b.textContent = "Consultando...";
+    try {
+      const d = await vpConsultar(inp.value);
+      const [txt, cor] = VP_SITUACAO[d.situacao] || [d.situacao, "#a1a1aa"];
+      const linha = (r, v) => `<div style="display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px solid rgba(255,255,255,0.06); font-size:13px;"><span style="color:rgba(252,228,228,0.55);">${r}</span><span style="color:rgba(252,228,228,1); font-weight:700; text-align:right;">${v}</span></div>`;
+      out.innerHTML = `
+        <div style="background:#0d0d0d; border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-family:ui-monospace,monospace; font-weight:700; color:rgba(252,228,228,1);">${escapeHtml(d.codigo)}</span>
+            <span style="font-size:12px; font-weight:800; color:${cor};">● ${txt}</span>
+          </div>
+          <div style="font-size:30px; font-weight:900; color:${d.situacao === "valido" ? "#22c55e" : "rgba(252,228,228,0.5)"};">${formatCurrency(d.saldo)}</div>
+          <div style="font-size:12px; color:rgba(252,228,228,0.45); margin-bottom:8px;">saldo disponível de ${formatCurrency(d.valor)}</div>
+          ${linha("Para", escapeHtml(d.para || "—"))}
+          ${linha("Vale até", vpData(d.expira_em))}
+          ${(d.usos || []).length ? linha("Usos", d.usos.map(u => `${formatCurrency(u.valor)} em ${vpData(u.criado_em)}`).join("<br>")) : ""}
+        </div>`;
+    } catch (e) {
+      out.innerHTML = `<div style="color:rgba(239,68,68,0.9); font-size:13px; font-weight:700;">❌ ${escapeHtml(e.message)}</div>`;
+    }
+    b.disabled = false; b.textContent = "Consultar";
+  };
+  document.getElementById("vale-consultar").onclick = consultar;
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter") consultar(); });
+  document.getElementById("vale-fechar").onclick = () => modal.remove();
+  modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+  setTimeout(() => inp.focus(), 50);
+}
+
+// Pagamento: campo do código embaixo da linha "Vale-presente"
+// (window._vpCtx aponta pra lista de pagamentos do modal aberto)
+function vpCampo(idx, p) {
+  if (p.metodo !== "voucher") return "";
+  return `
+    <div style="margin-top:8px; display:flex; gap:8px;">
+      <input id="vcod-${idx}" value="${escapeHtml(p.codigo || "")}" placeholder="VP-XXXX-XXXX-XXXX" autocomplete="off" maxlength="17" oninput="vpMascara(this)"
+        style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:ui-monospace,monospace; outline:none;" />
+      <button type="button" onclick="vpConferir(${idx})" style="padding:8px 14px; border-radius:10px; border:1px solid rgba(34,197,94,0.45); background:transparent; color:#86efac; font-weight:700; cursor:pointer; flex-shrink:0;">Conferir</button>
+    </div>
+    <div id="vinfo-${idx}" style="font-size:12px; margin-top:6px; font-weight:700; color:${p.vpOk ? "#86efac" : "rgba(239,68,68,0.9)"};">${p.vpInfo || ""}</div>`;
+}
+window.vpConferir = async (idx) => {
+  const ctx = window._vpCtx; if (!ctx) return;
+  const p = ctx.pagamentos[idx]; if (!p) return;
+  p.codigo = document.getElementById(`vcod-${idx}`)?.value || "";
+  const info = document.getElementById(`vinfo-${idx}`);
+  if (info) { info.style.color = "rgba(252,228,228,0.6)"; info.textContent = "Conferindo..."; }
+  try {
+    const d = await vpConsultar(p.codigo);
+    p.codigo = d.codigo;
+    if (d.situacao !== "valido") throw new Error((VP_SITUACAO[d.situacao] || [d.situacao])[0]);
+    p.vpOk = true; p.vpSaldo = Number(d.saldo);
+    p.vpInfo = `✓ Saldo ${formatCurrency(d.saldo)}${d.para ? " · " + escapeHtml(d.para) : ""} · vale até ${vpData(d.expira_em)}`;
+    if (parseFloat(p.valor) > p.vpSaldo + 0.009) {
+      p.vpInfo += ` — usando ${formatCurrency(p.vpSaldo)}, o resto vai em outra forma`;
+      ctx.onValor(idx, p.vpSaldo);   // abre a linha do restante
+    }
+  } catch (e) {
+    p.vpOk = false; p.vpSaldo = 0; p.vpInfo = "❌ " + escapeHtml(e.message);
+  }
+  ctx.render();
+};
+// antes de finalizar: confere e desconta cada vale (se algum falhar, nada é finalizado)
+async function vpDescontar(pagamentos, orderId) {
+  const vales = pagamentos.filter(p => p.metodo === "voucher" && parseFloat(p.valor) > 0);
+  for (const p of vales.filter(p => !p.vpUsado)) {
+    if (!p.vpOk) throw new Error("Confira o código do vale-presente antes de finalizar.");
+    if (parseFloat(p.valor) > p.vpSaldo + 0.009) throw new Error(`O vale ${p.codigo} só tem ${formatCurrency(p.vpSaldo)}.`);
+  }
+  const feitos = [];
+  for (const p of vales.filter(p => !p.vpUsado)) { // já descontado numa tentativa anterior: não desconta de novo
+    const resp = await fetch(`${API_BASE}/api/v1/vouchers/${getRestaurantId()}/usar`, {
+      method: "POST", headers: buildHeaders(),
+      body: JSON.stringify({ codigo: p.codigo, valor: parseFloat(p.valor), order_id: orderId })
+    });
+    const d = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const msg = d.error || "Não foi possível usar o vale";
+      throw new Error(feitos.length ? `${msg}. Atenção: ${feitos.join(", ")} já foi descontado.` : msg);
+    }
+    feitos.push(`${p.codigo} (${formatCurrency(p.valor)})`);
+    p.vpSaldo = d.saldo; p.vpUsado = true;
+  }
+  return vales.length;
+}
+// no pedido fica "vale-presente" (o código e o valor ficam no histórico do vale)
+const vpTextoPagamento = (p) => p.metodo === "voucher" ? "vale-presente" : p.metodo;
+
 function showPaymentModal(orderId) {
   const existing = document.getElementById("payment-modal");
   if (existing) existing.remove();
@@ -4041,16 +4179,18 @@ function showPaymentModal(orderId) {
                       <option value="pix" ${p.metodo === 'pix' ? 'selected' : ''}>PIX</option>
                       <option value="credito" ${p.metodo === 'credito' ? 'selected' : ''}>Cartão de crédito</option>
                       <option value="debito" ${p.metodo === 'debito' ? 'selected' : ''}>Cartão de débito</option>
-                      <option value="dinheiro" ${p.metodo === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
+                                            <option value="dinheiro" ${p.metodo === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
+                      <option value="voucher" ${p.metodo === 'voucher' ? 'selected' : ''}>Vale-presente</option>
                     </select>
                     <input type="number" id="valor-${idx}" value="${parseFloat(p.valor).toFixed(2)}" min="0.01" max="${valorRestante}" step="0.01"
   style="width:110px; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;"
   onblur="onValorInput(${idx}, this.value)"
 />
-                    ${pagamentos.length > 1
+                                        ${pagamentos.length > 1
                       ? `<button onclick="removerPagamento(${idx})" style="padding:8px 10px; border-radius:8px; border:1px solid rgba(239,68,68,0.4); background:transparent; color:rgba(239,68,68,0.8); cursor:pointer; font-size:13px; flex-shrink:0;">✕</button>`
                       : ''}
                   </div>
+                  ${vpCampo(idx, p)}
                 </div>
               `;
             }).join('')}
@@ -4079,14 +4219,15 @@ function showPaymentModal(orderId) {
       }
      const pagamentosValidos = pagamentos.filter(p => parseFloat(p.valor) > 0 && p.metodo);
 const paymentStr = pagamentosValidos.length === 1
-  ? pagamentosValidos[0].metodo
-  : pagamentosValidos.map(p => `${p.metodo} R$${parseFloat(p.valor).toFixed(2)}`).join(' + ');
+  ? vpTextoPagamento(pagamentosValidos[0])
+  : pagamentosValidos.map(p => `${vpTextoPagamento(p)} R$${parseFloat(p.valor).toFixed(2)}`).join(' + ');
 
       const confirmBtn = document.getElementById("payment-confirm");
       confirmBtn.disabled = true;
       confirmBtn.textContent = "Finalizando...";
 
       try {
+        await vpDescontar(pagamentosValidos, orderId);
         await fetch(`${API_BASE}/api/v1/pedidos/${orderId}/payment`, {
           method: "PATCH",
           headers: buildHeaders(),
@@ -4108,15 +4249,21 @@ const paymentStr = pagamentosValidos.length === 1
         renderBoard();
       } catch (err) {
         console.error("Erro ao finalizar:", err);
+        if (err && err.message) alert(err.message);
         confirmBtn.disabled = false;
         confirmBtn.textContent = "Finalizar Pedido";
       }
     });
 
-    // Sync selects
+     // Sync selects (trocar pra/de Voucher redesenha pra mostrar o campo do código)
+    window._vpCtx = { pagamentos, render: renderModal, onValor: (i, v) => window.onValorInput(i, v) };
     pagamentos.forEach((p, idx) => {
       const sel = document.getElementById(`metodo-${idx}`);
-      if (sel) sel.addEventListener("change", () => { pagamentos[idx].metodo = sel.value; });
+      if (sel) sel.addEventListener("change", () => {
+        const antes = pagamentos[idx].metodo;
+        pagamentos[idx].metodo = sel.value;
+        if (antes === "voucher" || sel.value === "voucher") { pagamentos[idx].vpOk = false; pagamentos[idx].vpInfo = ""; renderModal(); }
+      });
     });
   }
 
@@ -4396,16 +4543,18 @@ async function imprimirResumosSelecionados() {
                       <option value="pix" ${p.metodo === 'pix' ? 'selected' : ''}>PIX</option>
                       <option value="credito" ${p.metodo === 'credito' ? 'selected' : ''}>Cartão de crédito</option>
                       <option value="debito" ${p.metodo === 'debito' ? 'selected' : ''}>Cartão de débito</option>
-                      <option value="dinheiro" ${p.metodo === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
+                                            <option value="dinheiro" ${p.metodo === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
+                      <option value="voucher" ${p.metodo === 'voucher' ? 'selected' : ''}>Vale-presente</option>
                     </select>
                     <input type="number" id="valor-${idx}" value="${parseFloat(p.valor).toFixed(2)}" min="0.01" max="${valorRestante}" step="0.01"
                       style="width:110px; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;"
                       onblur="onValorInputJuntos(${idx}, this.value)"
                     />
-                    ${pagamentos.length > 1 ? `
+                     ${pagamentos.length > 1 ? `
                     <button onclick="removerPagamentoJuntos(${idx})" style="padding:8px 10px; border-radius:8px; border:1px solid rgba(239,68,68,0.4); background:transparent; color:rgba(239,68,68,0.8); cursor:pointer; font-size:13px; flex-shrink:0;">✕</button>
                     ` : ''}
                   </div>
+                  ${vpCampo(idx, p)}
                 </div>
               `;
             }).join('')}
@@ -4428,14 +4577,15 @@ async function imprimirResumosSelecionados() {
       }
       const pagamentosValidos = pagamentos.filter(p => parseFloat(p.valor) > 0 && p.metodo);
 const paymentStr = pagamentosValidos.length === 1
-  ? pagamentosValidos[0].metodo
-  : pagamentosValidos.map(p => `${p.metodo} R$${parseFloat(p.valor).toFixed(2)}`).join(' + ');
+  ? vpTextoPagamento(pagamentosValidos[0])
+  : pagamentosValidos.map(p => `${vpTextoPagamento(p)} R$${parseFloat(p.valor).toFixed(2)}`).join(' + ');
 
       const confirmBtn = document.getElementById("payment-confirm");
       confirmBtn.disabled = true;
       confirmBtn.textContent = "Finalizando...";
 
       try {
+  await vpDescontar(pagamentosValidos, pedidos[0]?.id);
   await Promise.all(pedidos.map(async (o) => {
     await fetch(`${API_BASE}/api/v1/pedidos/${o.id}/payment`, {
       method: "PATCH",
@@ -4459,14 +4609,20 @@ const paymentStr = pagamentosValidos.length === 1
         }
       } catch(err) {
         console.error("Erro ao finalizar:", err);
+        if (err && err.message) alert(err.message);
         confirmBtn.disabled = false;
         confirmBtn.textContent = "Finalizar Todos";
       }
     });
 
+    window._vpCtx = { pagamentos, render: renderModal, onValor: (i, v) => window.onValorInputJuntos(i, v) };
     pagamentos.forEach((p, idx) => {
       const sel = document.getElementById(`metodo-${idx}`);
-      if (sel) sel.addEventListener("change", () => { pagamentos[idx].metodo = sel.value; });
+      if (sel) sel.addEventListener("change", () => {
+        const antes = pagamentos[idx].metodo;
+        pagamentos[idx].metodo = sel.value;
+        if (antes === "voucher" || sel.value === "voucher") { pagamentos[idx].vpOk = false; pagamentos[idx].vpInfo = ""; renderModal(); }
+      });
     });
   }
 
