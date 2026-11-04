@@ -25,6 +25,10 @@ function showError(msg){
   gsap.set([".hero-sub", ".brand-row", ".ai-bubble"], { opacity:0, y:16 });
   gsap.set(".ai-bubble", { y:-10 });
 
+  // chegou pelo link da fidelidade (#fidelidade ou ?token=): já abre nela, o cardápio carrega por trás
+  if(location.hash === "#fidelidade" || new URLSearchParams(location.search).has("token"))
+    document.body.classList.add("aba-fid", "fid-carregando");
+
   try{
     MENU = await fetchMenu();
     applyBranding();
@@ -46,6 +50,7 @@ function showError(msg){
     iniciarAbas();
   }catch(err){
     console.error("Erro ao carregar o cardápio:", err);
+    document.body.classList.remove("aba-fid", "fid-carregando");
     gsap.to(".brand-row", { opacity:1, y:0, duration:.3 });
     showError(err.message || "Tente novamente em instantes.");
   }
@@ -94,7 +99,7 @@ function mostrarAba(aba, semRolar){
 async function iniciarAbas(){
   let tem = false;
   try{ tem = await fidCarregar(); }catch(err){ console.warn("Fidelidade indisponível:", err); }
-  if(!tem) return;
+  if(!tem){ document.body.classList.remove("aba-fid", "fid-carregando"); return; }
 
   // cabeçalho do menu com a marca do restaurante
   const logo = document.getElementById("sideMenuLogo");
@@ -121,6 +126,8 @@ async function iniciarAbas(){
   fidAtualizarPontinho();
 
   if(location.hash === "#fidelidade") mostrarAba("fidelidade", true);
+  else document.body.classList.remove("aba-fid");
+  document.body.classList.remove("fid-carregando");
 }
 
 /* barra de categorias presa no topo → body.nav-presa (o Entrar some) */
