@@ -348,22 +348,72 @@ function openItemDetail(itemId){
     dot.addEventListener("click", () => irParaFoto(Number(dot.dataset.idx)));
   });
 
+  // dois sabores: a opção marcada como "texto livre" pede 2 itens da mesma categoria
+  let sabores = [];
+  const precoAtual = () => {
+    const op = opcoes[selectedIdx];
+    if(!op) return parseFloat(item.preco || 0);
+    if(op.texto_livre && !(parseFloat(op.preco) > 0))
+      return sabores.length ? Math.max(...sabores.map(n => precoDoSabor(n, op))) : 0;
+    return parseFloat(op.preco || 0);
+  };
+  const atualizarPreco = () => { const v = precoAtual(); document.getElementById("detailPrice").textContent = v > 0 ? money(v) : "R$ —"; };
+  function montarSabores(){
+    const box = document.getElementById("detailSabores");
+    if(!box) return;
+    const op = opcoes[selectedIdx];
+    sabores = [];
+    box.hidden = !op?.texto_livre;
+    if(!op?.texto_livre) return;
+    const lista = saboresDoItem(item, op);
+    const mostraPreco = !(parseFloat(op.preco) > 0);
+    document.getElementById("saboresLista").innerHTML = lista.length
+      ? lista.map(s => `
+        <button type="button" class="sabor-opt" data-sabor="${escHtml(s.nome)}">
+          <span class="sabor-check"></span>
+          <span class="sabor-nome">${escHtml(s.nome)}</span>
+          ${mostraPreco ? `<span class="variation-opt-price">${money(precoDoSabor(s.nome, op))}</span>` : ""}
+        </button>`).join("")
+      : `<div class="sabores-vazio">Nenhum sabor disponível no momento.</div>`;
+    document.getElementById("saboresCont").textContent = "0/2";
+    box.querySelectorAll(".sabor-opt").forEach(b => b.onclick = () => {
+      const nome = b.dataset.sabor;
+      if(sabores.includes(nome)) sabores = sabores.filter(n => n !== nome);
+      else if(sabores.length < 2) sabores.push(nome);
+      else { shake("detailSabores"); return; }
+      box.querySelectorAll(".sabor-opt").forEach(x => x.classList.toggle("on", sabores.includes(x.dataset.sabor)));
+      document.getElementById("saboresCont").textContent = `${sabores.length}/2`;
+      box.classList.remove("erro");
+      atualizarPreco();
+    });
+  }
+
   // seleção de variação (se tiver)
   wrap.querySelectorAll(".variation-opt").forEach(btn => {
     btn.onclick = () => {
       wrap.querySelectorAll(".variation-opt").forEach(b => b.classList.remove("selected"));
       btn.classList.add("selected");
       selectedIdx = Number(btn.dataset.idx);
-      document.getElementById("detailPrice").textContent = money(parseFloat(opcoes[selectedIdx].preco || 0));
+      montarSabores();
+      atualizarPreco();
     };
   });
+  montarSabores();
+  atualizarPreco();
 
   document.getElementById("detailCloseBtn").onclick = () => closeItemDetail(wrap);
   wrap.addEventListener("click", e => { if(e.target === wrap) closeItemDetail(wrap); });
 
   document.getElementById("detailAddBtn").onclick = (e) => {
-    if(temVariacao){
-      addVariationToCart(item, opcoes[selectedIdx]);
+        if(temVariacao){
+      const op = opcoes[selectedIdx];
+      if(op.texto_livre && sabores.length !== 2){
+        const box = document.getElementById("detailSabores");
+        box.classList.add("erro"); shake("detailSabores");
+        box.scrollIntoView({ behavior:"smooth", block:"center" });
+        return;
+      }
+      addVariationToCart(item, op, op.texto_livre ? sabores : null, precoAtual());
     }else{
       const existing = CART.find(c => String(c.id) === String(item.id));
       if(existing){ existing.qty++; }
@@ -383,12 +433,16 @@ function closeItemDetail(wrap){
   gsap.to(wrap, { opacity:0, duration:.25, onComplete: () => wrap.remove() });
 }
 
-function addVariationToCart(item, opcao){
-  const cartId = `${item.id}__${opcao.nome}`;
-  const nomeCompleto = `${item.nome} — ${opcao.nome}`;
+function addVariationToCart(item, opcao, sabores, preco){
+  const doisSabores = Array.isArray(sabores) && sabores.length === 2;
+  const cartId = `${item.id}__${opcao.nome}` + (doisSabores ? `__${[...sabores].sort().join("+")}` : "");
+  // mesmo nome do cardápio da mesa: "Pizza dois sabores Grande — Calabresa + Mussarela"
+  const nomeCompleto = doisSabores
+    ? `${item.nome}${item.nome.toLowerCase().includes(String(opcao.nome).toLowerCase()) ? "" : " " + opcao.nome} — ${sabores.join(" + ")}`
+    : `${item.nome} — ${opcao.nome}`;
   const existing = CART.find(c => c.id === cartId);
   if(existing){ existing.qty++; }
-  else{ CART.push({ id:cartId, nome:nomeCompleto, preco:parseFloat(opcao.preco || 0), qty:1 }); }
+  else{ CART.push({ id:cartId, nome:nomeCompleto, preco: preco ?? parseFloat(opcao.preco || 0), qty:1 }); }
   updateCartUI();
 }
 
