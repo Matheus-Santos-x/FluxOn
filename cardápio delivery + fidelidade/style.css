@@ -1345,6 +1345,16 @@ backdrop-filter:blur(10px);
   body.aba-fid .ai-bubble,
   body.aba-fid .ai-tooltip{display:none !important;}
   .fid-fab{ display:none; }
+  /* chegou pelo link da fidelidade: mostra um esqueleto até ela carregar */
+  body.fid-carregando #fidView::before,
+  body.fid-carregando #fidView::after{
+    content:""; display:block; margin:20px 20px 0; border-radius:20px;
+    background:linear-gradient(90deg, var(--surface), color-mix(in srgb, var(--surface) 70%, var(--line)), var(--surface));
+    background-size:200% 100%; animation:fid-sk 1.2s linear infinite;
+  }
+  body.fid-carregando #fidView::before{ height:190px; }
+  body.fid-carregando #fidView::after{ height:96px; }
+  @keyframes fid-sk{ to{ background-position:-200% 0; } }
   body.aba-fid .fid-fab{ display:flex; }
 
   /* ================= FIDELIDADE ================= */
