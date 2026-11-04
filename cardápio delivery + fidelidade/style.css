@@ -308,12 +308,15 @@ header{
     background:color-mix(in srgb, var(--bg) 92%, transparent);
 backdrop-filter:blur(10px);
     border-bottom:1px solid var(--line);
-    padding:12px 20px;
+    padding:8px 0;
+  }
+  .cat-nav-in{
     display:flex; gap:8px;
     overflow-x:auto;
     scrollbar-width:none;
+    padding:4px 20px;
   }
-  .cat-nav::-webkit-scrollbar{display:none;}
+  .cat-nav-in::-webkit-scrollbar{display:none;}
   .cat-pill{
     flex-shrink:0;
     padding:9px 16px;
@@ -1173,10 +1176,10 @@ backdrop-filter:blur(10px);
       margin-left:auto;
       margin-right:auto;
     }
-    .cat-nav{
-      justify-content:center;
+    .cat-nav-in{
+      justify-content:safe center;
     }
-    .cat-nav > *{flex-shrink:0;}
+    .cat-nav-in > *{flex-shrink:0;}
     .drawer{ width:420px; }
     .ai-modal{ bottom:28px; }
   }
@@ -1233,8 +1236,13 @@ backdrop-filter:blur(10px);
     border:2px solid var(--bg);
     animation:pulse-dot 1.8s ease-in-out infinite;
   }
-  /* quando o menu existe, a barra de categorias abre espaço pros botões */
-  body.com-menu .cat-nav{ padding-left:64px; padding-right:104px; }
+  /* barra de categorias presa no topo: as categorias desviam dos três risquinhos e o Entrar some */
+  body.com-menu.nav-presa .cat-nav-in{
+    margin-left:60px; padding-left:10px;
+    -webkit-mask-image:linear-gradient(to right, transparent, #000 12px);
+    mask-image:linear-gradient(to right, transparent, #000 12px);
+  }
+  body.nav-presa .login-btn{ opacity:0 !important; visibility:hidden; pointer-events:none; }
 
   /* ================= BOTÃO ENTRAR / MINHA CONTA ================= */
   .login-btn{
@@ -1247,7 +1255,7 @@ backdrop-filter:blur(10px);
     box-shadow:0 6px 16px -6px rgba(0,0,0,.45);
     display:flex; align-items:center; gap:7px;
     font-size:13px; font-weight:800; color:var(--text);
-    transition:transform .15s ease, border-color .2s ease;
+    transition:transform .15s ease, border-color .2s ease, opacity .2s ease, visibility .2s ease;
   }
   .login-btn[hidden]{display:none;}
   .login-btn:active{transform:scale(.94);}
