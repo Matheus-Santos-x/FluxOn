@@ -1241,8 +1241,8 @@ backdrop-filter:blur(10px);
     margin:-50px 20px 0;
     padding:0;
     background:none; border:none; border-radius:0; box-shadow:none;
-    display:flex; flex-direction:column; align-items:center;
-    text-align:center;
+    display:flex; flex-direction:column; align-items:flex-start;
+    text-align:left;
   }
   .store-card .store-logo{
     width:96px; height:96px; border-radius:26px;
@@ -1258,11 +1258,11 @@ backdrop-filter:blur(10px);
     color:var(--text);
     margin-top:12px;
   }
-  .store-card .store-status{ justify-content:center; margin:4px 0 0; }
+  .store-card .store-status{ justify-content:flex-start; margin:4px 0 0; }
   .store-card .store-address{ margin-top:4px; max-width:320px; color:var(--muted-2); line-height:1.35; }
   .store-card .store-address:empty{ display:none; }
   .store-card .store-meta-row{
-    flex-wrap:wrap; justify-content:center; gap:8px;
+    flex-wrap:wrap; justify-content:flex-start; gap:8px;
     margin-top:14px; padding-top:0; border-top:none;
   }
   .store-card .store-meta{
