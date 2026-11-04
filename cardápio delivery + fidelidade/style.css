@@ -1236,34 +1236,45 @@ backdrop-filter:blur(10px);
     border-bottom-color:rgba(30,42,64,.08);
   }
 
-  /* ================= CARTÃO DA LOJA CENTRALIZADO (logo grande no meio) ================= */
+  /* ================= CARTÃO DA LOJA (logo redonda à esquerda, nome ao lado) ================= */
   .store-card{
-    margin:-50px 20px 0;
+    margin:-22px 20px 0;
     padding:0;
     background:none; border:none; border-radius:0; box-shadow:none;
-    display:flex; flex-direction:column; align-items:flex-start;
+    display:grid;
+    grid-template-columns:auto 1fr;
+    grid-template-rows:1fr auto;
+    column-gap:14px;
     text-align:left;
   }
   .store-card .store-logo{
-    width:96px; height:96px; border-radius:26px;
+    grid-row:1 / 3;
+    width:84px; height:84px; border-radius:50%;
     margin:0;
     background:var(--surface);
-    border:3px solid var(--bg);
-    font-size:34px;
-    box-shadow:0 14px 30px -12px rgba(0,0,0,.5);
+    border:none;
+    font-size:30px;
+    box-shadow:0 10px 24px -10px rgba(0,0,0,.55);
   }
   .store-card h1{
+    grid-column:2; grid-row:1; align-self:end;
     font-family:var(--font-display);
-    font-size:22px; line-height:1.15;
+    font-size:22px; line-height:1.1;
     color:var(--text);
-    margin-top:12px;
+    margin:0;
   }
-  .store-card .store-status{ justify-content:flex-start; margin:4px 0 0; }
-  .store-card .store-address{ margin-top:4px; max-width:320px; color:var(--muted-2); line-height:1.35; }
+  .store-card .store-status{ grid-column:2; grid-row:2; justify-content:flex-start; margin:3px 0 0; }
+  .store-card .store-address{
+    grid-column:1 / -1;
+    margin-top:14px;
+    font-size:15px; font-weight:700; line-height:1.35;
+    color:var(--text);
+  }
   .store-card .store-address:empty{ display:none; }
   .store-card .store-meta-row{
+    grid-column:1 / -1;
     flex-wrap:wrap; justify-content:flex-start; gap:8px;
-    margin-top:14px; padding-top:0; border-top:none;
+    margin-top:12px; padding-top:0; border-top:none;
   }
   .store-card .store-meta{
     flex:none;
