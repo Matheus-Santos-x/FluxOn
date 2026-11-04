@@ -102,7 +102,7 @@ function appendSuggestedItems(itens){
 
   wrap.querySelectorAll("[data-ai-add]").forEach(btn => {
     btn.addEventListener("click", e => {
-      if(btn.dataset.aiOpcoes === "1"){ closeAiChat(); openItemDetail(btn.dataset.aiAdd); return; }
+      if(btn.dataset.aiOpcoes === "1"){ closeAiChat(); openItemDetail(btn.dataset.aiAdd); window._voltarChat = btn; return; }
       addToCart(btn.dataset.aiAdd, e);
       btn.disabled = true;
       btn.innerHTML = `<span>✓ Adicionado ao carrinho</span>`;
