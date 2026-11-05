@@ -516,13 +516,11 @@ function updateCartUI(){
   }else{
     body.innerHTML = CART.map(c => `
       <div class="receipt-item">
-        <span class="ri-qty">${c.qty}x</span>
-        <div class="ri-name">
-          ${c.nome}
-          <div class="qty-ctrl">
-            <button class="qty-btn" data-qty-minus="${c.id}">−</button>
-            <button class="qty-btn" data-qty-plus="${c.id}">+</button>
-          </div>
+        <div class="ri-name">${c.nome}</div>
+        <div class="qty-ctrl">
+          <button class="qty-btn" data-qty-minus="${c.id}" aria-label="Diminuir">${c.qty === 1 ? "×" : "−"}</button>
+          <span class="qty-num">${c.qty}</span>
+          <button class="qty-btn" data-qty-plus="${c.id}" aria-label="Aumentar">+</button>
         </div>
         <span class="ri-price">${money(c.preco * c.qty)}</span>
       </div>
@@ -570,12 +568,12 @@ function closeOverlay(){
 
 function openDrawer(){
   openOverlay();
-  gsap.to(drawer, { x:0, duration:.5, ease:"power3.out" });
+  gsap.to(drawer, { y:0, duration:.45, ease:"power3.out" });
   iaNoCarrinho(); // balãozinho "vi que você não adicionou bebida..." (uma vez por visita)
   document.getElementById("receiptDate").textContent = new Date().toLocaleDateString("pt-BR");
 }
 function closeDrawer(){
-  gsap.to(drawer, { x:"100%", duration:.4, ease:"power2.in", onComplete: closeOverlay });
+  gsap.to(drawer, { y:"110%", duration:.35, ease:"power2.in", onComplete: closeOverlay });
 }
 
 function openSheet(){
@@ -591,8 +589,9 @@ function closeSheet(){
 
 document.getElementById("cartFab").onclick = openDrawer;
 document.getElementById("drawerClose").onclick = closeDrawer;
+document.getElementById("drawerHandle").onclick = closeDrawer;
 overlay.onclick = () => {
-  gsap.to(drawer, { x:"100%", duration:.35 });
+  gsap.to(drawer, { y:"110%", duration:.35 });
   gsap.to(sheet, { y:"100%", duration:.35 });
   closeOverlay();
 };
