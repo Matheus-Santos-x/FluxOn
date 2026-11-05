@@ -6730,6 +6730,25 @@ async function iaContextoLoja(rid) {
   };
 }
 
+// mais pedidos dos últimos 60 dias, pelo nome do item do cardápio (guarda 10 min na memória)
+const iaVendidosCache = new Map();
+async function iaMaisVendidos(rid, cardapio) {
+  const c = iaVendidosCache.get(rid);
+  if (c && Date.now() - c.t < 10 * 60 * 1000) return c.ranking;
+  const desde = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await supabase.from("orders").select("itens")
+    .eq("restaurant_id", rid).gte("created_at", desde).order("created_at", { ascending: false }).limit(3000);
+  const porNome = new Map(cardapio.map(i => [iaNorm(i.nome), i.id]));
+  const ranking = {};
+  (data || []).forEach(o => (o.itens || []).forEach(it => {
+    const base = iaNorm(String(it.name || it.nome || "").split(/\s+—\s+/)[0]);
+    const id = porNome.get(base);
+    if (id !== undefined) ranking[id] = (ranking[id] || 0) + (Number(it.qty || it.quantidade || it.quantity) || 1);
+  }));
+  iaVendidosCache.set(rid, { t: Date.now(), ranking });
+  return ranking;
+}
+
 const IA_FORMATO = {
   type: "json_schema", name: "sugestao_cardapio", strict: true,
   schema: {
@@ -6739,9 +6758,10 @@ const IA_FORMATO = {
       itens_sugeridos: { type: "array", items: { type: "string" } },
       opcoes_rapidas: { type: "array", items: { type: "string" } },
       categoria: { type: "string" },
+      etapa: { type: "string", enum: ["perguntar_tipo", "mostrar_categoria", "sugerir_itens", "conversa"] },
       pular: { type: "boolean" }
     },
-    required: ["resposta", "itens_sugeridos", "opcoes_rapidas", "categoria", "pular"]
+    required: ["resposta", "itens_sugeridos", "opcoes_rapidas", "categoria", "etapa", "pular"]
   }
 };
 
@@ -6776,7 +6796,19 @@ app.post("/api/v1/ia/sugestao", async (req, res) => {
     const contagem = {};
     itens.forEach(i => { const c = i.categoria || "Geral"; contagem[c] = (contagem[c] || 0) + 1; });
     const categoriasTexto = Object.entries(contagem).map(([c, n]) => `- ${c} (${n} ${n === 1 ? "item" : "itens"})`).join("\n");
-    const IA_MAX_NO_CHAT = 10; // categoria com mais que isso: leva o cliente até ela no cardápio
+    const IA_MAX_NO_CHAT = 10; // categoria com mais que isso: mostra só as mais pedidas + botão pra ver a categoria no cardápio
+    const vendidos = await iaMaisVendidos(restaurant_id, itens).catch(() => ({}));
+    // categoria grande: as 3 mais pedidas (sem histórico, as 3 primeiras do cardápio) + os itens de 2 sabores
+    const destaquesDe = (cat) => {
+      const daCat = itens.filter(i => (i.categoria || "Geral") === cat);
+      const doisSabores = daCat.filter(i => (i.opcoes || []).some(o => o.texto_livre));
+      const top = daCat.filter(i => !doisSabores.includes(i))
+        .map((i, pos) => ({ i, n: vendidos[i.id] || 0, pos }))
+        .sort((a, b) => b.n - a.n || a.pos - b.pos).slice(0, 3).map(x => x.i);
+      return [...top, ...doisSabores];
+    };
+    const maisPedidosTexto = Object.keys(contagem).filter(c => contagem[c] > IA_MAX_NO_CHAT)
+      .map(c => `- ${c}: ${destaquesDe(c).map(i => i.nome).join(", ")}`).join("\n");
     const modoCarrinho = mensagem === "__carrinho__";
 
     // o que já está no carrinho (só nome e quantidade, no máximo 30 linhas)
@@ -6786,13 +6818,21 @@ app.post("/api/v1/ia/sugestao", async (req, res) => {
 
     const systemPrompt = `Você é atendente do delivery do restaurante "${loja.nome}" e conversa pelo chat do cardápio. Aja como um atendente humano de verdade: português do Brasil, simpático, natural, frases curtas (no máximo 3), no máximo 1 emoji. Se perguntarem se você é robô, diga com sinceridade que é o assistente virtual do restaurante.
 
-COMO ATENDER (o mais importante):
-- Não empurre um produto específico sem saber o gosto da pessoa. Pedido genérico ("quero uma bebida", "quero uma esfiha", "o que tem de doce?"): primeiro pergunte o tipo, oferecendo os tipos que EXISTEM no cardápio (ex.: "Temos refrigerantes, sucos e cervejas. Qual você prefere?") e coloque esses tipos em "opcoes_rapidas".
-- Use como tipos as CATEGORIAS do cardápio. Se tudo estiver numa categoria só (ex.: "Bebidas" com refrigerante, suco e cerveja juntos), separe você mesmo em tipos pelos nomes dos itens.
-- Quando a pessoa escolher um tipo que é uma categoria, coloque o nome exato da categoria em "categoria" e deixe "itens_sugeridos" vazio — o sistema mostra os itens. Se a categoria tiver até ${IA_MAX_NO_CHAT} itens, diga algo como "Separei aqui pra você, é só escolher". Se tiver mais de ${IA_MAX_NO_CHAT}, diga algo como "Temos várias! Toque abaixo pra ver todas".
-- Se o tipo escolhido não for uma categoria (ex.: só os refrigerantes dentro de "Bebidas"), deixe "categoria" vazia e coloque em "itens_sugeridos" os itens desse tipo (até ${IA_MAX_NO_CHAT}).
-- Quando a pessoa já disser o que quer (ex.: "uma Coca 2L", "pizza de calabresa"), aí sim sugira o item direto em "itens_sugeridos".
-- Com itens no carrinho, ofereça o que combina (bebida, sobremesa, acompanhamento) do jeito acima: pergunte antes, ofereça os tipos. Se a pessoa recusar, não insista.
+COMO ATENDER (o mais importante) — conduza a escolha em etapas, como quem oferece opções para a pessoa tocar:
+- ETAPA "perguntar_tipo": quando o pedido é genérico ("quero uma bebida", "algo pra beber", "quero um doce", "o que vocês têm?"), NÃO indique nenhum item. Pergunte o que a pessoa está pensando e ofereça os tipos que EXISTEM no cardápio, em "opcoes_rapidas". "itens_sugeridos" fica vazio e "categoria" fica "".
+  Os tipos são as CATEGORIAS do cardápio. Se uma categoria mistura tipos (ex.: "Bebidas" com refrigerante, suco e cerveja), separe pelos nomes dos itens e pergunte assim mesmo.
+- ETAPA "mostrar_categoria": quando a pessoa escolhe um tipo que é uma categoria, ou já pede pela categoria ("quero uma pizza", "tem esfiha?"), coloque o nome exato em "categoria" e deixe "itens_sugeridos" vazio — o sistema mostra os itens no chat.
+  Categoria com até ${IA_MAX_NO_CHAT} itens: o sistema mostra todos; diga algo como "Separei aqui pra você, é só escolher".
+  Categoria com mais de ${IA_MAX_NO_CHAT} itens: o sistema mostra as mais pedidas (lista MAIS PEDIDOS) e um botão para ver a categoria inteira no cardápio; diga algo como "Aqui estão algumas das nossas mais pedidas. Pra ver todos os sabores, é só tocar em ver a categoria".
+- ETAPA "sugerir_itens": quando a pessoa já diz o que quer ("uma Coca 2L", "pizza de calabresa") ou escolhe um tipo que não é categoria (ex.: só os refrigerantes dentro de "Bebidas"), coloque esses itens em "itens_sugeridos" (até ${IA_MAX_NO_CHAT}).
+- ETAPA "conversa": dúvidas, horário, entrega etc.
+- Com itens no carrinho, ofereça o que combina (bebida, sobremesa, acompanhamento) do mesmo jeito: pergunte antes e ofereça os tipos. Se a pessoa recusar, não insista.
+
+EXEMPLOS (categorias Refrigerantes, Sucos, Cervejas e Pizzas):
+- Cliente: "quero uma bebida" → etapa "perguntar_tipo", resposta "Boa! Temos refrigerantes, sucos e cervejas. O que você tá pensando pra hoje?", opcoes_rapidas ["Refrigerantes", "Sucos", "Cervejas"], itens_sugeridos [], categoria "".
+- Cliente: "Refrigerantes" → etapa "mostrar_categoria", categoria "Refrigerantes", itens_sugeridos [].
+- Cliente: "tô querendo uma pizza" → etapa "mostrar_categoria", categoria "Pizzas", itens_sugeridos [].
+- Cliente: "quero uma Coca 2L" → etapa "sugerir_itens", itens_sugeridos ["Coca 2L"].
 
 REGRAS:
 1. Só fale do que está no CARDÁPIO, com o nome exato. Nunca invente prato, sabor, tamanho, adicional ou preço.
@@ -6808,7 +6848,8 @@ CAMPOS DA RESPOSTA:
 - "resposta": o que você fala.
 - "itens_sugeridos": nomes exatos dos itens que você está oferecendo (viram botões para adicionar). Vazio se não for o caso.
 - "opcoes_rapidas": até 4 respostas curtas que a pessoa pode tocar (tipos, "Sim", "Não, obrigado"). Vazio se não fizer uma pergunta de escolha.
-- "categoria": nome exato de uma categoria quando a pessoa escolheu ver uma; senão "".
+- "categoria": nome exato de uma categoria na etapa "mostrar_categoria"; senão "".
+- "etapa": "perguntar_tipo", "mostrar_categoria", "sugerir_itens" ou "conversa".
 - "pular": sempre false, menos no MODO CARRINHO quando não há nada para oferecer.
 ${modoCarrinho ? `
 MODO CARRINHO (agora): a pessoa abriu o carrinho. Veja se falta um tipo de item que combina e que EXISTE no cardápio — principalmente bebida; depois sobremesa ou acompanhamento.
@@ -6823,6 +6864,9 @@ ${carrinhoTexto}
 
 CATEGORIAS:
 ${categoriasTexto || "(nenhuma)"}
+
+MAIS PEDIDOS (categorias grandes):
+${maisPedidosTexto || "(nenhuma categoria grande)"}
 
 CARDÁPIO:
 ${cardapioTexto || "(vazio)"}`;
@@ -6863,14 +6907,16 @@ ${cardapioTexto || "(vazio)"}`;
       .slice(0, IA_MAX_NO_CHAT)
       .map(enxuto);
 
-    // escolheu uma categoria: até 10 itens vêm no chat; mais que isso, botão pra ir até ela no cardápio
+    // escolheu uma categoria: até 10 itens vêm todos no chat; mais que isso, as mais pedidas + botão pra ver a categoria
     let categoria = null;
-    const catNome = Object.keys(contagem).find(c => iaNorm(c) === iaNorm(parsed.categoria));
+    const catNome = parsed.etapa === "perguntar_tipo" ? null : Object.keys(contagem).find(c => iaNorm(c) === iaNorm(parsed.categoria));
     if (catNome) {
       const daCategoria = itens.filter(i => (i.categoria || "Geral") === catNome);
       categoria = { nome: catNome, total: daCategoria.length, ir: daCategoria.length > IA_MAX_NO_CHAT };
-      itensCompletos = categoria.ir ? [] : daCategoria.map(enxuto);
+      itensCompletos = (categoria.ir ? destaquesDe(catNome) : daCategoria).map(enxuto);
     }
+    // pergunta de tipo nunca vem com item (a pessoa escolhe o tipo primeiro)
+    if (parsed.etapa === "perguntar_tipo") itensCompletos = [];
 
     const opcoesRapidas = (Array.isArray(parsed.opcoes_rapidas) ? parsed.opcoes_rapidas : [])
       .map(o => String(o).slice(0, 30)).filter(Boolean).slice(0, 4);
