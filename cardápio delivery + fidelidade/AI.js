@@ -194,15 +194,37 @@ function balaoDesenhar(balao, data){
   });
 }
 // o que faltou no carrinho, olhando as categorias (sem esperar a IA): bebida primeiro, depois sobremesa
-const IA_FALTA = [
-  { re:/bebida|refri|suco|cerveja|chop|drink|agua|vinho|dose|cha |cafe/, nome:"bebida", pedido:"Quero adicionar uma bebida" },
-  { re:/sobremesa|doce|acai|sorvete|torta|bolo|pudim|brownie|milk ?shake/, nome:"sobremesa", pedido:"Quero adicionar uma sobremesa" }
-];
+// cada item tem etiquetas da IA (comida, bebida, sobremesa, petisco), feitas pra cada restaurante.
+// item novo que a IA ainda não marcou: usa a categoria e o nome/descrição até ela marcar
+const IA_TIPO_CAT = {
+  bebida: /bebida|refri|suco|cerveja|chop|drink|agua|vinho|dose|cha |cafe|polpa|refresco|soda|energetico/,
+  sobremesa: /sobremesa|doce|acai|sorvete|torta|bolo|pudim|brownie|milk ?shake/,
+  petisco: /porc|petisco|aperitivo|tira.?gosto|batata|frita|isca/
+};
+const IA_TEM_BEBIDA = /coca|guarana|refri|fanta|sprite|suco|cerveja|\d+ ?(ml|l|lt|litros?)(?![a-z])|lata/;
+function iaTiposDoItem(i){
+  if(Array.isArray(i.ia_tipos) && i.ia_tipos.length) return i.ia_tipos;
+  const cat = semAcento(i.categoria || "") + " ";
+  const t = new Set(Object.keys(IA_TIPO_CAT).filter(k => IA_TIPO_CAT[k].test(cat)));
+  if(!t.size) t.add("comida");
+  if(!t.has("bebida") && IA_TEM_BEBIDA.test(semAcento(`${i.nome || ""} ${i.descricao || ""}`))) t.add("bebida");
+  return [...t];
+}
+const IA_OFERTA = {
+  bebida:    { texto:"Vi que você não adicionou nenhuma bebida. Quer adicionar uma pra acompanhar?", pedido:"Quero adicionar uma bebida" },
+  sobremesa: { texto:"Seu pedido tá quase completo! Que tal uma sobremesa pra fechar?", pedido:"Quero adicionar uma sobremesa" },
+  petisco:   { texto:"Que tal um petisco pra acompanhar a bebida? Quer ver as opções?", pedido:"Quero adicionar um petisco ou uma porção" }
+};
 function iaOQueFalta(){
-  const cats = [...new Set(MENU.map(i => semAcento(i.categoria || "")))];
-  const noCarrinho = CART.map(c => MENU.find(m => String(m.id) === String(c.id).split("__")[0])).filter(Boolean)
-    .map(i => semAcento(i.categoria || ""));
-  return IA_FALTA.find(f => cats.some(c => f.re.test(c + " ")) && !noCarrinho.some(c => f.re.test(c + " "))) || null;
+  const tem = new Set(CART.map(c => MENU.find(m => String(m.id) === String(c.id).split("__")[0])).filter(Boolean).flatMap(iaTiposDoItem));
+  const existe = (t) => MENU.some(i => iaTiposDoItem(i).includes(t));
+  let falta = null;
+  if(tem.has("comida") && !tem.has("bebida")) falta = "bebida";                       // só comida → bebida
+  else if(tem.has("sobremesa") && !tem.has("comida") && !tem.has("bebida")) falta = "bebida"; // só doce → bebida
+  else if(tem.has("comida") && tem.has("bebida") && !tem.has("sobremesa")) falta = "sobremesa"; // comida + bebida → sobremesa
+  else if(tem.has("bebida") && !tem.has("comida") && !tem.has("petisco") && !tem.has("sobremesa")) falta = "petisco"; // só bebida → petisco
+  if(!falta || !existe(falta)) return null;                                          // pedido completo ou o restaurante não tem
+  return { nome: falta, ...IA_OFERTA[falta] };
 }
 
 async function iaNoCarrinho(){
@@ -211,7 +233,7 @@ async function iaNoCarrinho(){
   if(!falta) return;
   AI_CARRINHO_FEITO = true;
   const data = {
-    resposta: `Vi que você não adicionou nenhuma ${falta.nome}. Quer adicionar?`,
+    resposta: falta.texto,
     opcoes_rapidas: ["Sim", "Não, obrigado"], itens: [], categoria: null, _pedido: falta.pedido
   };
   AI_HISTORY.push({ role:"assistant", content:data.resposta });
