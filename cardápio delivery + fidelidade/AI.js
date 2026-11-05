@@ -130,7 +130,7 @@ function appendIrCategoria(cat){
   if(!cat || !cat.ir) return;
   const b = document.createElement("button");
   b.type = "button"; b.className = "ai-ir-cat";
-  b.textContent = `Ver todas as opções de ${cat.nome} (${cat.total}) →`;
+  b.textContent = `Ver a categoria ${cat.nome} no cardápio →`;
   b.onclick = () => {
     closeAiChat();
     closeDrawer();
@@ -167,7 +167,7 @@ function balaoDesenhar(balao, data){
       const op = Array.isArray(i.opcoes) && i.opcoes.length > 0;
       return `<button type="button" class="ai-suggested-item" data-id="${i.id}" data-op="${op ? 1 : 0}"><span>${escHtml(i.nome)}</span><span class="ai-item-price">${op ? "A partir de " : ""}${money(precoMinimo(i))}</span></button>`;
     }).join("")}</div>` : ""}
-    ${data.categoria && data.categoria.ir ? `<button type="button" class="ai-ir-cat" data-cat="${escHtml(data.categoria.nome)}">Ver todas as opções de ${escHtml(data.categoria.nome)} (${data.categoria.total}) →</button>` : ""}
+    ${data.categoria && data.categoria.ir ? `<button type="button" class="ai-ir-cat" data-cat="${escHtml(data.categoria.nome)}">Ver a categoria ${escHtml(data.categoria.nome)} no cardápio →</button>` : ""}
     ${(data.opcoes_rapidas || []).length ? `<div class="ai-cart-balao-ops">${data.opcoes_rapidas.map(o => `<button type="button">${escHtml(o)}</button>`).join("")}</div>` : ""}`;
   balao.querySelector(".ai-cart-balao-x").onclick = () => balao.remove();
   balao.querySelectorAll(".ai-suggested-item").forEach(b => b.onclick = (e) => {
