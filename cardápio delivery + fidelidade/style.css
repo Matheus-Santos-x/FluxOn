@@ -1337,6 +1337,44 @@ backdrop-filter:blur(10px);
   .store-card .meta-label[hidden]{ display:none; }
   .store-card .meta-value{ display:inline; font-size:12.5px; }
 
+  /* ================= CARRINHO: sobe de baixo pra cima, sem as linhas de "notinha" ================= */
+  .drawer{
+    top:auto; left:0; right:0; bottom:0;
+    width:min(520px, 100%); margin:0 auto;
+    max-height:85vh;
+    border-radius:24px 24px 0 0;
+    transform:translateY(110%);
+    box-shadow:0 -10px 50px rgba(0,0,0,.35);
+    overflow:hidden;
+  }
+  .drawer-handle{ width:40px; height:4px; border-radius:99px; background:var(--line); margin:10px auto 0; flex-shrink:0; cursor:pointer; }
+  .drawer-head{ padding:12px 20px 14px; border-bottom:1px solid var(--line); }
+  .drawer-head h2{ font-size:20px; text-transform:none; }
+  .drawer-close{ border-radius:50%; border:1px solid var(--line); font-size:0; }
+  .drawer-close::before{ content:"✕"; font-size:13px; }
+  .receipt-strip{ display:none; }
+  .drawer-body{ background-image:none; padding:6px 20px; }
+  .receipt-item{
+    align-items:center; gap:12px;
+    padding:14px 0;
+    border-bottom:1px solid var(--line);
+    font-family:var(--font-body); font-size:14px;
+  }
+  .receipt-item:last-child{ border-bottom:none; }
+  .receipt-item .ri-name{ font-weight:700; line-height:1.35; }
+  .receipt-item .ri-price{ color:var(--text); font-weight:800; min-width:74px; text-align:right; }
+  .receipt-item .qty-ctrl{
+    margin:0; gap:2px; padding:3px;
+    border:1px solid var(--line); border-radius:100px; background:var(--bg);
+  }
+  .receipt-item .qty-btn{ width:28px; height:28px; border-radius:50%; border:none; background:transparent; font-size:15px; font-weight:700; }
+  .receipt-item .qty-btn:active{ background:var(--surface-2); }
+  .receipt-item .qty-num{ min-width:18px; text-align:center; font-weight:800; font-size:13.5px; }
+  .drawer-empty{ font-family:var(--font-body); font-size:13.5px; }
+  .drawer-foot{ border-top:1px solid var(--line); }
+  .total-row .tot-label{ font-family:var(--font-body); font-size:13px; font-weight:600; text-transform:none; letter-spacing:0; }
+  .total-row .tot-value{ font-family:var(--font-display); font-size:24px; font-weight:400; color:var(--text); }
+
   /* ================= FOTOS MAIORES ================= */
   .item-thumb{ width:112px; height:112px; border-radius:12px; font-size:30px; }
   .bs-card{ width:136px; }
