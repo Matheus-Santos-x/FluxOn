@@ -496,9 +496,38 @@ function atualizarTotalCheckout(){
   }
 }
 
+// item simples que já está no carrinho: o "+" do card vira "− 2 +" (item com tamanho/sabores continua abrindo o popup)
+function atualizarContadoresDosCards(){
+  document.querySelectorAll(".item-card .item-bottom").forEach(box => {
+    const add = box.querySelector("[data-add]");
+    if(!add) return;
+    const id = add.dataset.add;
+    const qtd = (CART.find(c => String(c.id) === String(id)) || {}).qty || 0;
+    let ctr = box.querySelector(".card-qty");
+    if(qtd > 0){
+      add.hidden = true;
+      if(!ctr){
+        ctr = document.createElement("div");
+        ctr.className = "card-qty";
+        ctr.innerHTML = `<button type="button" data-card-menos aria-label="Diminuir"></button><span></span><button type="button" data-card-mais aria-label="Aumentar">+</button>`;
+        box.appendChild(ctr);
+        ctr.addEventListener("click", e => e.stopPropagation()); // não abre o popup do item
+        ctr.querySelector("[data-card-menos]").onclick = () => changeQty(id, -1);
+        ctr.querySelector("[data-card-mais]").onclick = (e) => addToCart(id, e);
+      }
+      ctr.querySelector("span").textContent = qtd;
+      ctr.querySelector("[data-card-menos]").textContent = qtd === 1 ? "×" : "−";
+    }else{
+      ctr?.remove();
+      add.hidden = false;
+    }
+  });
+}
+
 function updateCartUI(){
   const count = cartCount();
   const total = cartTotal();
+  atualizarContadoresDosCards();
 
   document.getElementById("cartBadge").textContent = count;
   document.getElementById("cartFabTotal").textContent = money(total);
