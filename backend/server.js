@@ -3497,6 +3497,75 @@ app.get("/api/v1/pedidos-cliente", async (req, res) => {
 });
 
 // GET - Lista cardápio do restaurante (com filtro opcional por categoria)
+/* ========================================
+   🏷️ ETIQUETAS DO CARDÁPIO (IA) — cada item é marcado uma vez como
+   comida, bebida, sobremesa e/ou petisco (um combo pode ter várias).
+   O cardápio usa isso pra saber o que falta no carrinho, na hora.
+   A IA só roda de novo quando o nome, a descrição ou a categoria mudam.
+======================================== */
+const ETIQUETAS = ["comida", "bebida", "sobremesa", "petisco"];
+const etqHash = (i) => crypto.createHash("md5").update(`${i.nome}|${i.descricao || ""}|${i.categoria || ""}`).digest("hex").slice(0, 16);
+const etqRodando = new Map(); // restaurante → horário da última rodada (evita rodar várias vezes seguidas)
+
+async function etiquetarCardapio(rid) {
+  const ultima = etqRodando.get(rid);
+  if (ultima && Date.now() - ultima < 60 * 1000) return;
+  etqRodando.set(rid, Date.now());
+  try {
+    const { data, error } = await supabase.from("cardapio")
+      .select("id, nome, descricao, categoria, ia_tipos, ia_tipos_hash").eq("restaurant_id", rid);
+    if (error) return; // coluna ainda não criada: ignora
+    const pendentes = (data || []).filter(i => !Array.isArray(i.ia_tipos) || i.ia_tipos_hash !== etqHash(i));
+    for (let k = 0; k < pendentes.length; k += 60) {
+      const lote = pendentes.slice(k, k + 60);
+      const lista = lote.map(i => `${i.id} | ${i.nome} | categoria: ${i.categoria || "-"}${i.descricao ? ` | ${String(i.descricao).slice(0, 200)}` : ""}`).join("\n");
+      const r = await openai.responses.create({
+        model: "gpt-5.6-luna",
+        input: [
+          { role: "system", content: `Classifique cada item de cardápio de restaurante (Brasil) com o que ele contém:
+- "comida": prato salgado, lanche, pizza salgada, esfiha salgada, refeição.
+- "bebida": refrigerante, suco, água, cerveja, drink, café etc. Um combo que vem com bebida (ex.: "01 coca-cola 2lt") também leva "bebida".
+- "sobremesa": doce, sobremesa, pizza/esfiha doce, açaí, sorvete.
+- "petisco": porção ou petisco para beliscar com bebida (fritas, calabresa acebolada, isca, mandioca, bolinho).
+Um item pode ter mais de uma (ex.: combo de esfihas com refrigerante = ["comida","bebida"]). Use o id exatamente como veio.` },
+          { role: "user", content: lista }
+        ],
+        text: { format: { type: "json_schema", name: "etiquetas", strict: true, schema: {
+          type: "object", additionalProperties: false, required: ["itens"],
+          properties: { itens: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "tipos"],
+            properties: { id: { type: "string" }, tipos: { type: "array", items: { type: "string", enum: ETIQUETAS } } } } } }
+        } } },
+        max_output_tokens: 4000
+      });
+      let res = [];
+      try { res = JSON.parse(r.output_text || "{}").itens || []; } catch {}
+      await Promise.all(lote.map(i => {
+        const achado = res.find(x => String(x.id) === String(i.id));
+        if (!achado) return null;
+        const tipos = [...new Set(achado.tipos.filter(t => ETIQUETAS.includes(t)))];
+        return supabase.from("cardapio").update({ ia_tipos: tipos, ia_tipos_hash: etqHash(i) }).eq("id", i.id);
+      }));
+    }
+  } catch (err) {
+    console.error("❌ etiquetas do cardápio:", err.message);
+  }
+}
+
+// junta as etiquetas nos itens (se a coluna ainda não existir, segue sem) e etiqueta o que faltar, em segundo plano
+async function comEtiquetas(rid, itens) {
+  const { data, error } = await supabase.from("cardapio").select("id, ia_tipos, ia_tipos_hash").eq("restaurant_id", rid);
+  if (error || !data) return itens;
+  const porId = new Map(data.map(d => [String(d.id), d]));
+  let faltando = false;
+  const out = itens.map(i => {
+    const d = porId.get(String(i.id));
+    if (!d || !Array.isArray(d.ia_tipos) || d.ia_tipos_hash !== etqHash(i)) faltando = true;
+    return { ...i, ia_tipos: d && Array.isArray(d.ia_tipos) ? d.ia_tipos : null };
+  });
+  if (faltando) etiquetarCardapio(rid); // não espera
+  return out;
+}
+
 app.get("/api/v1/cardapio/:restaurant_id", async (req, res) => {
   const { restaurant_id } = req.params;
   const { categoria, admin } = req.query;
@@ -3517,7 +3586,7 @@ app.get("/api/v1/cardapio/:restaurant_id", async (req, res) => {
     query = query.ilike("categoria", `%${categoria.trim()}%`);
   }
 
-  const { data, error } = await query;
+  let { data, error } = await query;
   if (error) return sendError(res, 500, "Erro ao buscar cardápio");
 
   // Busca ordem das categorias salva pelo admin
@@ -3528,6 +3597,7 @@ app.get("/api/v1/cardapio/:restaurant_id", async (req, res) => {
     .single();
 
   const ordemCategorias = config?.categorias_ordem;
+  if (!isAdmin) data = await comEtiquetas(restaurant_id, data || []);
 
   if (!ordemCategorias || ordemCategorias.length === 0) {
     return res.json(data);
@@ -6680,7 +6750,7 @@ const iaNorm = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/
 // uma linha por item, com as opções (tamanhos) e a regra dos 2 sabores
 function iaLinhaItem(i, cardapio) {
   const ops = Array.isArray(i.opcoes) ? i.opcoes : [];
-  const desc = i.descricao ? ` — ${String(i.descricao).slice(0, 140)}` : "";
+  const desc = (i.descricao ? ` — ${String(i.descricao).slice(0, 140)}` : "") + (i.ia_tipos?.length ? ` {${i.ia_tipos.join(", ")}}` : "");
   if (!ops.length) return `- ${i.nome} [${i.categoria || "Geral"}]: ${iaMoeda(i.preco)}${desc}`;
   const partes = ops.map(op => {
     if (!op.texto_livre) return `${op.nome} ${iaMoeda(op.preco)}`;
@@ -6791,7 +6861,7 @@ app.post("/api/v1/ia/sugestao", async (req, res) => {
       iaContextoLoja(restaurant_id)
     ]);
     if (error) return sendError(res, 500, "Erro ao buscar cardápio");
-    const itens = cardapio || [];
+    const itens = await comEtiquetas(restaurant_id, cardapio || []);
     const cardapioTexto = itens.map(i => iaLinhaItem(i, itens)).join("\n");
     const contagem = {};
     itens.forEach(i => { const c = i.categoria || "Geral"; contagem[c] = (contagem[c] || 0) + 1; });
