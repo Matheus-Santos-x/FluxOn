@@ -181,8 +181,9 @@ function balaoDesenhar(balao, data){
     setTimeout(() => document.getElementById("sec-" + slug(ir.dataset.cat))?.scrollIntoView({ behavior:"smooth", block:"start" }), 350);
   };
   balao.querySelectorAll(".ai-cart-balao-ops button").forEach(b => b.onclick = async () => {
-    const texto = b.textContent.trim();
+    let texto = b.textContent.trim();
     if(/^n[aã]o/i.test(texto)){ balao.remove(); return; }
+    if(data._pedido && /^sim/i.test(texto)) texto = data._pedido;
     AI_HISTORY.push({ role:"user", content:texto });
     balao.querySelector(".ai-cart-balao-ops")?.remove();
     balao.querySelector(".ai-cart-balao-top p").innerHTML = `<span class="ai-typing-dot"></span><span class="ai-typing-dot"></span><span class="ai-typing-dot"></span>`;
@@ -192,12 +193,27 @@ function balaoDesenhar(balao, data){
     balaoDesenhar(balao, d);
   });
 }
+// o que faltou no carrinho, olhando as categorias (sem esperar a IA): bebida primeiro, depois sobremesa
+const IA_FALTA = [
+  { re:/bebida|refri|suco|cerveja|chop|drink|agua|vinho|dose|cha |cafe/, nome:"bebida", pedido:"Quero adicionar uma bebida" },
+  { re:/sobremesa|doce|acai|sorvete|torta|bolo|pudim|brownie|milk ?shake/, nome:"sobremesa", pedido:"Quero adicionar uma sobremesa" }
+];
+function iaOQueFalta(){
+  const cats = [...new Set(MENU.map(i => semAcento(i.categoria || "")))];
+  const noCarrinho = CART.map(c => MENU.find(m => String(m.id) === String(c.id).split("__")[0])).filter(Boolean)
+    .map(i => semAcento(i.categoria || ""));
+  return IA_FALTA.find(f => cats.some(c => f.re.test(c + " ")) && !noCarrinho.some(c => f.re.test(c + " "))) || null;
+}
+
 async function iaNoCarrinho(){
   if(IS_DEMO || !CART.length || AI_CARRINHO_FEITO) return;
+  const falta = iaOQueFalta();
+  if(!falta) return;
   AI_CARRINHO_FEITO = true;
-  const data = await iaPerguntar("__carrinho__");
-  if(!data || data.pular || !data.resposta) return;
-  if(!data.opcoes_rapidas || !data.opcoes_rapidas.length) data.opcoes_rapidas = ["Sim", "Não, obrigado"];
+  const data = {
+    resposta: `Vi que você não adicionou nenhuma ${falta.nome}. Quer adicionar?`,
+    opcoes_rapidas: ["Sim", "Não, obrigado"], itens: [], categoria: null, _pedido: falta.pedido
+  };
   AI_HISTORY.push({ role:"assistant", content:data.resposta });
   document.getElementById("aiCartBalao")?.remove();
   const balao = document.createElement("div");
