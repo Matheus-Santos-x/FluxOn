@@ -711,27 +711,43 @@ function getFieldValues(){
 }
 
 function buildEndereco(v){
-  return `${v.rua}, ${v.numero}${v.complemento ? " - " + v.complemento : ""} - ${v.bairro}${v.referencia ? " (Ref: " + v.referencia + ")" : ""}`;
+  const cidade = CEP_INFO ? ` - ${CEP_INFO.cidade}/${CEP_INFO.uf} - CEP ${CEP_INFO.cep}` : "";
+  return `${v.rua}, ${v.numero}${v.complemento ? " - " + v.complemento : ""} - ${v.bairro}${cidade}${v.referencia ? " (Ref: " + v.referencia + ")" : ""}`;
 }
 
-function basePayload(v, extra){
-  return {
-    restaurant_id: RESTAURANT_ID,
-    client_name: v.nome,
-    client_phone: v.telefone,
-    // manda nos dois formatos (name/qty/price E nome/quantidade/preco)
-    // porque é assim que o backend e a rota de impressão leem os itens
-    itens: CART.map(c => ({
-      name:c.nome, nome:c.nome,
-      qty:c.qty, quantidade:c.qty,
-      price:c.preco, preco:c.preco
-    })),
-    total_price: cartTotal(),
-    origin: "cardapio_delivery",
-    ...(CURRENT_ORDER_ID ? { order_id: CURRENT_ORDER_ID } : {}),
-    ...extra
-  };
-}
+/* CEP: digitou os 8 números → busca rua, bairro e cidade e deixa só o número pra pessoa preencher */
+let CEP_INFO = null;
+(function(){
+  const inp = document.getElementById("inpCep"), info = document.getElementById("cepInfo");
+  if(!inp) return;
+  let ultimo = "";
+  inp.addEventListener("input", async () => {
+    const d = inp.value.replace(/\D/g, "").slice(0, 8);
+    inp.value = d.length > 5 ? d.slice(0, 5) + "-" + d.slice(5) : d;
+    if(d.length < 8){ CEP_INFO = null; info.textContent = ""; info.className = "cep-info"; ultimo = ""; return; }
+    if(d === ultimo) return;
+    ultimo = d;
+    info.className = "cep-info"; info.textContent = "Buscando endereço...";
+    try{
+      const r = await fetch(`https://viacep.com.br/ws/${d}/json/`);
+      const j = await r.json();
+      if(d !== ultimo) return;               // digitou outro CEP enquanto buscava
+      if(!r.ok || j.erro) throw new Error("nao achou");
+      CEP_INFO = { cep: inp.value, cidade: j.localidade || "", uf: j.uf || "" };
+      if(j.logradouro) document.getElementById("inpRua").value = j.logradouro;
+      if(j.bairro) document.getElementById("inpBairro").value = j.bairro;
+      info.className = "cep-info ok";
+      info.textContent = `📍 ${[j.bairro, j.localidade && j.localidade + "/" + j.uf].filter(Boolean).join(" · ")}`;
+      const alvo = j.logradouro ? "inpNumero" : "inpRua"; // CEP de cidade inteira não traz a rua
+      setTimeout(() => document.getElementById(alvo).focus(), 50);
+    }catch(e){
+      if(d !== ultimo) return;
+      CEP_INFO = null;
+      info.className = "cep-info erro";
+      info.textContent = "Não achamos esse CEP. Preencha o endereço abaixo.";
+    }
+  });
+})();
 
 /* STEP 1 → salva o lead na hora (nome + telefone), mesmo que ele
    desista depois — fica registrado como rascunho pra follow-up */
