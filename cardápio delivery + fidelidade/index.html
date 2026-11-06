@@ -196,6 +196,11 @@
     <!-- STEP 2 — endereço -->
     <div class="checkout-step" id="step2" style="display:none;">
       <h2>Endereço de entrega</h2>
+      <div class="field">
+        <label for="inpCep">CEP</label>
+        <input type="text" id="inpCep" placeholder="00000-000" inputmode="numeric" maxlength="9" autocomplete="postal-code">
+        <div class="cep-info" id="cepInfo"></div>
+      </div>
       <div class="field-row">
         <div class="field" style="flex:2">
           <label>Rua</label>
