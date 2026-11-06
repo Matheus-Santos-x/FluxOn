@@ -166,9 +166,10 @@ if("serviceWorker" in navigator){
     const cfg = (typeof RESTAURANT_CONFIG !== "undefined" && RESTAURANT_CONFIG) || {};
     if(cfg.nome_exibicao) $i("instNome").textContent = cfg.nome_exibicao;
     // mesma logo que aparece no topo do cardápio
-    const logo = cfg.logo_url || document.querySelector("#brandLogo img")?.src || "icon-192.png";
+    const iconeApp = document.getElementById("appleIcon").href;
+    const logo = cfg.logo_url || document.querySelector("#brandLogo img")?.src || iconeApp;
     const img = $i("instLogo");
-    img.onerror = () => { img.onerror = null; img.src = "icon-192.png"; };
+    img.onerror = () => { img.onerror = null; img.src = iconeApp; };
     img.classList.remove("hidden"); img.src = logo;
     $i("instDica").classList.add("hidden");
     fundo.classList.remove("hidden"); document.body.classList.add("inst-aberto");
