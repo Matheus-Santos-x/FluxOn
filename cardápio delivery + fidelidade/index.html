@@ -284,6 +284,22 @@
   </div>
 </div>
 
+<!-- convite pra instalar o app (aparece toda vez até o cliente instalar) -->
+<div class="inst-fundo hidden" id="instFundo">
+  <div class="inst-card" role="dialog" aria-modal="true" aria-labelledby="instTitulo">
+    <img class="inst-logo" id="instLogo" src="icon-192.png" alt="">
+    <h2 id="instTitulo">Tenha o <span id="instNome">cardápio</span> no seu celular</h2>
+    <ul class="inst-lista">
+      <li><b>Peça em 1 toque:</b> abre direto da tela inicial, sem procurar link.</li>
+      <li><b>Mais rápido:</b> seus dados de entrega ficam salvos para os próximos pedidos.</li>
+      <li><b>100% seguro:</b> não pede nenhuma permissão, não expõe nenhum dado e quase não ocupa espaço.</li>
+    </ul>
+    <p class="inst-dica hidden" id="instDica"></p>
+    <button class="inst-sim" id="instSim" type="button">Adicionar à tela inicial</button>
+    <button class="inst-nao" id="instNao" type="button">Agora não</button>
+  </div>
+</div>
+
 <script src="comum.js"></script>
 <script src="cardapio.js"></script>
 <script src="AI.js"></script>
