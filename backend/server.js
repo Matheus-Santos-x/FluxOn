@@ -3428,6 +3428,7 @@ if (req.query.desde) {
           else if (parte.includes("debito") || parte.includes("débito")) metodo = "Débito";
           else if (parte.includes("dinheiro")) metodo = "Dinheiro";
           else if (parte.includes("maquininha")) metodo = "Maquininha";
+          else if (parte.includes("refeicao") || parte.includes("refeição")) metodo = "Vale-refeição";
           else if (parte.includes("vale") || parte.includes("voucher")) metodo = "Voucher";
           if (!porPagamento[metodo]) porPagamento[metodo] = { qtd: 0, valor: 0 };
           porPagamento[metodo].qtd++;
@@ -3440,6 +3441,7 @@ if (req.query.desde) {
         else if (paymentStr.includes("debito") || paymentStr.includes("débito")) metodo = "Débito";
         else if (paymentStr.includes("dinheiro")) metodo = "Dinheiro";
         else if (paymentStr.includes("maquininha")) metodo = "Maquininha";
+        else if (paymentStr.includes("refeicao") || paymentStr.includes("refeição")) metodo = "Vale-refeição";
         else if (paymentStr.includes("vale") || paymentStr.includes("voucher")) metodo = "Voucher";
         if (!porPagamento[metodo]) porPagamento[metodo] = { qtd: 0, valor: 0 };
         porPagamento[metodo].qtd++;
@@ -4524,6 +4526,7 @@ function formaPagamentoNFCe(texto) {
   if (t.includes("credito") || t.includes("crédito") || t.includes("credit")) return "03";
   if (t.includes("debito") || t.includes("débito") || t.includes("debit")) return "04";
   if (t.includes("pix")) return "17";
+  if (t.includes("refeicao") || t.includes("refeição")) return "11";
   if (t.includes("vale") || t.includes("voucher")) return "12";
   return "99";
 }
