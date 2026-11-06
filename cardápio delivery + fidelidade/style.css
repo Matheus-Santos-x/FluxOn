@@ -1,21 +1,21 @@
 /* ================= CONVITE PRA INSTALAR O APP ================= */
-.inst-fundo{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.62);display:flex;align-items:flex-end;justify-content:center;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom));animation:instFade .25s ease}
+.inst-fundo{position:fixed;inset:0;z-index:400;background:rgba(10,8,6,.6);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;padding:20px;animation:instFade .25s ease}
 .inst-fundo.hidden{display:none}
-.inst-card{width:100%;max-width:420px;background:#fff;color:#1a1814;border-radius:24px;padding:26px 22px 18px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35);animation:instSobe .35s cubic-bezier(.2,.9,.3,1.1)}
-.inst-logo{width:72px;height:72px;border-radius:20px;object-fit:cover;margin:0 auto 12px;display:block;box-shadow:0 6px 18px rgba(0,0,0,.15)}
-.inst-card h2{font-family:var(--font-display);font-size:21px;line-height:1.2;margin-bottom:14px}
-.inst-lista{list-style:none;text-align:left;display:grid;gap:10px;margin-bottom:16px;font-size:14px;line-height:1.4;color:#3a3630}
-.inst-lista li{padding-left:26px;position:relative}
-.inst-lista li::before{content:"✓";position:absolute;left:0;top:0;width:18px;height:18px;border-radius:50%;background:var(--red);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
-.inst-lista b{color:#1a1814}
-.inst-dica{background:#f5f5f5;border-radius:12px;padding:12px;font-size:13px;line-height:1.45;margin-bottom:12px;text-align:left}
+.inst-card{width:100%;max-width:400px;background:rgba(255,255,255,.16);-webkit-backdrop-filter:blur(22px) saturate(1.4);backdrop-filter:blur(22px) saturate(1.4);border:1px solid rgba(255,255,255,.32);color:#fff;border-radius:26px;padding:28px 22px 18px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.35);animation:instSobe .35s cubic-bezier(.2,.9,.3,1.1)}
+.inst-logo{width:84px;height:84px;border-radius:24px;object-fit:cover;margin:0 auto 14px;display:block;background:#fff;box-shadow:0 8px 22px rgba(0,0,0,.25)}
+.inst-logo.hidden{display:none}
+.inst-card h2{font-family:var(--font-display);font-size:22px;line-height:1.2;margin-bottom:16px;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.35)}
+.inst-lista{list-style:none;text-align:left;display:grid;gap:11px;margin-bottom:18px;font-size:14px;line-height:1.45;color:rgba(255,255,255,.92);text-shadow:0 1px 6px rgba(0,0,0,.35)}
+.inst-lista li{padding-left:28px;position:relative}
+.inst-lista li::before{content:"✓";position:absolute;left:0;top:1px;width:19px;height:19px;border-radius:50%;background:var(--red);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;text-shadow:none}
+.inst-lista b{color:#fff}
+.inst-dica{background:rgba(0,0,0,.35);border-radius:12px;padding:12px;font-size:13px;line-height:1.45;margin-bottom:12px;text-align:left;color:#fff}
 .inst-dica.hidden{display:none}
-.inst-sim{width:100%;min-height:52px;border-radius:14px;background:var(--red)!important;color:#fff!important;font-size:16px;font-weight:800;box-shadow:0 8px 22px color-mix(in srgb, var(--red) 40%, transparent)}
-.inst-nao{width:100%;min-height:44px;margin-top:6px;color:#8a8a8a!important;font-size:14px;font-weight:700}
+.inst-sim{width:100%;min-height:52px;border-radius:14px;background:var(--red)!important;color:#fff!important;font-size:16px;font-weight:800;box-shadow:0 8px 22px color-mix(in srgb, var(--red) 45%, transparent)}
+.inst-nao{width:100%;min-height:44px;margin-top:6px;color:rgba(255,255,255,.8)!important;font-size:14px;font-weight:700}
 body.inst-aberto{overflow:hidden}
 @keyframes instFade{from{opacity:0}to{opacity:1}}
-@keyframes instSobe{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
-
+@keyframes instSobe{from{transform:translateY(24px) scale(.97);opacity:0}to{transform:none;opacity:1}}
 /* ================= TOKENS ================= */
   :root{
 --bg:#ffffff;
