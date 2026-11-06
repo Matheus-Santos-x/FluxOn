@@ -229,7 +229,7 @@
   window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedidoInstalar = e; if (st.owner) montarAvatar(); atualizarFab(); });
   window.addEventListener("appinstalled", () => { pedidoInstalar = null; toast("App instalado! Abra pelo ícone na tela inicial."); if (st.owner) montarAvatar(); atualizarFab(); });
   // bolinha de download na tela de login (link com ?instalar mostra o texto "Instalar app" junto)
-  function atualizarFab() { $("fab-instalar")?.classList.toggle("hidden", !podeInstalar()); }
+  function atualizarFab() { $("fab-instalar")?.classList.toggle("hidden", instalado()); }
   if (/[?&]instalar\b/.test(location.search)) $("fab-instalar")?.classList.add("com-texto");
   $("fab-instalar")?.addEventListener("click", () => { instalarApp().then(atualizarFab); });
   atualizarFab();
@@ -241,6 +241,7 @@
       return;
     }
     if (ehIOS) toast("No iPhone: toque em Compartilhar (quadrado com a seta) e depois em \"Adicionar à Tela de Início\".", 9000);
+    else toast("Toque nos 3 pontinhos (⋮) do navegador e depois em \"Instalar app\" ou \"Adicionar à tela inicial\".", 9000);
   }
 
   function montarAvatar() {
