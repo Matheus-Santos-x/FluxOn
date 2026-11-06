@@ -160,14 +160,20 @@ if("serviceWorker" in navigator){
   window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedido = e; });
   window.addEventListener("appinstalled", () => { pedido = null; fechar(); });
   function fechar(){ fundo.classList.add("hidden"); document.body.classList.remove("inst-aberto"); }
-  function abrir(){
+  
+   function abrir(){
     if(instalado() || !fundo) return;
-    const nome = (typeof RESTAURANT_CONFIG !== "undefined" && RESTAURANT_CONFIG.nome_exibicao) || "";
-    if(nome) $i("instNome").textContent = nome;
-    if(typeof RESTAURANT_CONFIG !== "undefined" && RESTAURANT_CONFIG.logo_url) $i("instLogo").src = RESTAURANT_CONFIG.logo_url;
+    const cfg = (typeof RESTAURANT_CONFIG !== "undefined" && RESTAURANT_CONFIG) || {};
+    if(cfg.nome_exibicao) $i("instNome").textContent = cfg.nome_exibicao;
+    // mesma logo que aparece no topo do cardápio
+    const logo = cfg.logo_url || document.querySelector("#brandLogo img")?.src || "icon-192.png";
+    const img = $i("instLogo");
+    img.onerror = () => { img.onerror = null; img.src = "icon-192.png"; };
+    img.classList.remove("hidden"); img.src = logo;
     $i("instDica").classList.add("hidden");
     fundo.classList.remove("hidden"); document.body.classList.add("inst-aberto");
   }
+   
   $i("instNao").onclick = fechar;
   fundo.addEventListener("click", (e) => { if(e.target === fundo) fechar(); });
   $i("instSim").onclick = async () => {
