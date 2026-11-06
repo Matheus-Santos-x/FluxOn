@@ -655,6 +655,24 @@ border: none;
   padding: 10px;
 }
 
+/* ===== BOTÃO INSTALAR O APP ===== */
+.fab-instalar {
+  position: fixed; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 90;
+  height: 52px; padding: 0 20px 0 16px; border-radius: 999px; border: none;
+  background: #e53935; color: #fff; font: inherit; font-weight: 700; font-size: 14px;
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  box-shadow: 0 10px 28px rgba(229, 57, 53, 0.4);
+}
+.fab-instalar:hover { filter: brightness(1.08); }
+.fab-instalar:active { transform: scale(0.96); }
+.fab-dica {
+  position: fixed; right: 18px; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); z-index: 90;
+  max-width: 320px; padding: 12px 14px; border-radius: 12px; background: #141414;
+  border: 1px solid rgba(255, 255, 255, 0.12); color: rgba(252, 228, 228, 0.95); font-size: 13px; line-height: 1.45;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+}
+@media (max-width: 600px) { .fab-instalar { width: 52px; padding: 0; justify-content: center; } .fab-instalar span { display: none; } }
+
 /* ===== LOGIN ===== */
 .login-screen {
   position: fixed;
