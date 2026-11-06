@@ -4029,6 +4029,101 @@ app.get("/api/v1/dominio-cardapio/:dominio", async (req, res) => {
   return res.json({ restaurant_id: data.id });
 });
 
+/* ========================================
+   📱 APP DO CARDÁPIO (PWA) DE CADA RESTAURANTE
+   Cada restaurante vira um app com o próprio nome e a própria logo
+   (a mesma logo_url que o cardápio mostra no círculo). O cardápio
+   aponta o <link rel="manifest"> e os ícones pra cá.
+======================================== */
+const appIconCache = new Map(); // "rid|logo|cor|tipo" → png
+async function appRestaurante(req) {
+  let rid = String(req.query.r || "").trim() || null;
+  const dominio = normalizarDominio(req.query.d);
+  if (!rid && dominio) {
+    for (const coluna of ["cardapio_delivery_url", "fidelidade_url"]) {
+      const { data } = await supabase.from("restaurants").select("id").eq(coluna, dominio).limit(1);
+      if (data?.[0]) { rid = data[0].id; break; }
+    }
+  }
+  if (!rid) return null;
+  const [{ data: rest }, { data: cfg }] = await Promise.all([
+    supabase.from("restaurants").select("id, name").eq("id", rid).maybeSingle(),
+    supabase.from("restaurante_config").select("nome_exibicao, logo_url, cor_primaria").eq("restaurant_id", rid).maybeSingle()
+  ]);
+  if (!rest) return null;
+  return {
+    rid, dominio,
+    nome: String(cfg?.nome_exibicao || rest.name || "Cardápio").trim(),
+    logo: cfg?.logo_url || null,
+    cor: /^#[0-9a-f]{6}$/i.test(cfg?.cor_primaria || "") ? cfg.cor_primaria : "#d62828"
+  };
+}
+
+app.get("/api/v1/app/manifest.json", async (req, res) => {
+  try {
+    const a = await appRestaurante(req);
+    if (!a) return sendError(res, 404, "Restaurante não encontrado");
+    const icone = `https://${req.get("host")}/api/v1/app/icone`;
+    const q = `r=${encodeURIComponent(a.rid)}`;
+    const origem = a.dominio ? `https://${a.dominio}/` : "./";
+    const curto = a.nome.length > 15 ? a.nome.split(/\s+/)[0].slice(0, 15) : a.nome;
+    res.set("Content-Type", "application/manifest+json; charset=utf-8");
+    res.set("Cache-Control", "public, max-age=300");
+    return res.json({
+      id: origem, name: a.nome, short_name: curto, description: `Cardápio e pedidos do ${a.nome}`,
+      start_url: origem, scope: origem, display: "standalone", lang: "pt-BR",
+      background_color: "#ffffff", theme_color: a.cor,
+      icons: [
+        { src: `${icone}/192.png?${q}`, sizes: "192x192", type: "image/png", purpose: "any" },
+        { src: `${icone}/512.png?${q}`, sizes: "512x512", type: "image/png", purpose: "any" },
+        { src: `${icone}/maskable.png?${q}`, sizes: "512x512", type: "image/png", purpose: "maskable" }
+      ]
+    });
+  } catch (err) {
+    console.error("❌ manifest do app:", err.message);
+    return sendError(res, 500, "Erro ao montar o app");
+  }
+});
+
+// ícone do app: a logo do restaurante recortada em quadrado (192, 512 e "maskable" com margem)
+app.get("/api/v1/app/icone/:tipo", async (req, res) => {
+  try {
+    const tipo = String(req.params.tipo).replace(/\.png$/, "");
+    if (!["192", "512", "maskable"].includes(tipo)) return sendError(res, 404, "Ícone não encontrado");
+    const a = await appRestaurante(req);
+    if (!a) return sendError(res, 404, "Restaurante não encontrado");
+    const chave = `${a.rid}|${a.logo}|${a.cor}|${tipo}`;
+    let png = appIconCache.get(chave);
+    if (!png) {
+      const sharp = (await import("sharp")).default;
+      const tam = tipo === "192" ? 192 : 512;
+      const miolo = tipo === "maskable" ? Math.round(tam * 0.72) : tam;
+      let img = null;
+      if (a.logo) {
+        try {
+          const r = await fetch(a.logo);
+          if (r.ok) img = await sharp(Buffer.from(await r.arrayBuffer())).resize(miolo, miolo, { fit: "cover" }).flatten({ background: "#ffffff" }).png().toBuffer();
+        } catch { img = null; }
+      }
+      if (!img) { // sem logo: um prato branco na cor do restaurante
+        const m = miolo;
+        img = await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${m}" height="${m}"><rect width="${m}" height="${m}" fill="${a.cor}"/><circle cx="${m / 2}" cy="${m / 2}" r="${m * 0.3}" fill="none" stroke="#fff" stroke-width="${m * 0.045}"/><circle cx="${m / 2}" cy="${m / 2}" r="${m * 0.19}" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="${m * 0.02}"/></svg>`)).png().toBuffer();
+      }
+      png = tipo === "maskable"
+        ? await sharp({ create: { width: tam, height: tam, channels: 4, background: "#ffffff" } }).composite([{ input: img, gravity: "center" }]).png().toBuffer()
+        : img;
+      appIconCache.set(chave, png);
+      if (appIconCache.size > 500) appIconCache.delete(appIconCache.keys().next().value);
+    }
+    res.set("Content-Type", "image/png");
+    res.set("Cache-Control", "public, max-age=86400");
+    return res.send(png);
+  } catch (err) {
+    console.error("❌ ícone do app:", err.message);
+    return sendError(res, 500, "Erro ao gerar o ícone");
+  }
+});
+
 app.get("/api/v1/dominio-delivery/:dominio", async (req, res) => {
   const dominio = normalizarDominio(req.params.dominio);
   if (!dominio) return sendError(res, 404, "Domínio não encontrado");
