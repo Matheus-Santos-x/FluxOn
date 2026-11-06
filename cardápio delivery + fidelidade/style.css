@@ -16,6 +16,7 @@
 body.inst-aberto{overflow:hidden}
 @keyframes instFade{from{opacity:0}to{opacity:1}}
 @keyframes instSobe{from{transform:translateY(24px) scale(.97);opacity:0}to{transform:none;opacity:1}}
+
 /* ================= TOKENS ================= */
   :root{
 --bg:#ffffff;
@@ -834,6 +835,10 @@ backdrop-filter:blur(10px);
     border-color:var(--red);
   }
   .field-row{display:flex; gap:10px;}
+  .cep-info{font-size:12px; font-weight:700; color:var(--muted); margin-top:6px; min-height:0;}
+  .cep-info:empty{display:none;}
+  .cep-info.ok{color:#15803d;}
+  .cep-info.erro{color:var(--red);}
   .field-row .field{flex:1;}
 
   .pay-options{display:flex; flex-direction:column; gap:8px;}
