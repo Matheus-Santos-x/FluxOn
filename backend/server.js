@@ -5764,6 +5764,37 @@ app.post("/api/v1/restaurante/:restaurant_id/mp/cobrar", async (req, res) => {
     if (!config?.mp_access_token || !config?.mp_device_id)
       return sendError(res, 400, "Mercado Pago não configurado");
 
+    // cobrança parcial (tela Cobrar) pela API nova do Mercado Pago (Orders):
+    // o caixa acompanha o status e lança o pagamento; o pedido não é finalizado aqui
+    if (req.body?.parcial) {
+      const tipoMp = { credito: "credit_card", debito: "debit_card", pix: "qr" }[metodo];
+      const r = await fetch("https://api.mercadopago.com/v1/orders", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${config.mp_access_token}`,
+          "Content-Type": "application/json",
+          "X-Idempotency-Key": crypto.randomUUID()
+        },
+        body: JSON.stringify({
+          type: "point",
+          external_reference: `${String(order_id).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40)}-${Date.now()}`,
+          expiration_time: "PT3M",
+          transactions: { payments: [{ amount: Number(valor).toFixed(2) }] },
+          config: {
+            point: { terminal_id: config.mp_device_id, print_on_terminal: "seller_ticket" },
+            ...(tipoMp ? { payment_method: { default_type: tipoMp } } : {})
+          },
+          description: `Pedido ${order_id}`.slice(0, 150)
+        })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        console.error("❌ Erro MP Orders:", r.status, JSON.stringify(d));
+        return sendError(res, 502, d.message || d.errors?.[0]?.message || `Mercado Pago recusou (${r.status})`);
+      }
+      return res.json({ success: true, payment_intent_id: d.id });
+    }
+
     const paymentTypeMap = {
       credito: "credit_card",
       debito:  "debit_card",
@@ -5909,22 +5940,19 @@ app.post("/api/v1/restaurante/:restaurant_id/mp/cobrar", async (req, res) => {
   }
 });
 
-// status de uma cobrança na maquininha: aguardando | pago | cancelado
+// status de uma cobrança na maquininha (API Orders): aguardando | pago | cancelado
 app.get("/api/v1/restaurante/:restaurant_id/mp/intent/:intent_id", async (req, res) => {
   try {
     const config = await getIntegracao(req.params.restaurant_id, "maquininha");
     if (!config?.mp_access_token) return sendError(res, 400, "Mercado Pago não configurado");
-    const h = { Authorization: `Bearer ${config.mp_access_token}` };
-    const r = await fetch(`https://api.mercadopago.com/point/integration-api/payment-intents/${encodeURIComponent(req.params.intent_id)}`, { headers: h });
+    const r = await fetch(`https://api.mercadopago.com/v1/orders/${encodeURIComponent(req.params.intent_id)}`,
+      { headers: { Authorization: `Bearer ${config.mp_access_token}` } });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return sendError(res, 502, d.message || "Erro ao consultar a maquininha");
-    if (["CANCELED", "ERROR", "ABANDONED"].includes(d.state)) return res.json({ estado: "cancelado", mp: d.state });
-    if (d.state === "FINISHED" && d.payment?.id) {
-      const p = await fetch(`https://api.mercadopago.com/v1/payments/${d.payment.id}`, { headers: h }).then(x => x.json()).catch(() => ({}));
-      if (p.status === "approved") return res.json({ estado: "pago", payment_id: d.payment.id, tipo: p.payment_type_id });
-      if (["rejected", "cancelled", "refunded"].includes(p.status)) return res.json({ estado: "cancelado", mp: p.status });
-    }
-    return res.json({ estado: "aguardando", mp: d.state });
+    const pg = d.transactions?.payments?.[0] || {};
+    if (d.status === "processed") return res.json({ estado: "pago", payment_id: pg.id, tipo: pg.payment_method?.type });
+    if (["canceled", "failed", "expired", "refunded"].includes(d.status)) return res.json({ estado: "cancelado", mp: d.status, detalhe: d.status_detail });
+    return res.json({ estado: "aguardando", mp: d.status });
   } catch (err) {
     console.error("❌ Erro em /mp/intent:", err.message);
     return sendError(res, 500, "Erro interno");
@@ -5935,14 +5963,34 @@ app.get("/api/v1/restaurante/:restaurant_id/mp/intent/:intent_id", async (req, r
 app.post("/api/v1/restaurante/:restaurant_id/mp/cancelar", async (req, res) => {
   try {
     const config = await getIntegracao(req.params.restaurant_id, "maquininha");
-    if (!config?.mp_access_token || !config?.mp_device_id) return sendError(res, 400, "Mercado Pago não configurado");
+    if (!config?.mp_access_token) return sendError(res, 400, "Mercado Pago não configurado");
     const id = String(req.body?.payment_intent_id || "");
     if (!id) return sendError(res, 400, "payment_intent_id é obrigatório");
-    const r = await fetch(`https://api.mercadopago.com/point/integration-api/devices/${config.mp_device_id}/payment-intents/${encodeURIComponent(id)}`,
-      { method: "DELETE", headers: { Authorization: `Bearer ${config.mp_access_token}` } });
+    const r = await fetch(`https://api.mercadopago.com/v1/orders/${encodeURIComponent(id)}/cancel`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.mp_access_token}`,
+        "X-Idempotency-Key": crypto.randomUUID(),
+        "x-allow-cancelable-status": "at_terminal"
+      }
+    });
     return res.json({ success: r.ok });
   } catch (err) {
     console.error("❌ Erro em /mp/cancelar:", err.message);
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// lista as maquininhas da conta (pra achar o Device ID e ver se está em PDV)
+app.get("/api/v1/restaurante/:restaurant_id/mp/terminais", async (req, res) => {
+  try {
+    const config = await getIntegracao(req.params.restaurant_id, "maquininha");
+    if (!config?.mp_access_token) return sendError(res, 400, "Salve o Access Token da maquininha primeiro");
+    const r = await fetch("https://api.mercadopago.com/terminals/v1/list?limit=50",
+      { headers: { Authorization: `Bearer ${config.mp_access_token}` } });
+    const d = await r.json().catch(() => ({}));
+    return res.status(r.ok ? 200 : 502).json({ ok: r.ok, status: r.status, ...d });
+  } catch (err) {
     return sendError(res, 500, "Erro interno");
   }
 });
@@ -5954,17 +6002,14 @@ app.post("/api/v1/restaurante/:restaurant_id/mp/ativar-pdv", async (req, res) =>
     if (!config?.mp_access_token || !config?.mp_device_id)
       return sendError(res, 400, "Maquininha não configurada");
 
-    const mpResp = await fetch(
-      `https://api.mercadopago.com/point/integration-api/devices/${config.mp_device_id}`,
-      {
-        method: "PATCH",
-        headers: {
-          "Authorization": `Bearer ${config.mp_access_token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ operating_mode: "PDV" })
-      }
-    );
+    const mpResp = await fetch("https://api.mercadopago.com/terminals/v1/setup", {
+      method: "PATCH",
+      headers: {
+        "Authorization": `Bearer ${config.mp_access_token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ terminals: [{ id: config.mp_device_id, operating_mode: "PDV" }] })
+    });
 
     const data = await mpResp.json();
     console.log("🔧 Ativar PDV:", data);
