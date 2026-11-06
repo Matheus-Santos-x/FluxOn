@@ -4146,12 +4146,14 @@ const cobNome = (m) => (COB_METODOS.find(x => x[0] === m) || [m, m])[1];
 const cobSvg = (d, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const cobR = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const cobTxtPag = (p) => p.metodo === "vale_refeicao" ? "vale-refeição" : vpTextoPagamento(p);
+const COB_MAQ = ["pix", "credito", "debito"]; // vão pra maquininha quando o Mercado Pago Point está configurado
 
 function abrirCobranca(pedidos, juntos) {
   document.getElementById("payment-modal")?.remove();
   const total = cobR(pedidos.reduce((s, o) => s + parseFloat(o.total_price || 0), 0));
-  const pags = [];            // { metodo, valor, recebido, troco, codigo, vpOk, vpSaldo }
+  const pags = [];    
   let metodo = null, digitado = 0, vp = null, vpErro = "", finalizando = false;
+  let mpAtivo = false, aguard = null, maqErro = "";  
 
   const modal = document.createElement("div");
   modal.id = "payment-modal";
@@ -4193,7 +4195,7 @@ function abrirCobranca(pedidos, juntos) {
         <label class="cob-rot" for="cob-valor">${metodo === "dinheiro" ? "Quanto o cliente entregou em dinheiro?" : "Valor no " + cobNome(metodo).toLowerCase()}</label>
         <div class="cob-linha">
           <input id="cob-valor" class="cob-inp" inputmode="numeric" autocomplete="off" value="${formatCurrency(digitado)}">
-          <button class="cob-go" data-a="add">Adicionar</button>
+          <button class="cob-go" data-a="add">${mpAtivo && COB_MAQ.includes(metodo) ? "Cobrar" : "Adicionar"}</button>
         </div>
         ${chips ? `<div class="cob-chips">${chips}</div>` : ""}
         <div id="cob-troco-prev" class="cob-troco-prev"></div>
@@ -4201,8 +4203,8 @@ function abrirCobranca(pedidos, juntos) {
   }
 
   function render() {
-    const f = falta(), tr = troco(), travado = pags.length > 0;
-    const pode = f <= 0.009 && pags.length > 0 && !finalizando;
+    const f = falta(), tr = troco(), travado = pags.length > 0 || !!aguard;
+    const pode = f <= 0.009 && pags.length > 0 && !finalizando && !aguard;
     const p0 = pedidos[0];
     modal.innerHTML = `
       <div class="cob" role="dialog" aria-label="Cobrar">
@@ -4235,12 +4237,22 @@ function abrirCobranca(pedidos, juntos) {
 
         ${pags.length ? `<div class="cob-lista">${pags.map((p, i) => `
           <div class="cob-item">
-            <div><b>${cobNome(p.metodo)}</b><small>${p.metodo === "dinheiro" ? `Recebido ${formatCurrency(p.recebido)}${p.troco > 0 ? " · troco " + formatCurrency(p.troco) : ""}` : (p.codigo ? escapeHtml(p.codigo) : "")}</small></div>
+                  <div><b>${cobNome(p.metodo)}</b><small>${p.metodo === "dinheiro" ? `Recebido ${formatCurrency(p.recebido)}${p.troco > 0 ? " · troco " + formatCurrency(p.troco) : ""}` : p.maquina ? "Aprovado na maquininha" : (p.codigo ? escapeHtml(p.codigo) : "")}</small></div>
             <b>${formatCurrency(p.valor)}</b>
-            ${finalizando ? "" : `<button class="cob-x" data-a="rm:${i}" aria-label="Remover pagamento">${cobSvg('<path d="M6 6l12 12M18 6L6 18"/>', 16)}</button>`}
+            ${p.maquina ? `<span class="cob-ok" role="img" aria-label="Pago na maquininha">${cobSvg('<path d="M5 12l5 5L20 7"/>', 18)}</span>`
+              : finalizando || aguard ? "" : `<button class="cob-x" data-a="rm:${i}" aria-label="Remover pagamento">${cobSvg('<path d="M6 6l12 12M18 6L6 18"/>', 16)}</button>`}
           </div>`).join("")}</div>` : ""}
 
-        ${f > 0.009 ? `
+        ${aguard ? `
+        <div class="cob-maq">
+          <div class="cob-spin" aria-hidden="true"></div>
+          <b>Aguardando pagamento na maquininha</b>
+          <span>${cobNome(aguard.metodo)} de ${formatCurrency(aguard.valor)}${aguard.intent ? " enviado para a maquininha" : " · enviando..."}</span>
+          <button class="cob-chip" data-a="maqcancel">Cancelar cobrança</button>
+        </div>` : ""}
+        ${maqErro ? `<div class="cob-erro cob-erro-box">${escapeHtml(maqErro)}</div>` : ""}
+
+        ${f > 0.009 && !aguard ? `
         <div class="cob-met">
           <span class="cob-sec">${pags.length ? "COMO VAI PAGAR O RESTANTE?" : "FORMA DE PAGAMENTO"}</span>
           <div class="cob-grade">${COB_METODOS.map(([id, nome, d]) => `<button class="cob-btn ${metodo === id ? "on" : ""}" data-a="m:${id}">${cobSvg(d)}${nome}</button>`).join("")}</div>
@@ -4276,11 +4288,12 @@ function abrirCobranca(pedidos, juntos) {
 
   const acoes = {
     fechar() { if (!pags.length) modal.remove(); },
-    m(id) { metodo = id; digitado = falta(); vp = null; vpErro = ""; render(); },
+    m(id) { metodo = id; digitado = falta(); vp = null; vpErro = ""; maqErro = ""; render(); },
     chip(v) { digitado = cobR(v); render(); },
     add() {
       const f = falta();
       if (!metodo || metodo === "voucher" || !(digitado > 0) || f <= 0) return;
+      if (mpAtivo && COB_MAQ.includes(metodo)) return cobrarMaq(metodo, cobR(Math.min(digitado, f)));
       const p = { metodo, valor: cobR(Math.min(digitado, f)) };
       if (metodo === "dinheiro") { p.recebido = cobR(digitado); p.troco = Math.max(0, cobR(digitado - f)); }
       pags.push(p);
@@ -4306,7 +4319,14 @@ function abrirCobranca(pedidos, juntos) {
       metodo = null; vp = null;
       render();
     },
-    rm(i) { pags.splice(Number(i), 1); render(); },
+    rm(i) { if (!pags[Number(i)]?.maquina) { pags.splice(Number(i), 1); render(); } },
+    async maqcancel() {
+      const a = aguard; if (!a) return;
+      aguard = null; maqErro = ""; render();
+      if (a.intent) fetch(`${API_BASE}/api/v1/restaurante/${getRestaurantId()}/mp/cancelar`, {
+        method: "POST", headers: buildHeaders(), body: JSON.stringify({ payment_intent_id: a.intent })
+      }).catch(() => {});
+    },
     async fin() {
       if (falta() > 0.009 || !pags.length || finalizando) return;
       finalizando = true; render();
@@ -4339,6 +4359,53 @@ function abrirCobranca(pedidos, juntos) {
       }
     }
   };
+
+  // manda a cobrança pra maquininha e espera o cliente pagar (até 3 min)
+  async function cobrarMaq(m, valor) {
+    const rid = getRestaurantId();
+    const a = { metodo: m, valor, intent: null };
+    aguard = a; metodo = null; digitado = 0; maqErro = ""; render();
+    try {
+      const r = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/mp/cobrar`, {
+        method: "POST", headers: buildHeaders(),
+        body: JSON.stringify({ order_id: pedidos[0].id, valor, metodo: m, parcial: true })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.success) throw new Error(d.error || "Não foi possível enviar para a maquininha");
+      if (aguard !== a) return;        // cancelou enquanto enviava
+      a.intent = d.payment_intent_id; render();
+    } catch (e) {
+      if (aguard === a) { aguard = null; maqErro = e.message; render(); }
+      return;
+    }
+    for (let t = 0; t < 60; t++) {
+      await new Promise(ok => setTimeout(ok, 3000));
+      if (aguard !== a || !document.body.contains(modal)) return;   // cancelado ou tela fechada
+      try {
+        const r = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/mp/intent/${encodeURIComponent(a.intent)}`, { headers: buildHeaders() });
+        const d = await r.json().catch(() => ({}));
+        if (aguard !== a) return;
+        if (d.estado === "pago") {
+          pags.push({ metodo: m, valor, maquina: true, payment_id: d.payment_id });
+          aguard = null; render(); return;
+        }
+        if (d.estado === "cancelado") {
+          aguard = null; maqErro = `O ${cobNome(m).toLowerCase()} de ${formatCurrency(valor)} foi recusado ou cancelado na maquininha. Toque na forma de pagamento para cobrar de novo.`;
+          render(); return;
+        }
+      } catch (e) { /* internet oscilou: tenta de novo no próximo ciclo */ }
+    }
+    if (aguard === a) {
+      aguard = null; maqErro = `Tempo esgotado: o ${cobNome(m).toLowerCase()} de ${formatCurrency(valor)} não foi pago. Toque na forma de pagamento para cobrar de novo.`;
+      render();
+      fetch(`${API_BASE}/api/v1/restaurante/${rid}/mp/cancelar`, { method: "POST", headers: buildHeaders(), body: JSON.stringify({ payment_intent_id: a.intent }) }).catch(() => {});
+    }
+  }
+
+  // tem maquininha do Mercado Pago configurada? (Pix, crédito e débito passam a cobrar nela)
+  fetch(`${API_BASE}/api/v1/restaurante/${getRestaurantId()}/integracao/maquininha`, { headers: buildHeaders() })
+    .then(r => r.json()).then(d => { mpAtivo = !!(d.configurado && d.ativo !== false && d.dados?.mp_device_id); if (!pags.length && !aguard) render(); })
+    .catch(() => {});
 
   modal.addEventListener("click", (e) => {
     const b = e.target.closest("[data-a]");
