@@ -4133,268 +4133,226 @@ async function vpDescontar(pagamentos, orderId) {
 // no pedido fica "vale-presente" (o código e o valor ficam no histórico do vale)
 const vpTextoPagamento = (p) => p.metodo === "voucher" ? "vale-presente" : p.metodo;
 
-function showPaymentModal(orderId) {
-  const existing = document.getElementById("payment-modal");
-  if (existing) existing.remove();
+// ===== COBRAR: tela de pagamento (pedido único e mesa/vários pedidos) =====
+const COB_METODOS = [
+  ["pix", "Pix", '<path d="M12 3l9 9-9 9-9-9z"/><path d="M8 12h8"/>'],
+  ["dinheiro", "Dinheiro", '<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/>'],
+  ["credito", "Crédito", '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 10h19"/>'],
+  ["debito", "Débito", '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M6 15h4"/>'],
+  ["vale_refeicao", "Vale-refeição", '<path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M16 3c-2 0-3 2-3 5s1 4 3 4v9"/>'],
+  ["voucher", "Voucher", '<rect x="3" y="8" width="18" height="12" rx="1.5"/><path d="M12 8v12M3 12h18M12 8c-2-4-6-3-5 0M12 8c2-4 6-3 5 0"/>']
+];
+const cobNome = (m) => (COB_METODOS.find(x => x[0] === m) || [m, m])[1];
+const cobSvg = (d, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const cobR = (v) => Math.round((Number(v) || 0) * 100) / 100;
+const cobTxtPag = (p) => p.metodo === "vale_refeicao" ? "vale-refeição" : vpTextoPagamento(p);
 
-  const o = orders.find((x) => x.id === orderId);
-  if (!o) return;
-
-  const totalPedido = parseFloat(o.total_price || 0);
-  let pagamentos = [{ metodo: "", valor: totalPedido }];
+function abrirCobranca(pedidos, juntos) {
+  document.getElementById("payment-modal")?.remove();
+  const total = cobR(pedidos.reduce((s, o) => s + parseFloat(o.total_price || 0), 0));
+  const pags = [];            // { metodo, valor, recebido, troco, codigo, vpOk, vpSaldo }
+  let metodo = null, digitado = 0, vp = null, vpErro = "", finalizando = false;
 
   const modal = document.createElement("div");
   modal.id = "payment-modal";
   modal.className = "modal-backdrop open";
+  document.body.appendChild(modal);
 
-  function calcRestante() {
-  return totalPedido - pagamentos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-}
+  const pago = () => cobR(pags.reduce((s, p) => s + p.valor, 0));
+  const falta = () => Math.max(0, cobR(total - pago()));
+  const troco = () => cobR(pags.reduce((s, p) => s + (p.troco || 0), 0));
 
-  function renderModal() {
+  function painelMetodo(f) {
+    if (!metodo) return "";
+    if (metodo === "voucher") {
+      const uso = vp ? Math.min(Number(vp.saldo), f) : 0;
+      return `
+        <div class="cob-painel">
+          <label class="cob-rot" for="cob-vcod">Código do voucher</label>
+          <div class="cob-linha">
+            <input id="cob-vcod" class="cob-cod" placeholder="VP-XXXX-XXXX-XXXX" maxlength="17" autocomplete="off" value="${escapeHtml(vp?.codigo || "")}" oninput="vpMascara(this)">
+            <button class="cob-go" data-a="vconf">Conferir</button>
+          </div>
+          ${vpErro ? `<div class="cob-erro">${escapeHtml(vpErro)}</div>` : ""}
+          ${vp ? `
+          <div class="cob-vsaldo">
+            <div class="cob-entre"><span>Saldo disponível</span><b>${formatCurrency(vp.saldo)} · vale até ${vpData(vp.expira_em)}</b></div>
+            <div class="cob-vtxt">${Number(vp.saldo) >= f
+              ? `Cobre o restante inteiro. Sobra ${formatCurrency(cobR(vp.saldo - f))} no voucher.`
+              : `Não cobre tudo: usa o saldo inteiro e o restante de ${formatCurrency(cobR(f - vp.saldo))} vai em outra forma.`}</div>
+            <button class="cob-go cob-verde" data-a="vusar">Usar ${formatCurrency(uso)} do voucher</button>
+          </div>` : ""}
+        </div>`;
+    }
+    const chips = metodo === "dinheiro"
+      ? [["Valor exato", f], ["R$ 50", 50], ["R$ 100", 100], ["R$ 200", 200]].filter((c, i) => i === 0 || c[1] > f)
+          .map(c => `<button class="cob-chip" data-a="chip:${c[1]}">${c[0]}</button>`).join("")
+      : "";
+    return `
+      <div class="cob-painel">
+        <label class="cob-rot" for="cob-valor">${metodo === "dinheiro" ? "Quanto o cliente entregou em dinheiro?" : "Valor no " + cobNome(metodo).toLowerCase()}</label>
+        <div class="cob-linha">
+          <input id="cob-valor" class="cob-inp" inputmode="numeric" autocomplete="off" value="${formatCurrency(digitado)}">
+          <button class="cob-go" data-a="add">Adicionar</button>
+        </div>
+        ${chips ? `<div class="cob-chips">${chips}</div>` : ""}
+        <div id="cob-troco-prev" class="cob-troco-prev"></div>
+      </div>`;
+  }
+
+  function render() {
+    const f = falta(), tr = troco(), travado = pags.length > 0;
+    const pode = f <= 0.009 && pags.length > 0 && !finalizando;
+    const p0 = pedidos[0];
     modal.innerHTML = `
-      <div class="modal confirm-modal" style="display:flex; flex-direction:column; max-height:85vh;">
-        <div class="modal-header" style="flex-shrink:0;">
-          <h3>💳 Forma de Pagamento</h3>
-        </div>
-        <div class="modal-body" style="flex:1; overflow-y:auto; padding-bottom:8px;">
-          <div style="background:#0d0d0d; border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:12px 14px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
-            <span style="color:rgba(252,228,228,0.7); font-weight:700;">Valor Total</span>
-            <span style="color:rgba(252,228,228,1); font-size:18px; font-weight:900;">${formatCurrency(totalPedido)}</span>
+      <div class="cob" role="dialog" aria-label="Cobrar">
+        <div class="cob-topo">
+          <div class="cob-id">
+            <div class="cob-quem">${pedidos.length === 1
+              ? `<span class="cob-tag">Pedido nº ${escapeHtml(p0.order_number ?? "")}</span><span>${escapeHtml(p0.client_name || "")}</span>`
+              : `<span class="cob-tag">${pedidos.length} pedidos</span>`}</div>
+            <div class="cob-total">${formatCurrency(total)}</div>
           </div>
-
-          <div id="pagamentos-lista">
-            ${pagamentos.map((p, idx) => {
-              const isUltimo = idx === pagamentos.length - 1;
-              const valorRestante = totalPedido - pagamentos.slice(0, idx).reduce((s, x) => s + (parseFloat(x.valor) || 0), 0);
-              return `
-               <div style="margin-bottom:10px; padding:10px 0; ${idx > 0 ? 'border-top:1px solid rgba(255,255,255,0.07);' : ''}">
-                  <div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.4); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">
-                    Pagamento ${idx + 1}
-                    ${isUltimo && pagamentos.length > 1 ? `<span style="color:rgba(249,115,115,0.8); margin-left:6px;">Restante: ${formatCurrency(valorRestante)}</span>` : ''}
-                  </div>
-                  <div style="display:flex; gap:8px; align-items:center;">
-                    <select id="metodo-${idx}" style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;">
-                      <option value="">Selecione...</option>
-                      <option value="pix" ${p.metodo === 'pix' ? 'selected' : ''}>PIX</option>
-                      <option value="credito" ${p.metodo === 'credito' ? 'selected' : ''}>Cartão de crédito</option>
-                      <option value="debito" ${p.metodo === 'debito' ? 'selected' : ''}>Cartão de débito</option>
-                                            <option value="dinheiro" ${p.metodo === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
-                      <option value="voucher" ${p.metodo === 'voucher' ? 'selected' : ''}>Vale-presente</option>
-                    </select>
-                    <input type="number" id="valor-${idx}" value="${parseFloat(p.valor).toFixed(2)}" min="0.01" max="${valorRestante}" step="0.01"
-  style="width:110px; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;"
-  onblur="onValorInput(${idx}, this.value)"
-/>
-                                        ${pagamentos.length > 1
-                      ? `<button onclick="removerPagamento(${idx})" style="padding:8px 10px; border-radius:8px; border:1px solid rgba(239,68,68,0.4); background:transparent; color:rgba(239,68,68,0.8); cursor:pointer; font-size:13px; flex-shrink:0;">✕</button>`
-                      : ''}
-                  </div>
-                  ${vpCampo(idx, p)}
-                </div>
-              `;
-            }).join('')}
-          </div>
-
-          <div id="payment-status-msg" style="margin-top:10px; text-align:center; font-size:14px; font-weight:700; color:rgba(252,228,228,0.7); display:none;"></div>
+          ${travado
+            ? `<div class="cob-trava">${cobSvg('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>', 14)}Cobrança em andamento</div>`
+            : `<button class="cob-x" data-a="fechar" aria-label="Cancelar">${cobSvg('<path d="M6 6l12 12M18 6L6 18"/>', 18)}</button>`}
         </div>
-        <div class="modal-actions" style="flex-shrink:0;">
-          <button class="ghost-button" id="payment-cancel">Cancelar</button>
-          <button class="primary-button" id="payment-confirm" ${Math.abs(calcRestante()) > 0.009 ? 'disabled' : ''}>Finalizar Pedido</button>
+        ${pedidos.length > 1 ? `<div class="cob-pedidos">${pedidos.map(o => `<div class="cob-entre"><span>Nº ${escapeHtml(o.order_number ?? "")} · ${escapeHtml(o.client_name || "")}</span><b>${formatCurrency(o.total_price)}</b></div>`).join("")}</div>` : ""}
+
+        ${travado ? `
+        <div class="cob-prog">
+          <div class="cob-barra"><div style="width:${Math.min(100, total > 0 ? pago() / total * 100 : 100)}%; background:${f <= 0.009 ? "#22c55e" : "#ef4444"};"></div></div>
+          <div class="cob-entre"><span class="cob-mut">Pago ${formatCurrency(pago())} de ${formatCurrency(total)}</span>
+            <span class="cob-pill ${f <= 0.009 ? "ok" : ""}">${f <= 0.009 ? "Pagamento completo" : "Restante " + formatCurrency(f)}</span></div>
+        </div>` : ""}
+
+        ${tr > 0 ? `
+        <div class="cob-troco">
+          <span>DEVOLVER DE TROCO</span>
+          <b>${formatCurrency(tr)}</b>
+          <small>Recebeu ${formatCurrency(pags.find(p => p.troco > 0)?.recebido)} em dinheiro</small>
+        </div>` : ""}
+
+        ${pags.length ? `<div class="cob-lista">${pags.map((p, i) => `
+          <div class="cob-item">
+            <div><b>${cobNome(p.metodo)}</b><small>${p.metodo === "dinheiro" ? `Recebido ${formatCurrency(p.recebido)}${p.troco > 0 ? " · troco " + formatCurrency(p.troco) : ""}` : (p.codigo ? escapeHtml(p.codigo) : "")}</small></div>
+            <b>${formatCurrency(p.valor)}</b>
+            ${finalizando ? "" : `<button class="cob-x" data-a="rm:${i}" aria-label="Remover pagamento">${cobSvg('<path d="M6 6l12 12M18 6L6 18"/>', 16)}</button>`}
+          </div>`).join("")}</div>` : ""}
+
+        ${f > 0.009 ? `
+        <div class="cob-met">
+          <span class="cob-sec">${pags.length ? "COMO VAI PAGAR O RESTANTE?" : "FORMA DE PAGAMENTO"}</span>
+          <div class="cob-grade">${COB_METODOS.map(([id, nome, d]) => `<button class="cob-btn ${metodo === id ? "on" : ""}" data-a="m:${id}">${cobSvg(d)}${nome}</button>`).join("")}</div>
         </div>
-      </div>
-    `;
+        ${painelMetodo(f)}` : ""}
 
-    // Eventos fixos
-    document.getElementById("payment-cancel").addEventListener("click", () => {
-      if (pollingInterval) clearInterval(pollingInterval);
-      modal.remove();
-    });
+        <button class="cob-fin ${pode ? "on" : ""}" data-a="fin" ${pode ? "" : "disabled"}>${finalizando ? "Finalizando..." : pode ? `Finalizar ${juntos ? "pedidos" : "pedido"} · ${formatCurrency(total)}` : `Finalizar ${juntos ? "pedidos" : "pedido"}`}</button>
+        ${travado && !pode && !finalizando ? `<div class="cob-aviso">Já tem pagamento nesta conta: a tela só fecha depois de finalizar.</div>` : ""}
+      </div>`;
 
-    document.getElementById("payment-confirm").addEventListener("click", async () => {
-      for (let i = 0; i < pagamentos.length; i++) {
-        const metodo = document.getElementById(`metodo-${i}`)?.value;
-        if (!metodo) { alert(`Selecione o método do Pagamento ${i + 1}`); return; }
-        pagamentos[i].metodo = metodo;
-      }
-     const pagamentosValidos = pagamentos.filter(p => parseFloat(p.valor) > 0 && p.metodo);
-const paymentStr = pagamentosValidos.length === 1
-  ? vpTextoPagamento(pagamentosValidos[0])
-  : pagamentosValidos.map(p => `${vpTextoPagamento(p)} R$${parseFloat(p.valor).toFixed(2)}`).join(' + ');
+    const inp = document.getElementById("cob-valor");
+    if (inp) {
+      const prev = () => {
+        const el = document.getElementById("cob-troco-prev");
+        if (el) el.textContent = metodo === "dinheiro" && digitado > falta() ? `Troco: ${formatCurrency(cobR(digitado - falta()))}` : "";
+      };
+      inp.addEventListener("input", () => {   // igual app de banco: os números entram pelos centavos
+        const d = inp.value.replace(/\D/g, "").replace(/^0+/, "").slice(0, 9);
+        digitado = (parseInt(d || "0", 10)) / 100;
+        inp.value = formatCurrency(digitado);
+        prev();
+      });
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") acoes.add(); });
+      prev();
+      setTimeout(() => { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }, 30);
+    }
+    const vcod = document.getElementById("cob-vcod");
+    if (vcod) {
+      vcod.addEventListener("keydown", (e) => { if (e.key === "Enter") acoes.vconf(); });
+      if (!vp) setTimeout(() => vcod.focus(), 30);
+    }
+  }
 
-      const confirmBtn = document.getElementById("payment-confirm");
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = "Finalizando...";
-
+  const acoes = {
+    fechar() { if (!pags.length) modal.remove(); },
+    m(id) { metodo = id; digitado = falta(); vp = null; vpErro = ""; render(); },
+    chip(v) { digitado = cobR(v); render(); },
+    add() {
+      const f = falta();
+      if (!metodo || metodo === "voucher" || !(digitado > 0) || f <= 0) return;
+      const p = { metodo, valor: cobR(Math.min(digitado, f)) };
+      if (metodo === "dinheiro") { p.recebido = cobR(digitado); p.troco = Math.max(0, cobR(digitado - f)); }
+      pags.push(p);
+      metodo = null; digitado = 0;
+      render();
+    },
+    async vconf() {
+      const cod = document.getElementById("cob-vcod")?.value || "";
+      vpErro = ""; vp = null;
       try {
-        await vpDescontar(pagamentosValidos, orderId);
-        await fetch(`${API_BASE}/api/v1/pedidos/${orderId}/payment`, {
-          method: "PATCH",
-          headers: buildHeaders(),
-          body: JSON.stringify({ payment_method: paymentStr })
-        });
-
-        await fetch(`${API_URL}/${orderId}/status`, {
-          method: "PATCH",
-          headers: buildHeaders(),
-          body: JSON.stringify({ status: "finished" })
-        });
-
-        const idx = orders.findIndex(x => x.id === orderId);
-        if (idx !== -1) orders[idx]._frontStatus = "finalizado";
-        // Emissão ligada: imprime o resumo com o QR da nota (sem travar a tela)
-        if (document.getElementById("home-nf-toggle")?.checked) imprimirResumo(orderId);
+        const d = await vpConsultar(cod);
+        if (d.situacao !== "valido") throw new Error((VP_SITUACAO[d.situacao] || [d.situacao])[0]);
+        if (pags.some(p => p.codigo === d.codigo)) throw new Error("Este voucher já foi usado nesta conta");
+        vp = d;
+      } catch (e) { vpErro = e.message; }
+      render();
+    },
+    vusar() {
+      const f = falta();
+      if (!vp || f <= 0) return;
+      const uso = cobR(Math.min(Number(vp.saldo), f));
+      pags.push({ metodo: "voucher", valor: uso, codigo: vp.codigo, vpOk: true, vpSaldo: Number(vp.saldo) });
+      metodo = null; vp = null;
+      render();
+    },
+    rm(i) { pags.splice(Number(i), 1); render(); },
+    async fin() {
+      if (falta() > 0.009 || !pags.length || finalizando) return;
+      finalizando = true; render();
+      const paymentStr = pags.length === 1
+        ? cobTxtPag(pags[0])
+        : pags.map(p => `${cobTxtPag(p)} R$${p.valor.toFixed(2)}`).join(" + ");
+      try {
+        await vpDescontar(pags, pedidos[0].id);
+        await Promise.all(pedidos.map(async (o) => {
+          await fetch(`${API_BASE}/api/v1/pedidos/${o.id}/payment`, {
+            method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ payment_method: paymentStr })
+          });
+          await fetch(`${API_URL}/${o.id}/status`, {
+            method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ status: "finished" })
+          });
+          const idx = orders.findIndex(x => x.id === o.id);
+          if (idx !== -1) orders[idx]._frontStatus = "finalizado";
+          // mesa/juntos: sempre imprime o resumo; pedido único: só com a nota ligada
+          if (juntos || document.getElementById("home-nf-toggle")?.checked) { try { await imprimirResumo(o.id); } catch (e) {} }
+        }));
         modal.remove();
+        if (juntos) clearSelection();
         await fetchOrders();
         renderBoard();
+        if (juntos && !document.getElementById("mesas-view")?.classList.contains("hidden")) renderMesas();
       } catch (err) {
         console.error("Erro ao finalizar:", err);
         if (err && err.message) alert(err.message);
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = "Finalizar Pedido";
+        finalizando = false; render();
       }
-    });
-
-     // Sync selects (trocar pra/de Voucher redesenha pra mostrar o campo do código)
-    window._vpCtx = { pagamentos, render: renderModal, onValor: (i, v) => window.onValorInput(i, v) };
-    pagamentos.forEach((p, idx) => {
-      const sel = document.getElementById(`metodo-${idx}`);
-      if (sel) sel.addEventListener("change", () => {
-        const antes = pagamentos[idx].metodo;
-        pagamentos[idx].metodo = sel.value;
-        if (antes === "voucher" || sel.value === "voucher") { pagamentos[idx].vpOk = false; pagamentos[idx].vpInfo = ""; renderModal(); }
-      });
-    });
-  }
-
- window.onValorInput = (idx, valor) => {
-  const valorNum = parseFloat(valor) || 0;
-  const maxValor = totalPedido - pagamentos.slice(0, idx).reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-  pagamentos[idx].valor = Math.min(valorNum, maxValor);
-  const sel = document.getElementById(`metodo-${idx}`);
-  if (sel) pagamentos[idx].metodo = sel.value;
-  const restante = totalPedido - pagamentos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-  if (restante > 0.009 && idx === pagamentos.length - 1) {
-    pagamentos.push({ metodo: "", valor: restante });
-    renderModal();
-    setTimeout(() => { document.getElementById(`metodo-${pagamentos.length - 1}`)?.focus(); }, 50);
-  } else if (restante <= 0.009 && pagamentos.length > idx + 1) {
-    pagamentos = pagamentos.slice(0, idx + 1);
-    renderModal();
-  } else if (idx < pagamentos.length - 1) {
-    pagamentos[pagamentos.length - 1].valor = restante;
-    const ultimoInput = document.getElementById(`valor-${pagamentos.length - 1}`);
-    if (ultimoInput) ultimoInput.value = restante.toFixed(2);
-  }
-};
-
-  window.removerPagamento = (idx) => {
-    pagamentos.splice(idx, 1);
-    const restante = totalPedido - pagamentos.slice(0, -1).reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-    pagamentos[pagamentos.length - 1].valor = restante;
-    renderModal();
+    }
   };
 
-  document.body.appendChild(modal);
+  modal.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-a]");
+    if (!b || b.disabled) return;
+    const [a, arg] = b.dataset.a.split(":");
+    if (acoes[a]) acoes[a](arg);
+  });
 
-  const rid = getRestaurantId();
-  let pollingInterval = null;
+  render();
+}
 
-  renderModal();
-
-  // ===== POLLING MAQUININHA (não mexer) =====
-  function iniciarPolling(metodo) {
-    let tentativas = 0;
-    const MAX_TENTATIVAS = 60;
-    pollingInterval = setInterval(async () => {
-      tentativas++;
-      if (tentativas > MAX_TENTATIVAS) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
-        document.getElementById("payment-status-msg").style.color = "rgba(239,68,68,0.9)";
-        document.getElementById("payment-status-msg").textContent = "⏰ Tempo esgotado. Verifique a maquininha.";
-        habilitarRetry(metodo);
-        return;
-      }
-      try {
-        const ordersResp = await fetch(`${API_URL}/${rid}`);
-        const allOrders = await ordersResp.json();
-        const updated = allOrders.find(x => x.id === orderId);
-        if (!updated) return;
-        const frontStatus = toFrontStatus(updated.status);
-        if (frontStatus === "finalizado") {
-          clearInterval(pollingInterval);
-          pollingInterval = null;
-          const idx = orders.findIndex(x => x.id === orderId);
-          if (idx !== -1) orders[idx] = { ...updated, _frontStatus: "finalizado" };
-          modal.remove();
-          renderBoard();
-          return;
-        }
-        if (frontStatus === "cancelado") {
-          clearInterval(pollingInterval);
-          pollingInterval = null;
-          document.getElementById("payment-status-msg").style.color = "rgba(239,68,68,0.9)";
-          document.getElementById("payment-status-msg").textContent = "❌ Pagamento cancelado ou recusado na maquininha.";
-          await fetch(`${API_URL}/${orderId}/status`, {
-            method: "PATCH",
-            headers: buildHeaders(),
-            body: JSON.stringify({ status: toBackStatus(o._frontStatus) })
-          });
-          const idx = orders.findIndex(x => x.id === orderId);
-          if (idx !== -1) orders[idx].status = toBackStatus(o._frontStatus);
-          habilitarRetry(metodo);
-          return;
-        }
-      } catch (e) { console.warn("Erro no polling:", e); }
-    }, 2000);
-  }
-
-  function habilitarRetry(metodo) {
-    const confirmBtn = document.getElementById("payment-confirm");
-    const cancelBtn = document.getElementById("payment-cancel");
-    confirmBtn.disabled = false;
-    confirmBtn.textContent = "🔄 Tentar novamente";
-    cancelBtn.disabled = false;
-    confirmBtn.replaceWith(confirmBtn.cloneNode(true));
-    const novoBtn = document.getElementById("payment-confirm");
-    novoBtn.addEventListener("click", () => enviarParaMaquininha(metodo));
-  }
-
-  async function enviarParaMaquininha(metodo) {
-    const confirmBtn = document.getElementById("payment-confirm");
-    const cancelBtn = document.getElementById("payment-cancel");
-    const statusMsg = document.getElementById("payment-status-msg");
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = "Aguardando...";
-    cancelBtn.disabled = true;
-    statusMsg.style.display = "block";
-    statusMsg.style.color = "rgba(252,228,228,0.7)";
-    statusMsg.textContent = "📲 Enviando para a maquininha...";
-    try {
-      await fetch(`${API_BASE}/api/v1/pedidos/${orderId}/payment`, {
-        method: "PATCH",
-        headers: buildHeaders(),
-        body: JSON.stringify({ payment_method: metodo })
-      });
-      const cobrarResp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/mp/cobrar`, {
-        method: "POST",
-        headers: buildHeaders(),
-        body: JSON.stringify({ order_id: orderId, valor: parseFloat(o.total_price || 0), metodo: metodo })
-      });
-      const cobrarData = await cobrarResp.json();
-      if (!cobrarResp.ok || !cobrarData.success) throw new Error(cobrarData.error || "Erro ao enviar para maquininha");
-      statusMsg.textContent = "💳 Aguardando pagamento na maquininha...";
-      iniciarPolling(metodo);
-    } catch (err) {
-      console.error("Erro maquininha:", err);
-      statusMsg.style.color = "rgba(239,68,68,0.9)";
-      statusMsg.textContent = `❌ ${err.message}`;
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = "Tentar novamente";
-      cancelBtn.disabled = false;
-    }
-  }
+function showPaymentModal(orderId) {
+  const o = orders.find((x) => x.id === orderId);
+  if (o) abrirCobranca([o], false);
 }
 
 async function imprimirPedido(orderId) {
@@ -4487,175 +4445,9 @@ async function imprimirResumosSelecionados() {
   }
 }
 
-  async function cobrarJuntos() {
-  const ids = [...selectedOrderIds];
-  const pedidos = ids.map(id => orders.find(x => x.id === id)).filter(Boolean);
-  const totalGeral = pedidos.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
-
-  const existing = document.getElementById("payment-modal");
-  if (existing) existing.remove();
-
-  let pagamentos = [{ metodo: "", valor: totalGeral }];
-
-  const modal = document.createElement("div");
-  modal.id = "payment-modal";
-  modal.className = "modal-backdrop open";
-
-  function calcRestante() {
-    return totalGeral - pagamentos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-  }
-
-  function renderModal() {
-    modal.innerHTML = `
-      <div class="modal confirm-modal" style="display:flex; flex-direction:column; max-height:85vh;">
-        <div class="modal-header" style="flex-shrink:0;">
-          <h3>💳 Cobrar</h3>
-        </div>
-        <div class="modal-body" style="flex:1; overflow-y:auto; padding-bottom:8px;">
-          
-          <div style="margin-bottom:12px;">
-            ${pedidos.map(o => `
-              <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
-                <span style="color:rgba(252,228,228,0.7); font-size:13px;">Pedido #${o.order_number} — ${escapeHtml(o.client_name || "")}</span>
-                <span style="color:rgba(251,191,36,1); font-size:13px; font-weight:700;">${formatCurrency(o.total_price)}</span>
-              </div>
-            `).join("")}
-          </div>
-
-          <div style="background:rgba(28,28,30,0.45); border:1px solid rgba(255,255,255,0.18); border-radius:12px; padding:12px 14px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
-            <span style="color:rgba(252,228,228,0.7); font-weight:700;">Total Geral</span>
-            <span style="color:rgba(252,228,228,1); font-size:18px; font-weight:900;">${formatCurrency(totalGeral)}</span>
-          </div>
-
-          <div id="pagamentos-lista">
-            ${pagamentos.map((p, idx) => {
-              const isUltimo = idx === pagamentos.length - 1;
-              const valorRestante = totalGeral - pagamentos.slice(0, idx).reduce((s, x) => s + (parseFloat(x.valor) || 0), 0);
-              return `
-                <div style="margin-bottom:10px; padding:10px 0; ${idx > 0 ? 'border-top:1px solid rgba(255,255,255,0.07);' : ''}">
-                  <div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.4); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">
-                    Pagamento ${idx + 1}
-                    ${isUltimo && pagamentos.length > 1 ? `<span style="color:rgba(249,115,115,0.8); margin-left:6px;">Restante: ${formatCurrency(valorRestante)}</span>` : ''}
-                  </div>
-                  <div style="display:flex; gap:8px; align-items:center;">
-                    <select id="metodo-${idx}" style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;">
-                      <option value="">Selecione...</option>
-                      <option value="pix" ${p.metodo === 'pix' ? 'selected' : ''}>PIX</option>
-                      <option value="credito" ${p.metodo === 'credito' ? 'selected' : ''}>Cartão de crédito</option>
-                      <option value="debito" ${p.metodo === 'debito' ? 'selected' : ''}>Cartão de débito</option>
-                                            <option value="dinheiro" ${p.metodo === 'dinheiro' ? 'selected' : ''}>Dinheiro</option>
-                      <option value="voucher" ${p.metodo === 'voucher' ? 'selected' : ''}>Vale-presente</option>
-                    </select>
-                    <input type="number" id="valor-${idx}" value="${parseFloat(p.valor).toFixed(2)}" min="0.01" max="${valorRestante}" step="0.01"
-                      style="width:110px; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; font-family:inherit; outline:none;"
-                      onblur="onValorInputJuntos(${idx}, this.value)"
-                    />
-                     ${pagamentos.length > 1 ? `
-                    <button onclick="removerPagamentoJuntos(${idx})" style="padding:8px 10px; border-radius:8px; border:1px solid rgba(239,68,68,0.4); background:transparent; color:rgba(239,68,68,0.8); cursor:pointer; font-size:13px; flex-shrink:0;">✕</button>
-                    ` : ''}
-                  </div>
-                  ${vpCampo(idx, p)}
-                </div>
-              `;
-            }).join('')}
-          </div>
-          <div id="payment-status-msg" style="margin-top:10px; text-align:center; font-size:14px; font-weight:700; color:rgba(252,228,228,0.7); display:none;"></div>
-        </div>
-        <div class="modal-actions" style="flex-shrink:0;">
-          <button class="ghost-button" id="payment-cancel">Cancelar</button>
-          <button class="primary-button" id="payment-confirm" ${Math.abs(calcRestante()) > 0.009 ? 'disabled' : ''}>Finalizar Todos</button>
-        </div>
-      </div>
-    `;
-
-    document.getElementById("payment-cancel").addEventListener("click", () => modal.remove());
-    document.getElementById("payment-confirm").addEventListener("click", async () => {
-      for (let i = 0; i < pagamentos.length; i++) {
-        const metodo = document.getElementById(`metodo-${i}`)?.value;
-        if (!metodo) { alert(`Selecione o método do Pagamento ${i + 1}`); return; }
-        pagamentos[i].metodo = metodo;
-      }
-      const pagamentosValidos = pagamentos.filter(p => parseFloat(p.valor) > 0 && p.metodo);
-const paymentStr = pagamentosValidos.length === 1
-  ? vpTextoPagamento(pagamentosValidos[0])
-  : pagamentosValidos.map(p => `${vpTextoPagamento(p)} R$${parseFloat(p.valor).toFixed(2)}`).join(' + ');
-
-      const confirmBtn = document.getElementById("payment-confirm");
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = "Finalizando...";
-
-      try {
-  await vpDescontar(pagamentosValidos, pedidos[0]?.id);
-  await Promise.all(pedidos.map(async (o) => {
-    await fetch(`${API_BASE}/api/v1/pedidos/${o.id}/payment`, {
-      method: "PATCH",
-      headers: buildHeaders(),
-      body: JSON.stringify({ payment_method: paymentStr })
-    });
-    await fetch(`${API_URL}/${o.id}/status`, {
-      method: "PATCH",
-      headers: buildHeaders(),
-      body: JSON.stringify({ status: "finished" })
-    });
-    try { await imprimirResumo(o.id); } catch(e) {}
-  }));
-        modal.remove();
-        clearSelection();
-        await fetchOrders();
-        renderBoard();
-        // Atualiza tela de mesas se estiver visível
-        if (!document.getElementById("mesas-view")?.classList.contains("hidden")) {
-          renderMesas();
-        }
-      } catch(err) {
-        console.error("Erro ao finalizar:", err);
-        if (err && err.message) alert(err.message);
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = "Finalizar Todos";
-      }
-    });
-
-    window._vpCtx = { pagamentos, render: renderModal, onValor: (i, v) => window.onValorInputJuntos(i, v) };
-    pagamentos.forEach((p, idx) => {
-      const sel = document.getElementById(`metodo-${idx}`);
-      if (sel) sel.addEventListener("change", () => {
-        const antes = pagamentos[idx].metodo;
-        pagamentos[idx].metodo = sel.value;
-        if (antes === "voucher" || sel.value === "voucher") { pagamentos[idx].vpOk = false; pagamentos[idx].vpInfo = ""; renderModal(); }
-      });
-    });
-  }
-
- window.onValorInputJuntos = (idx, valor) => {
-  const valorNum = parseFloat(valor) || 0;
-  const maxValor = totalGeral - pagamentos.slice(0, idx).reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-  pagamentos[idx].valor = Math.min(valorNum, maxValor);
-  const sel = document.getElementById(`metodo-${idx}`);
-  if (sel) pagamentos[idx].metodo = sel.value;
-  const restante = totalGeral - pagamentos.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-  if (restante > 0.009 && idx === pagamentos.length - 1) {
-    pagamentos.push({ metodo: "", valor: restante });
-    renderModal();
-    setTimeout(() => { document.getElementById(`metodo-${pagamentos.length - 1}`)?.focus(); }, 50);
-  } else if (restante <= 0.009 && pagamentos.length > idx + 1) {
-    pagamentos = pagamentos.slice(0, idx + 1);
-    renderModal();
-  } else if (idx < pagamentos.length - 1) {
-    pagamentos[pagamentos.length - 1].valor = restante;
-    const ultimoInput = document.getElementById(`valor-${pagamentos.length - 1}`);
-    if (ultimoInput) ultimoInput.value = restante.toFixed(2);
-  }
-};
-
-  window.removerPagamentoJuntos = (idx) => {
-    pagamentos.splice(idx, 1);
-    const restante = totalGeral - pagamentos.slice(0, -1).reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-    pagamentos[pagamentos.length - 1].valor = restante;
-    renderModal();
-  };
-
-  document.body.appendChild(modal);
-  renderModal();
+async function cobrarJuntos() {
+  const pedidos = [...selectedOrderIds].map(id => orders.find(x => x.id === id)).filter(Boolean);
+  if (pedidos.length) abrirCobranca(pedidos, true);
 }
   
 async function reemitirNFCe(orderId) {
