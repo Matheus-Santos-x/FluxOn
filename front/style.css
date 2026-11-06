@@ -3084,4 +3084,11 @@ input[type="number"] {
 .cob-fin{width:100%;min-height:54px;border-radius:14px;border:none;background:#232323;color:#8a7f7f;font-size:16px;font-weight:800;font-family:inherit;cursor:not-allowed;transition:all .2s}
 .cob-fin.on{background:#22c55e;color:#04140a;cursor:pointer}
 .cob-aviso{margin-top:-12px;text-align:center;font-size:12px;font-weight:700;color:#b3a6a6}
+.cob-ok{width:36px;height:36px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#86efac}
+.cob-maq{display:flex;flex-direction:column;align-items:center;gap:10px;padding:22px 16px;border-radius:16px;background:#101010;border:1px solid rgba(239,68,68,.35);text-align:center}
+.cob-maq b{font-size:17px}
+.cob-maq span{font-size:14px;color:#b3a6a6}
+.cob-spin{width:40px;height:40px;border-radius:50%;border:4px solid rgba(239,68,68,.2);border-top-color:#ef4444;animation:cobGira .9s linear infinite}
+@keyframes cobGira{to{transform:rotate(360deg)}}
+.cob-erro-box{padding:12px 14px;border-radius:12px;background:rgba(239,68,68,.12)}
 @media (max-width:480px){.cob{padding:20px}.cob-total{font-size:36px}.cob-troco b{font-size:42px}}
