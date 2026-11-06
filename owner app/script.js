@@ -226,8 +226,13 @@
   const instalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   const ehIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const podeInstalar = () => !instalado() && (!!pedidoInstalar || ehIOS);
-  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedidoInstalar = e; if (st.owner) montarAvatar(); });
-  window.addEventListener("appinstalled", () => { pedidoInstalar = null; toast("App instalado! Abra pelo ícone na tela inicial."); if (st.owner) montarAvatar(); });
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedidoInstalar = e; if (st.owner) montarAvatar(); atualizarFab(); });
+  window.addEventListener("appinstalled", () => { pedidoInstalar = null; toast("App instalado! Abra pelo ícone na tela inicial."); if (st.owner) montarAvatar(); atualizarFab(); });
+  // bolinha de download na tela de login (link com ?instalar mostra o texto "Instalar app" junto)
+  function atualizarFab() { $("fab-instalar")?.classList.toggle("hidden", !podeInstalar()); }
+  if (/[?&]instalar\b/.test(location.search)) $("fab-instalar")?.classList.add("com-texto");
+  $("fab-instalar")?.addEventListener("click", () => { instalarApp().then(atualizarFab); });
+  atualizarFab();
   async function instalarApp() {
     if (pedidoInstalar) {
       const p = pedidoInstalar; pedidoInstalar = null;
