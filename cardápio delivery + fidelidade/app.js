@@ -149,3 +149,35 @@ if("serviceWorker" in navigator){
     navigator.serviceWorker.register("sw.js").catch(() => {});
   });
 }
+
+/* convite pra instalar: aparece toda vez que abre pelo navegador, até o cliente instalar */
+(function(){
+  let pedido = null;
+  const $i = (id) => document.getElementById(id);
+  const fundo = $i("instFundo");
+  const instalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedido = e; });
+  window.addEventListener("appinstalled", () => { pedido = null; fechar(); });
+  function fechar(){ fundo.classList.add("hidden"); document.body.classList.remove("inst-aberto"); }
+  function abrir(){
+    if(instalado() || !fundo) return;
+    const nome = (typeof RESTAURANT_CONFIG !== "undefined" && RESTAURANT_CONFIG.nome_exibicao) || "";
+    if(nome) $i("instNome").textContent = nome;
+    if(typeof RESTAURANT_CONFIG !== "undefined" && RESTAURANT_CONFIG.logo_url) $i("instLogo").src = RESTAURANT_CONFIG.logo_url;
+    $i("instDica").classList.add("hidden");
+    fundo.classList.remove("hidden"); document.body.classList.add("inst-aberto");
+  }
+  $i("instNao").onclick = fechar;
+  fundo.addEventListener("click", (e) => { if(e.target === fundo) fechar(); });
+  $i("instSim").onclick = async () => {
+    if(pedido){ const p = pedido; pedido = null; p.prompt(); const r = await p.userChoice.catch(() => null); if(r?.outcome === "accepted") fechar(); return; }
+    const d = $i("instDica");
+    d.innerHTML = ios
+      ? "No iPhone: toque em <b>Compartilhar</b> (o quadrado com a seta, embaixo da tela) e depois em <b>Adicionar à Tela de Início</b>."
+      : "Toque nos <b>3 pontinhos (⋮)</b> do navegador e depois em <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.";
+    d.classList.remove("hidden");
+  };
+  // espera o cardápio aparecer antes de mostrar
+  window.addEventListener("load", () => setTimeout(abrir, 1500));
+})();
