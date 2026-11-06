@@ -5803,6 +5803,8 @@ app.post("/api/v1/restaurante/:restaurant_id/mp/cobrar", async (req, res) => {
       .update({ mp_payment_intent_id: mpData.id })
       .eq("id", order_id);
 
+    if (req.body?.parcial) return res.json({ success: true, payment_intent_id: mpData.id });
+
     const intentId = mpData.id;
     let tentativas = 0;
     const MAX = 60;
@@ -5903,6 +5905,44 @@ app.post("/api/v1/restaurante/:restaurant_id/mp/cobrar", async (req, res) => {
 
   } catch (err) {
     console.error("❌ Erro em /mp/cobrar:", err);
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// status de uma cobrança na maquininha: aguardando | pago | cancelado
+app.get("/api/v1/restaurante/:restaurant_id/mp/intent/:intent_id", async (req, res) => {
+  try {
+    const config = await getIntegracao(req.params.restaurant_id, "maquininha");
+    if (!config?.mp_access_token) return sendError(res, 400, "Mercado Pago não configurado");
+    const h = { Authorization: `Bearer ${config.mp_access_token}` };
+    const r = await fetch(`https://api.mercadopago.com/point/integration-api/payment-intents/${encodeURIComponent(req.params.intent_id)}`, { headers: h });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return sendError(res, 502, d.message || "Erro ao consultar a maquininha");
+    if (["CANCELED", "ERROR", "ABANDONED"].includes(d.state)) return res.json({ estado: "cancelado", mp: d.state });
+    if (d.state === "FINISHED" && d.payment?.id) {
+      const p = await fetch(`https://api.mercadopago.com/v1/payments/${d.payment.id}`, { headers: h }).then(x => x.json()).catch(() => ({}));
+      if (p.status === "approved") return res.json({ estado: "pago", payment_id: d.payment.id, tipo: p.payment_type_id });
+      if (["rejected", "cancelled", "refunded"].includes(p.status)) return res.json({ estado: "cancelado", mp: p.status });
+    }
+    return res.json({ estado: "aguardando", mp: d.state });
+  } catch (err) {
+    console.error("❌ Erro em /mp/intent:", err.message);
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// cancela a cobrança que está na maquininha
+app.post("/api/v1/restaurante/:restaurant_id/mp/cancelar", async (req, res) => {
+  try {
+    const config = await getIntegracao(req.params.restaurant_id, "maquininha");
+    if (!config?.mp_access_token || !config?.mp_device_id) return sendError(res, 400, "Mercado Pago não configurado");
+    const id = String(req.body?.payment_intent_id || "");
+    if (!id) return sendError(res, 400, "payment_intent_id é obrigatório");
+    const r = await fetch(`https://api.mercadopago.com/point/integration-api/devices/${config.mp_device_id}/payment-intents/${encodeURIComponent(id)}`,
+      { method: "DELETE", headers: { Authorization: `Bearer ${config.mp_access_token}` } });
+    return res.json({ success: r.ok });
+  } catch (err) {
+    console.error("❌ Erro em /mp/cancelar:", err.message);
     return sendError(res, 500, "Erro interno");
   }
 });
