@@ -185,5 +185,12 @@ if("serviceWorker" in navigator){
     d.classList.remove("hidden");
   };
   // espera o cardápio aparecer antes de mostrar
-  window.addEventListener("load", () => setTimeout(abrir, 1500));
+  // espera o cardápio (nome e logo do restaurante) carregar antes de mostrar
+  window.addEventListener("load", () => {
+    let t = 0;
+    const esperar = setInterval(() => {
+      const pronto = typeof RESTAURANT_CONFIG !== "undefined" && Object.keys(RESTAURANT_CONFIG || {}).length;
+      if(pronto || ++t > 16){ clearInterval(esperar); setTimeout(abrir, 600); }
+    }, 250);
+  });
 })();
