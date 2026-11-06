@@ -2033,10 +2033,35 @@ border:1px solid rgba(255,255,255,0.08);
   });
 </script>
 
+  <button id="fab-instalar" class="fab-instalar hidden" type="button" aria-label="Instalar o FluxON neste computador">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10.5l5 5 5-5"/><path d="M5 20h14"/></svg>
+    <span>Instalar FluxON</span>
+  </button>
+  <div id="fab-dica" class="fab-dica hidden" role="status"></div>
+
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js');
     }
+    // botão de instalar o FluxON (some quando já está aberto como app instalado)
+    (function () {
+      let pedido = null;
+      const btn = document.getElementById("fab-instalar"), dica = document.getElementById("fab-dica");
+      const instalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+      const atualizar = () => btn.classList.toggle("hidden", instalado());
+      let tDica;
+      const mostrarDica = (txt) => { dica.textContent = txt; dica.classList.remove("hidden"); clearTimeout(tDica); tDica = setTimeout(() => dica.classList.add("hidden"), 10000); };
+      window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedido = e; atualizar(); });
+      window.addEventListener("appinstalled", () => { pedido = null; atualizar(); mostrarDica("FluxON instalado! Abra pelo ícone na área de trabalho ou no menu Iniciar."); });
+      btn.addEventListener("click", async () => {
+        if (pedido) { const p = pedido; pedido = null; p.prompt(); await p.userChoice.catch(() => null); atualizar(); return; }
+        const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+        mostrarDica(ios
+          ? "No iPhone/iPad: toque em Compartilhar e depois em \"Adicionar à Tela de Início\"."
+          : "No Chrome ou Edge: clique no ícone de instalar na barra de endereço (o monitor com a setinha) ou no menu ⋮ → \"Instalar FluxON\" / \"Salvar e compartilhar → Instalar\".");
+      });
+      atualizar();
+    })();
   </script>
 
 </body>
