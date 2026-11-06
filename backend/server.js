@@ -5790,7 +5790,7 @@ app.post("/api/v1/restaurante/:restaurant_id/mp/cobrar", async (req, res) => {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
         console.error("❌ Erro MP Orders:", r.status, JSON.stringify(d));
-        return sendError(res, 502, d.message || d.errors?.[0]?.message || `Mercado Pago recusou (${r.status})`);
+        return sendError(res, 400, d.message || d.errors?.[0]?.message || `Mercado Pago recusou (${r.status})`);
       }
       return res.json({ success: true, payment_intent_id: d.id });
     }
@@ -5948,7 +5948,7 @@ app.get("/api/v1/restaurante/:restaurant_id/mp/intent/:intent_id", async (req, r
     const r = await fetch(`https://api.mercadopago.com/v1/orders/${encodeURIComponent(req.params.intent_id)}`,
       { headers: { Authorization: `Bearer ${config.mp_access_token}` } });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok) return sendError(res, 502, d.message || "Erro ao consultar a maquininha");
+    if (!r.ok) return sendError(res, 400, d.message || "Erro ao consultar a maquininha");
     const pg = d.transactions?.payments?.[0] || {};
     if (d.status === "processed") return res.json({ estado: "pago", payment_id: pg.id, tipo: pg.payment_method?.type });
     if (["canceled", "failed", "expired", "refunded"].includes(d.status)) return res.json({ estado: "cancelado", mp: d.status, detalhe: d.status_detail });
@@ -5989,7 +5989,7 @@ app.get("/api/v1/restaurante/:restaurant_id/mp/terminais", async (req, res) => {
     const r = await fetch("https://api.mercadopago.com/terminals/v1/list?limit=50",
       { headers: { Authorization: `Bearer ${config.mp_access_token}` } });
     const d = await r.json().catch(() => ({}));
-    return res.status(r.ok ? 200 : 502).json({ ok: r.ok, status: r.status, ...d });
+    return res.json({ ok: r.ok, status: r.status, ...d });
   } catch (err) {
     return sendError(res, 500, "Erro interno");
   }
