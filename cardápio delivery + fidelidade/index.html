@@ -5,9 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Cardápio Delivery</title>
 <meta name="theme-color" content="#0a0908">
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="manifest" href="manifest.json" id="manifestLink">
+<link rel="icon" href="icon-192.png" type="image/png" id="favIcon">
 <link rel="apple-touch-icon" href="icon-192.png" id="appleIcon">
+<script>
+  // cada restaurante vira um app com o próprio nome e logo (montado pelo servidor, pelo domínio)
+  (function(){
+    var api = "https://backend.evoriseai.com.br/api/v1/app";
+    var r = new URLSearchParams(location.search).get("r");
+    var q = "d=" + encodeURIComponent(location.hostname) + (r ? "&r=" + encodeURIComponent(r) : "");
+    document.getElementById("manifestLink").href = api + "/manifest.json?" + q;
+    document.getElementById("appleIcon").href = api + "/icone/192.png?" + q;
+    document.getElementById("favIcon").href = api + "/icone/192.png?" + q;
+  })();
+</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
