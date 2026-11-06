@@ -4038,7 +4038,7 @@ app.get("/api/v1/dominio-cardapio/:dominio", async (req, res) => {
 const appIconCache = new Map(); // "rid|logo|cor|tipo" → png
 async function appRestaurante(req) {
   let rid = String(req.query.r || "").trim() || null;
-  const dominio = normalizarDominio(req.query.d);
+  const dominio = normalizarDominio(req.query.d || req.get("origin") || req.get("referer"));
   if (!rid && dominio) {
     for (const coluna of ["cardapio_delivery_url", "fidelidade_url"]) {
       const { data } = await supabase.from("restaurants").select("id").eq(coluna, dominio).limit(1);
