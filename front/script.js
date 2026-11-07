@@ -598,6 +598,7 @@ function showHome() {
 }
 
 function showAdmin() {
+  if (!checkAdminAccess()) return; 
   board?.classList.add("hidden");
   crmView?.classList.add("hidden");
   resultsView?.classList.add("hidden");
