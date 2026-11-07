@@ -2048,7 +2048,11 @@ border:1px solid rgba(255,255,255,0.08);
       let pedido = null;
       const btn = document.getElementById("fab-instalar"), dica = document.getElementById("fab-dica");
       const instalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-      const atualizar = () => btn.classList.toggle("hidden", instalado());
+      // só aparece na tela de login: entrou na conta, some (e volta se sair da conta)
+      const telaLogin = document.getElementById("login-screen");
+      const atualizar = () => btn.classList.toggle("hidden", instalado() || !telaLogin || telaLogin.classList.contains("hidden"));
+      if (telaLogin) new MutationObserver(() => { atualizar(); if (telaLogin.classList.contains("hidden")) dica.classList.add("hidden"); })
+        .observe(telaLogin, { attributes: true, attributeFilter: ["class"] });
       let tDica;
       const mostrarDica = (txt) => { dica.textContent = txt; dica.classList.remove("hidden"); clearTimeout(tDica); tDica = setTimeout(() => dica.classList.add("hidden"), 10000); };
       window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedido = e; atualizar(); });
