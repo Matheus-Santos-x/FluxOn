@@ -196,6 +196,8 @@
     <!-- STEP 2 — endereço -->
     <div class="checkout-step" id="step2" style="display:none;">
       <h2>Endereço de entrega</h2>
+      <div class="end-salvos hidden" id="endSalvos"></div>
+      <div id="endForm">
       <div class="field">
         <label for="inpCep">CEP</label>
         <input type="text" id="inpCep" placeholder="00000-000" inputmode="numeric" maxlength="9" autocomplete="postal-code">
@@ -224,6 +226,7 @@
       <div class="field">
         <label>Ponto de referência (opcional)</label>
         <input type="text" id="inpReferencia" placeholder="Ex: perto do mercado">
+      </div>
       </div>
       <button class="checkout-btn" id="step2NextBtn">Continuar</button>
     </div>
