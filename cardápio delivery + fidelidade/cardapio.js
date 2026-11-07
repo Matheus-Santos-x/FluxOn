@@ -787,12 +787,7 @@ document.getElementById("step1NextBtn").onclick = async () => {
     showStep(2);
   }catch(err){
     console.error(err);
-    // rascunho antigo já foi confirmado/cancelado: começa um pedido novo e tenta de novo
-    if(CURRENT_ORDER_ID && /não pode mais ser alterado/i.test(err.message || "")){
-      CURRENT_ORDER_ID = null;
-      return document.getElementById("step1NextBtn").click();
-    }
-    alert("Não foi possível salvar seus dados: " + (err.message || "tente novamente."));
+    alert("Não foi possível salvar seus dados. Tente novamente.");
      
   }finally{
     btn.disabled = false; btn.textContent = "Continuar";
