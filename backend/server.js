@@ -193,7 +193,7 @@ app.use(cors({
     return callback(new Error(`CORS: origem não permitida: ${origin}`));
   },
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-service-key']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-service-key', 'x-cliente-token']
 }));
 
 app.use((req, res, next) => {
@@ -6636,6 +6636,111 @@ function telefoneLocal(v) {
   if (d.length >= 12 && d.startsWith("55")) d = d.slice(2);
   return d.length === 10 || d.length === 11 ? d : null;
 }
+
+/* ========================================
+   👤 CONTA DO CLIENTE (cardápio delivery): nome e endereços salvos
+   O login é o token da fidelidade (fica no celular depois do código no WhatsApp),
+   enviado no cabeçalho x-cliente-token. Os endereços ficam na coluna
+   base_clientes.enderecos (lista), o principal primeiro.
+======================================== */
+const END_CAMPOS = ["cep", "rua", "numero", "bairro", "complemento", "referencia", "cidade", "uf"];
+const endNorm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+const endLimpo = (b) => Object.fromEntries(END_CAMPOS.map(k => [k, String(b?.[k] ?? "").trim().slice(0, k === "uf" ? 2 : 120)]));
+const endOrdenar = (l) => [...l].sort((a, b) => (b.principal ? 1 : 0) - (a.principal ? 1 : 0) || String(b.ultimo_uso || "").localeCompare(String(a.ultimo_uso || "")));
+
+async function clienteDoToken(req) {
+  const token = String(req.get("x-cliente-token") || "").trim();
+  if (!token || token.length > 64) return null;
+  const { data } = await supabase.from("base_clientes").select("id, nome, numero, enderecos")
+    .eq("token_fidelidade", token).eq("restaurant_id", req.params.restaurant_id).maybeSingle();
+  if (data) data.enderecos = Array.isArray(data.enderecos) ? data.enderecos : [];
+  return data || null;
+}
+async function salvarEnderecos(cli, lista) {
+  const l = endOrdenar(lista).slice(0, 20);
+  if (l.length && !l.some(e => e.principal)) l[0].principal = true;
+  const { error } = await supabase.from("base_clientes").update({ enderecos: l }).eq("id", cli.id);
+  if (error) throw error;
+  return endOrdenar(l);
+}
+
+app.get("/api/v1/cliente/:restaurant_id/conta", async (req, res) => {
+  try {
+    const cli = await clienteDoToken(req);
+    if (!cli) return sendError(res, 401, "Entre na sua conta de novo");
+    return res.json({ nome: cli.nome || "", telefone: cli.numero || "", enderecos: endOrdenar(cli.enderecos) });
+  } catch (err) {
+    console.error("❌ conta cliente:", err.message);
+    return sendError(res, 500, "Erro ao carregar a conta");
+  }
+});
+
+// muda o nome
+app.patch("/api/v1/cliente/:restaurant_id/conta", async (req, res) => {
+  try {
+    const cli = await clienteDoToken(req);
+    if (!cli) return sendError(res, 401, "Entre na sua conta de novo");
+    const nome = String(req.body?.nome || "").trim().slice(0, 80);
+    if (!nome) return sendError(res, 400, "Informe seu nome");
+    const { error } = await supabase.from("base_clientes").update({ nome }).eq("id", cli.id);
+    if (error) throw error;
+    return res.json({ success: true, nome });
+  } catch (err) {
+    console.error("❌ conta cliente (nome):", err.message);
+    return sendError(res, 500, "Erro ao salvar");
+  }
+});
+
+// salva um endereço; se já existe igual, só marca como o último usado
+app.post("/api/v1/cliente/:restaurant_id/enderecos", async (req, res) => {
+  try {
+    const cli = await clienteDoToken(req);
+    if (!cli) return sendError(res, 401, "Entre na sua conta de novo");
+    const e = endLimpo(req.body);
+    if (!e.rua || !e.numero || !e.bairro) return sendError(res, 400, "Preencha rua, número e bairro");
+    const agora = new Date().toISOString();
+    const lista = cli.enderecos;
+    const igual = lista.find(x => ["rua", "numero", "bairro", "complemento"].every(k => endNorm(x[k]) === endNorm(e[k])));
+    if (igual) {
+      END_CAMPOS.forEach(k => { if (!igual[k] && e[k]) igual[k] = e[k]; }); // completa o que faltava (CEP, cidade...)
+      igual.ultimo_uso = agora;
+    } else {
+      lista.push({ id: crypto.randomBytes(6).toString("hex"), ...e, principal: lista.length === 0, ultimo_uso: agora });
+    }
+    const enderecos = await salvarEnderecos(cli, lista);
+    return res.json({ enderecos, id: (igual || enderecos.find(x => x.ultimo_uso === agora))?.id });
+  } catch (err) {
+    console.error("❌ endereço cliente:", err.message);
+    return sendError(res, 500, "Erro ao salvar o endereço");
+  }
+});
+
+// escolhe o endereço principal
+app.patch("/api/v1/cliente/:restaurant_id/enderecos/:id/principal", async (req, res) => {
+  try {
+    const cli = await clienteDoToken(req);
+    if (!cli) return sendError(res, 401, "Entre na sua conta de novo");
+    if (!cli.enderecos.some(e => e.id === req.params.id)) return sendError(res, 404, "Endereço não encontrado");
+    cli.enderecos.forEach(e => { e.principal = e.id === req.params.id; });
+    return res.json({ enderecos: await salvarEnderecos(cli, cli.enderecos) });
+  } catch (err) {
+    console.error("❌ endereço principal:", err.message);
+    return sendError(res, 500, "Erro ao salvar");
+  }
+});
+
+// apaga um endereço
+app.delete("/api/v1/cliente/:restaurant_id/enderecos/:id", async (req, res) => {
+  try {
+    const cli = await clienteDoToken(req);
+    if (!cli) return sendError(res, 401, "Entre na sua conta de novo");
+    const lista = cli.enderecos.filter(e => e.id !== req.params.id);
+    return res.json({ enderecos: await salvarEnderecos(cli, lista) });
+  } catch (err) {
+    console.error("❌ apagar endereço:", err.message);
+    return sendError(res, 500, "Erro ao apagar");
+  }
+});
 
 app.post("/api/v1/cliente/:restaurant_id/login/solicitar", clienteLimitSolicitar, async (req, res) => {
   try {
