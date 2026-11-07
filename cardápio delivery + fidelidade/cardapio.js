@@ -749,6 +749,25 @@ let CEP_INFO = null;
   });
 })();
 
+function basePayload(v, extra){
+  return {
+    restaurant_id: RESTAURANT_ID,
+    client_name: v.nome,
+    client_phone: v.telefone,
+    // manda nos dois formatos (name/qty/price E nome/quantidade/preco)
+    // porque é assim que o backend e a rota de impressão leem os itens
+    itens: CART.map(c => ({
+      name:c.nome, nome:c.nome,
+      qty:c.qty, quantidade:c.qty,
+      price:c.preco, preco:c.preco
+    })),
+    total_price: cartTotal(),
+    origin: "cardapio_delivery",
+    ...(CURRENT_ORDER_ID ? { order_id: CURRENT_ORDER_ID } : {}),
+    ...extra
+  };
+}
+
 /* STEP 1 → salva o lead na hora (nome + telefone), mesmo que ele
    desista depois — fica registrado como rascunho pra follow-up */
 document.getElementById("step1NextBtn").onclick = async () => {
