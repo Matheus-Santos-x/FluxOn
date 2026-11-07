@@ -3636,6 +3636,8 @@ app.get("/api/v1/cardapio/:restaurant_id/categorias", async (req, res) => {
 // POST - Cria categoria
 app.post("/api/v1/cardapio/:restaurant_id/categorias", async (req, res) => {
   const { restaurant_id } = req.params;
+  if (req.auth?.kind === "user" && req.auth.restaurant_id !== restaurant_id)
+    return sendError(res, 403, "Não autorizado");
   const { nome, foto_url } = req.body;
 
   if (!nome || !nome.trim()) return sendError(res, 400, "nome é obrigatório");
@@ -3896,6 +3898,8 @@ app.post("/api/v1/cardapio/:restaurant_id/validar-itens", async (req, res) => {
 // PATCH - Salva ordem das categorias
 app.patch("/api/v1/cardapio/:restaurant_id/ordem-categorias", async (req, res) => {
   const { restaurant_id } = req.params;
+  if (req.auth?.kind === "user" && req.auth.restaurant_id !== restaurant_id)
+    return sendError(res, 403, "Não autorizado");
   const { ordem } = req.body;
   if (!Array.isArray(ordem)) return sendError(res, 400, "ordem deve ser um array");
 
@@ -4099,9 +4103,20 @@ app.get("/api/v1/app/icone/:tipo", async (req, res) => {
       const tam = tipo === "192" ? 192 : 512;
       const miolo = tipo === "maskable" ? Math.round(tam * 0.72) : tam;
       let img = null;
-      if (a.logo) {
+      const logoSegura = (u) => {
         try {
-          const r = await fetch(a.logo);
+          const x = new URL(u);
+          if (x.protocol !== "https:") return false;            // só https
+          const h = x.hostname.toLowerCase();
+          if (!h.includes(".")) return false;                   // nada de nomes internos
+          if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|::1|\[)/.test(h)) return false;
+          if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false; // faixa privada 172.16–31
+          return true;
+        } catch { return false; }
+      };
+      if (a.logo && logoSegura(a.logo)) {
+        try {
+          const r = await fetch(a.logo, { redirect: "error", signal: AbortSignal.timeout(5000) });
           if (r.ok) img = await sharp(Buffer.from(await r.arrayBuffer())).resize(miolo, miolo, { fit: "cover" }).flatten({ background: "#ffffff" }).png().toBuffer();
         } catch { img = null; }
       }
