@@ -288,7 +288,7 @@ app.use("/api/v1/caixa/:restaurant_id", requireAuth);
 app.use("/api/v1/rodizio/:restaurant_id", requireAuth);
 app.use("/orders", requireAuth); // só login: aqui o :id pode ser de pedido, não de restaurante
 for (const p of ["integracao", "impressora", "fiscal", "marketplace", "mp", "tracking-url",
-  "webhook-satisfaction", "webhook-fechamento", "webhook-crm", "webhook-reclamacao", "crm-mensagem",
+  "webhook-satisfaction", "webhook-fechamento", "webhook-crm", "webhook-reclamacao", "webhook-login", "crm-mensagem",
   "imprimir-pedido", "reimprimir-pedido"]) {
   app.use(`/api/v1/restaurante/:restaurant_id/${p}`, requireAuth);
 }
@@ -6552,6 +6552,33 @@ app.post("/api/v1/restaurante/:restaurant_id/webhook-reclamacao", async (req, re
   }
 });
 
+// ===== WEBHOOK LOGIN DO CARDÁPIO (código de 6 dígitos que o cliente recebe no WhatsApp) =====
+app.get("/api/v1/restaurante/:restaurant_id/webhook-login", async (req, res) => {
+  try {
+    const dados = await getIntegracao(req.params.restaurant_id, "webhook_login");
+    return res.json({ success: true, webhook_url: dados?.webhook_url || "" });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+app.post("/api/v1/restaurante/:restaurant_id/webhook-login", async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const webhook_url = String(req.body?.webhook_url || "").trim();
+    if (webhook_url && !/^https?:\/\//i.test(webhook_url))
+      return sendError(res, 400, "A URL deve começar com http:// ou https://");
+    await supabase.from("integracoes").upsert({
+      restaurant_id, tipo: "webhook_login",
+      dados: { webhook_url: webhook_url || null }, ativo: true,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "restaurant_id,tipo" });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
 // POST - Envia a mensagem do CRM para o webhook (n8n) do restaurante
 app.post("/api/v1/restaurante/:restaurant_id/crm-mensagem", async (req, res) => {
   try {
@@ -6757,8 +6784,10 @@ app.post("/api/v1/cliente/:restaurant_id/login/solicitar", clienteLimitSolicitar
     if (reg.pedidos.length && agora - reg.pedidos[reg.pedidos.length - 1] < 45 * 1000)
       return sendError(res, 429, "Aguarde alguns segundos para pedir outro código.");
 
-    const crm = await getIntegracao(rid, "webhook_crm");
-    const url = crm?.webhook_url || OWNER_OTP_WEBHOOK_URL;
+    // 1º o webhook de login do restaurante; sem ele, o do CRM; sem nenhum, o da Evorise (variável do backend)
+    const login = await getIntegracao(rid, "webhook_login");
+    const crm = login?.webhook_url ? null : await getIntegracao(rid, "webhook_crm");
+    const url = login?.webhook_url || crm?.webhook_url || OWNER_OTP_WEBHOOK_URL;
     if (!url) {
       console.error("❌ login cliente: nenhum webhook de WhatsApp configurado");
       return sendError(res, 503, "Entrar pelo WhatsApp ainda não está disponível neste restaurante");
@@ -6776,21 +6805,22 @@ app.post("/api/v1/cliente/:restaurant_id/login/solicitar", clienteLimitSolicitar
     const corpo = crm?.webhook_url
       ? { restaurant_id: rid, restaurant_name: rest?.name || null, client_name: String(req.body?.nome || "").slice(0, 80) || null,
           client_phone: tel, client_phone_whatsapp: `55${tel}`, message: mensagem, sent_at: new Date().toISOString(), source: "login_cliente" }
-      : { tipo: "cliente_otp", nome: String(req.body?.nome || "").slice(0, 80) || null, telefone: `55${tel}`, codigo,
-          expira_em_minutos: CLIENTE_OTP_MINUTOS, mensagem };
+      : { tipo: "cliente_otp", restaurant_id: rid, restaurant_name: rest?.name || null,
+          nome: String(req.body?.nome || "").slice(0, 80) || null, telefone: `55${tel}`, codigo,
+          expira_em_minutos: CLIENTE_OTP_MINUTOS, mensagem, sent_at: new Date().toISOString() };
 
     const r = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(!crm?.webhook_url && OWNER_OTP_WEBHOOK_SECRET ? { "x-fluxon-secret": OWNER_OTP_WEBHOOK_SECRET } : {})
+        ...(url === OWNER_OTP_WEBHOOK_URL && OWNER_OTP_WEBHOOK_SECRET ? { "x-fluxon-secret": OWNER_OTP_WEBHOOK_SECRET } : {})
       },
       body: JSON.stringify(corpo),
       signal: AbortSignal.timeout(10000)
     });
     if (!r.ok) {
       console.error(`❌ login cliente: webhook respondeu ${r.status}`);
-      return sendError(res, 502, "Não foi possível enviar o código agora. Tente de novo.");
+      return sendError(res, 400, "Não foi possível enviar o código agora. Tente de novo.");
     }
     return res.json({ success: true });
   } catch (err) {
