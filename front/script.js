@@ -3251,7 +3251,6 @@ async function loadSettingsData() {
   } catch (e) {
     console.error("Erro ao carregar webhook de login:", e);
   }
-  }
 
   // Mesas & Automação — carrega do banco
   try {
