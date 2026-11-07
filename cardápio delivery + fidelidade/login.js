@@ -33,7 +33,7 @@ function loginAtualizarBotao(){
 }
 
 function loginClique(){
-  if(FID.cliente) mostrarAba("fidelidade");
+  if(FID.cliente) contaMenu();
   else loginAbrir();
 }
 
