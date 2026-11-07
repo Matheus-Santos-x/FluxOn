@@ -1787,3 +1787,50 @@ backdrop-filter:blur(10px);
     .fid-view{ max-width:560px; margin-left:auto; margin-right:auto; }
     .fid-grid{ grid-template-columns:repeat(3, minmax(0, 1fr)); }
   }
+
+/* ================= MINHA CONTA ================= */
+.conta-menu{position:fixed;top:calc(58px + env(safe-area-inset-top));right:12px;z-index:320;width:min(280px,calc(100vw - 24px));background:var(--bg);border:1px solid var(--line);border-radius:16px;box-shadow:0 18px 40px rgba(0,0,0,.22);overflow:hidden;animation:contaMenuIn .18s ease}
+.conta-menu-quem{padding:14px 16px;border-bottom:1px solid var(--line);display:grid;gap:2px}
+.conta-menu-quem b{font-size:15px;font-weight:800;color:var(--text)}
+.conta-menu-quem span{font-size:13px;color:var(--muted);font-family:var(--font-mono)}
+.conta-menu-item{width:100%;display:flex;align-items:center;gap:10px;padding:13px 16px;font-size:14.5px;font-weight:700;color:var(--text);text-align:left;min-height:48px}
+.conta-menu-item:hover{background:var(--surface)}
+.conta-menu-item.sair{border-top:1px solid var(--line);color:var(--red)}
+@keyframes contaMenuIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.conta-tela{position:fixed;inset:0;z-index:330;background:var(--bg);overflow-y:auto;animation:contaTelaIn .25s ease}
+.conta-topo{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;background:var(--bg);border-bottom:1px solid var(--line)}
+.conta-topo h2{font-family:var(--font-display);font-size:19px}
+.conta-voltar{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:var(--text)}
+.conta-voltar:active{background:var(--surface)}
+.conta-corpo{max-width:560px;margin:0 auto;padding:18px 16px calc(40px + env(safe-area-inset-bottom))}
+.conta-sec{margin-bottom:26px}
+.conta-sec h3{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+.conta-btn{width:100%;min-height:50px;border-radius:14px;background:var(--red)!important;color:#fff!important;font-size:15px;font-weight:800;margin-top:4px}
+.conta-btn.contorno{background:transparent!important;color:var(--red)!important;border:1.5px dashed color-mix(in srgb,var(--red) 55%,transparent)}
+.conta-btn:disabled{opacity:.6}
+.conta-ends{display:grid;gap:10px;margin-bottom:12px}
+.conta-end{display:flex;align-items:flex-start;gap:10px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.conta-end-txt{flex:1;display:grid;gap:3px;font-size:14px}
+.conta-end-txt b{color:var(--text)}
+.conta-end-txt span{font-size:12.5px;color:var(--muted)}
+.conta-tag{justify-self:start;margin-top:4px;font-style:normal;font-size:11px;font-weight:800;color:#fff;background:var(--red);padding:3px 8px;border-radius:999px}
+.conta-link{justify-self:start;margin-top:4px;font-size:12.5px;font-weight:700;color:var(--red);text-decoration:underline;text-underline-offset:3px}
+.conta-lixo{width:40px;height:40px;flex-shrink:0;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.conta-lixo:hover{color:var(--red);background:var(--bg)}
+.conta-vazio{font-size:13.5px;color:var(--muted);line-height:1.5}
+.conta-form{padding:14px;border:1px solid var(--line);border-radius:14px;margin-bottom:12px}
+@keyframes contaTelaIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+/* endereços salvos na etapa do pedido */
+.end-salvos{display:grid;gap:10px;margin-bottom:16px}
+.end-salvos.hidden,#endForm.hidden{display:none}
+.end-op{display:flex;align-items:center;gap:12px;width:100%;padding:14px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);text-align:left;min-height:56px}
+.end-op.sel{border-color:var(--red);background:color-mix(in srgb,var(--red) 7%,var(--bg))}
+.end-radio{width:20px;height:20px;flex-shrink:0;border-radius:50%;border:2px solid var(--muted-2);position:relative}
+.end-op.sel .end-radio{border-color:var(--red)}
+.end-op.sel .end-radio::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--red)}
+.end-txt{display:grid;gap:3px;font-size:14px}
+.end-txt b{color:var(--text)}
+.end-txt span{font-size:12.5px;color:var(--muted)}
+.end-add{width:100%;min-height:48px;border-radius:14px;border:1.5px dashed color-mix(in srgb,var(--red) 55%,transparent);color:var(--red);font-size:14px;font-weight:800}
+.end-add.sel{background:color-mix(in srgb,var(--red) 7%,var(--bg))}
+
