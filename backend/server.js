@@ -2128,7 +2128,23 @@ app.patch("/api/v1/pedidos/:id/adicionar-itens", requireRowOwner("orders"), asyn
     // Monta itens combinados
     const itensAntigos = Array.isArray(pedidoAtual.itens) ? pedidoAtual.itens : [];
     const itensCombinados = [...itensAntigos, ...itens_novos];
-    const novoTotal = parseFloat(pedidoAtual.total_price || 0) + parseFloat(total_adicional || 0);
+    // cliente pela mesa (QR, sem login): o servidor confere conta aberta, item pausado e preço
+    let adicional = parseFloat(total_adicional || 0);
+    if (!readAuth(req)) {
+      if (["finished", "cancelled", "canceled"].includes(pedidoAtual.status))
+        return sendError(res, 400, "Essa conta já foi fechada. Chame o garçom.");
+      const pausado = await itemPausado(pedidoAtual.restaurant_id, itens_novos);
+      if (pausado) return sendError(res, 400, `${pausado} acabou de esgotar. Tire do carrinho para continuar.`);
+      const { total, naoEncontrados } = await calcularTotalServidor(pedidoAtual.restaurant_id, itens_novos);
+      if (naoEncontrados.length > 0 || Math.abs(total - adicional) > 0.01) {
+        console.warn(`💰 TOTAL[${AUTH_MODE}] adicionar-itens pedido=${id} cliente=${adicional} servidor=${total} fora_do_cardapio=${JSON.stringify(naoEncontrados)}`);
+        if (AUTH_MODE === "enforce") {
+          if (naoEncontrados.length > 0) return sendError(res, 400, `Item fora do cardápio: ${naoEncontrados[0]}`);
+          adicional = total;
+        }
+      }
+    }
+    const novoTotal = parseFloat(pedidoAtual.total_price || 0) + adicional;
 
     // Atualiza o pedido
     const updatePayload = {
@@ -2462,6 +2478,10 @@ app.post("/api/v1/pedidos", async (req, res) => {
       }
     }
 
+        if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0) {
+      const pausado = await itemPausado(restaurant_id, normalizedItems);
+      if (pausado) return sendError(res, 400, `${pausado} acabou de esgotar. Tire do carrinho para continuar.`);
+    }
     if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0 && (ehDeliveryPublico || !order_id)) {
       const { total: totalServidor, naoEncontrados } = await calcularTotalServidor(restaurant_id, normalizedItems);
       const diverge = Math.abs(totalServidor - (parseFloat(total_price_cliente) || 0)) > 0.01;
@@ -3826,6 +3846,22 @@ function validarItensCardapio(cardapio, itens) {
   });
 
   return resultados;
+}
+
+// item pausado (esgotado) não entra, mesmo com o cardápio aberto desde antes da pausa
+// compara pelo nome do item ("Item" ou "Item — Opção"); devolve o nome do item pausado ou null
+async function itemPausado(restaurant_id, itens) {
+  const { data: pausados } = await supabase.from("cardapio").select("nome")
+    .eq("restaurant_id", restaurant_id).eq("ativo", false);
+  if (!pausados?.length) return null;
+  const norm = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const nomes = new Map(pausados.map(p => [norm(p.nome), p.nome]));
+  for (const i of itens) {
+    const nome = norm(i.name || i.nome);
+    const achou = nomes.get(nome) || nomes.get(nome.split(/\s+—\s+/)[0]);
+    if (achou) return achou;
+  }
+  return null;
 }
 
 async function calcularTotalServidor(restaurant_id, itens) {
