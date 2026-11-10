@@ -2238,6 +2238,36 @@ async function estornarSeloFidelidade(order) {
   }
 }
 
+// ===== FORMA DE PAGAMENTO → VALORES (caixa e resumo do dia) =====
+// "pix R$30.00 + dinheiro R$20.00" → [{ metodo: "pix", valor: 30 }, { metodo: "dinheiro", valor: 20 }]
+// as partes são ajustadas ao total DESTE pedido (mesa paga junta antiga trazia a conta inteira em cada pedido)
+const tipoPagamento = (t) =>
+  t.includes("refeicao") || t.includes("refeição") ? "vale_refeicao"
+  : t.includes("vale") || t.includes("voucher") ? "voucher"
+  : t.includes("pix") ? "pix"
+  : t.includes("credito") || t.includes("crédito") ? "credito"
+  : t.includes("debito") || t.includes("débito") ? "debito"
+  : t.includes("dinheiro") ? "dinheiro"
+  : t.includes("maquininha") || t.includes("cartão") || t.includes("cartao") ? "maquininha"
+  : "outros";
+const valorTexto = (t) => {
+  const m = t.match(/\d[\d.,]*/);
+  if (!m) return 0;
+  let v = m[0];
+  if (v.includes(",")) v = v.replace(/\./g, "").replace(",", ".");
+  return parseFloat(v) || 0;
+};
+function repartirPagamento(paymentMethod, total) {
+  const s = String(paymentMethod || "").toLowerCase();
+  total = Number(total) || 0;
+  if (!s.includes("+")) return [{ metodo: tipoPagamento(s), valor: total }];
+  const partes = s.split("+").map(p => ({ metodo: tipoPagamento(p), valor: valorTexto(p) }));
+  const soma = partes.reduce((a, p) => a + p.valor, 0);
+  if (soma <= 0) return [{ metodo: partes[0].metodo, valor: total }];
+  const fator = total / soma;
+  return partes.map(p => ({ metodo: p.metodo, valor: Math.round(p.valor * fator * 100) / 100 }));
+}
+
 app.patch("/orders/:id/status", requireRowOwner("orders"), async (req, res) => {
   try {
     const { id } = req.params;
@@ -2349,64 +2379,29 @@ console.log(`🖨️ Job de impressão adicionado — Pedido #${data.order_numbe
   dispara_em: new Date(Date.now() + 30 * 60 * 1000).toISOString()
 }]);
 console.log(`✅ Webhook satisfação agendado na fila — Pedido ${id}`);
-    // Atualiza caixa aberto
-if (status === "finished") {
+
+      
+    // Atualiza caixa aberto (só na 1ª vez que o pedido finaliza: finalizar de novo não soma em dobro)
+if (status === "finished" && orderAntes?.status !== "finished") {
   try {
     const { data: caixaAberto } = await supabase
-      .from("caixa")
-      .select("id")
-      .eq("restaurant_id", data.restaurant_id)
-      .eq("status", "aberto")
-      .single();
+      .from("caixa").select("id")
+      .eq("restaurant_id", data.restaurant_id).eq("status", "aberto")
+      .maybeSingle();
 
     if (caixaAberto) {
-      const paymentStr = String(data.payment_method || "").toLowerCase();
-      const total = parseFloat(data.total_price || 0);
-
-      const incrementos = {
-        valor_pix: 0, qtd_pix: 0,
-        valor_credito: 0, qtd_credito: 0,
-        valor_debito: 0, qtd_debito: 0,
-        valor_dinheiro: 0, qtd_dinheiro: 0,
-        valor_maquininha: 0, qtd_maquininha: 0
-      };
-
-      if (paymentStr.includes("+")) {
-        const partes = paymentStr.split("+").map(p => p.trim());
-        partes.forEach(parte => {
-          const valorMatch = parte.match(/r?\$?([\d.,]+)/i);
-          const valor = valorMatch ? parseFloat(valorMatch[1].replace(",", ".")) : 0;
-          if (parte.includes("pix"))                                        { incrementos.valor_pix        += valor; incrementos.qtd_pix        += 1; }
-          if (parte.includes("credito") || parte.includes("crédito"))       { incrementos.valor_credito    += valor; incrementos.qtd_credito    += 1; }
-          if (parte.includes("debito")  || parte.includes("débito"))        { incrementos.valor_debito     += valor; incrementos.qtd_debito     += 1; }
-          if (parte.includes("dinheiro"))                                    { incrementos.valor_dinheiro   += valor; incrementos.qtd_dinheiro   += 1; }
-          if (parte.includes("maquininha"))                                  { incrementos.valor_maquininha += valor; incrementos.qtd_maquininha += 1; }
-        });
-      } else {
-        if (paymentStr.includes("pix"))                                      { incrementos.valor_pix        += total; incrementos.qtd_pix        += 1; }
-        if (paymentStr.includes("credito") || paymentStr.includes("crédito")){ incrementos.valor_credito    += total; incrementos.qtd_credito    += 1; }
-        if (paymentStr.includes("debito")  || paymentStr.includes("débito")) { incrementos.valor_debito     += total; incrementos.qtd_debito     += 1; }
-        if (paymentStr.includes("dinheiro"))                                  { incrementos.valor_dinheiro   += total; incrementos.qtd_dinheiro   += 1; }
-        if (paymentStr.includes("maquininha"))                                { incrementos.valor_maquininha += total; incrementos.qtd_maquininha += 1; }
+      const inc = { pix: [0, 0], credito: [0, 0], debito: [0, 0], dinheiro: [0, 0], maquininha: [0, 0], vale_refeicao: [0, 0], voucher: [0, 0] };
+      for (const p of repartirPagamento(data.payment_method, parseFloat(data.total_price || 0))) {
+        if (!inc[p.metodo]) { console.warn(`⚠️ Caixa: forma de pagamento não reconhecida "${data.payment_method}" — Pedido #${data.order_number}`); continue; }
+        inc[p.metodo][0] += p.valor;
+        inc[p.metodo][1] += 1;
       }
-
-      const temIncremento = Object.values(incrementos).some(v => v > 0);
-      if (temIncremento) {
-       await supabase.rpc("incrementar_caixa", {
-  p_caixa_id: caixaAberto.id,
-  p_valor_pix: incrementos.valor_pix,
-  p_qtd_pix: incrementos.qtd_pix,
-  p_valor_credito: incrementos.valor_credito,
-  p_qtd_credito: incrementos.qtd_credito,
-  p_valor_debito: incrementos.valor_debito,
-  p_qtd_debito: incrementos.qtd_debito,
-  p_valor_dinheiro: incrementos.valor_dinheiro,
-  p_qtd_dinheiro: incrementos.qtd_dinheiro,
-  p_valor_maquininha: incrementos.valor_maquininha,
-  p_qtd_maquininha: incrementos.qtd_maquininha,
-  p_total_pedidos: 1
-});
-        console.log(`💰 Caixa atualizado atomicamente — Pedido #${data.order_number}`);
+      if (Object.values(inc).some(([v]) => v > 0)) {
+        const args = { p_caixa_id: caixaAberto.id, p_total_pedidos: 1 };
+        for (const [m, [v, q]] of Object.entries(inc)) { args[`p_valor_${m}`] = v; args[`p_qtd_${m}`] = q; }
+        const { error: incErr } = await supabase.rpc("incrementar_caixa_v2", args);
+        if (incErr) throw incErr;
+        console.log(`💰 Caixa atualizado — Pedido #${data.order_number}`);
       }
     }
   } catch (caixaErr) {
@@ -3413,39 +3408,14 @@ if (req.query.desde) {
     const delivery = finalizados.filter(o => String(o.service_type || "").toLowerCase() === "delivery").length;
     const local = finalizados.filter(o => String(o.service_type || "").toLowerCase() !== "delivery").length;
 
+    const NOMES_PAG = { pix: "Pix", credito: "Crédito", debito: "Débito", dinheiro: "Dinheiro", maquininha: "Maquininha", vale_refeicao: "Vale-refeição", voucher: "Voucher", outros: "Outros" };
     const porPagamento = {};
     finalizados.forEach(o => {
-      const paymentStr = String(o.payment_method || "Não informado").toLowerCase();
-      const total = parseFloat(o.total_price) || 0;
-      if (paymentStr.includes("+")) {
-        const partes = paymentStr.split("+").map(p => p.trim());
-        partes.forEach(parte => {
-          const valorMatch = parte.match(/r?\$?([\d.,]+)/i);
-          const valor = valorMatch ? parseFloat(valorMatch[1].replace(",", ".")) : 0;
-          let metodo = "outros";
-          if (parte.includes("pix")) metodo = "Pix";
-          else if (parte.includes("credito") || parte.includes("crédito")) metodo = "Crédito";
-          else if (parte.includes("debito") || parte.includes("débito")) metodo = "Débito";
-          else if (parte.includes("dinheiro")) metodo = "Dinheiro";
-          else if (parte.includes("maquininha")) metodo = "Maquininha";
-          else if (parte.includes("refeicao") || parte.includes("refeição")) metodo = "Vale-refeição";
-          else if (parte.includes("vale") || parte.includes("voucher")) metodo = "Voucher";
-          if (!porPagamento[metodo]) porPagamento[metodo] = { qtd: 0, valor: 0 };
-          porPagamento[metodo].qtd++;
-          porPagamento[metodo].valor += valor;
-        });
-      } else {
-        let metodo = "Outros";
-        if (paymentStr.includes("pix")) metodo = "Pix";
-        else if (paymentStr.includes("credito") || paymentStr.includes("crédito")) metodo = "Crédito";
-        else if (paymentStr.includes("debito") || paymentStr.includes("débito")) metodo = "Débito";
-        else if (paymentStr.includes("dinheiro")) metodo = "Dinheiro";
-        else if (paymentStr.includes("maquininha")) metodo = "Maquininha";
-        else if (paymentStr.includes("refeicao") || paymentStr.includes("refeição")) metodo = "Vale-refeição";
-        else if (paymentStr.includes("vale") || paymentStr.includes("voucher")) metodo = "Voucher";
-        if (!porPagamento[metodo]) porPagamento[metodo] = { qtd: 0, valor: 0 };
-        porPagamento[metodo].qtd++;
-        porPagamento[metodo].valor += total;
+      for (const p of repartirPagamento(o.payment_method, parseFloat(o.total_price) || 0)) {
+        const nome = NOMES_PAG[p.metodo];
+        if (!porPagamento[nome]) porPagamento[nome] = { qtd: 0, valor: 0 };
+        porPagamento[nome].qtd++;
+        porPagamento[nome].valor += p.valor;
       }
     });
 
@@ -6959,7 +6929,7 @@ io.to(restaurant_id).emit("caixa_atualizado", { status: "fechado" });
     const webhookConfig = await getIntegracao(restaurant_id, "webhook_fechamento");
     const webhookUrl = webhookConfig?.webhook_url;
    if (webhookUrl) {
-  const totalMovimentado = caixa.valor_dinheiro + caixa.valor_pix + caixa.valor_credito + caixa.valor_debito + caixa.valor_maquininha;
+const totalMovimentado = ["dinheiro", "pix", "credito", "debito", "maquininha", "vale_refeicao", "voucher"].reduce((t, m) => t + (Number(caixa[`valor_${m}`]) || 0), 0);
   
   // Busca métricas do dia para enriquecer o webhook
   let metricas = {};
@@ -6986,6 +6956,10 @@ io.to(restaurant_id).emit("caixa_atualizado", { status: "fechado" });
           qtd_debito: caixa.qtd_debito,
           valor_maquininha: caixa.valor_maquininha,
           qtd_maquininha: caixa.qtd_maquininha,
+          valor_vale_refeicao: caixa.valor_vale_refeicao || 0,
+          qtd_vale_refeicao: caixa.qtd_vale_refeicao || 0,
+          valor_voucher: caixa.valor_voucher || 0,
+          qtd_voucher: caixa.qtd_voucher || 0,
           total_movimentado: totalMovimentado,
           total_pedidos: caixa.total_pedidos || 0,
           total_esperado_caixa: caixa.fundo_inicial + (caixa.valor_dinheiro || 0),
