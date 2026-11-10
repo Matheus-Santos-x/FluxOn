@@ -3867,6 +3867,8 @@ if (modalItems) {
   }
 
 if (modalNotes) modalNotes.textContent = order.notes || "";
+ const notasRow = document.getElementById("modal-notes-row");
+if (notasRow) notasRow.style.display = String(order.notes || "").trim() ? "" : "none";
   const notasRow = document.getElementById("modal-notes-row");
 if (notasRow) notasRow.style.display = String(order.notes || "").trim() ? "" : "none";
   modalPrevBtn?.classList.toggle("hidden", ["cancelado", "finalizado", "recebido"].includes(order._frontStatus));
