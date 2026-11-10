@@ -3806,7 +3806,7 @@ function openOrderModal(orderId) {
 
   activeOrderId = orderId;
 
-  if (modalId) modalId.textContent = `#${order.order_number || ""}`;
+  if (modalId) modalId.textContent = order.order_number ?? "";
   if (modalCustomer) modalCustomer.textContent = order.client_name || "Cliente";
 
   // Telefone + Horário na mesma linha
@@ -3868,8 +3868,6 @@ if (modalItems) {
 
 if (modalNotes) modalNotes.textContent = order.notes || "";
  const notasRow = document.getElementById("modal-notes-row");
-if (notasRow) notasRow.style.display = String(order.notes || "").trim() ? "" : "none";
-  const notasRow = document.getElementById("modal-notes-row");
 if (notasRow) notasRow.style.display = String(order.notes || "").trim() ? "" : "none";
   modalPrevBtn?.classList.toggle("hidden", ["cancelado", "finalizado", "recebido"].includes(order._frontStatus));
   // Botão imprimir — só aparece em "recebido"
