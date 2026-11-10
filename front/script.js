@@ -3851,16 +3851,13 @@ if (modalItems) {
       const qty = it?.qty || it?.quantidade || 1;
       const price = it?.price || it?.preco || 0;
       const li = document.createElement("li");
-      li.style.cssText = "list-style:none; display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#0d0d0d; border:1px solid rgba(255, 255, 255, 0.08); border-radius:10px; gap:12px;";
+            li.style.cssText = "list-style:none; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 0; background:none; border:none; border-bottom:1px solid rgba(255,255,255,0.05); border-radius:0;";
       li.innerHTML = `
-       <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
-          <span style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</span>
-          <span style="color:rgba(252,228,228,0.3); font-size:12px;">—</span>
-          <span style="color:rgba(252,228,228,0.5); font-size:13px; font-weight:700;">${qty} un</span>
+        <div style="display:flex; align-items:center; gap:12px; flex:1; min-width:0;">
+          <span style="font-size:12px; font-weight:800; color:rgba(252,228,228,0.3); min-width:24px;">×${qty}</span>
+          <span style="font-size:14px; font-weight:600; color:rgba(252,228,228,0.92); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(name)}</span>
         </div>
-        <div style="display:flex; align-items:center; flex-shrink:0;">
-          ${price > 0 ? `<span style="color:rgba(251,191,36,0.85); font-size:14px; font-weight:700; white-space:nowrap;">${formatCurrency(price * qty)}</span>` : ""}
-        </div>
+        ${price > 0 ? `<span style="font-size:14px; font-weight:700; color:rgba(251,191,36,0.9); white-space:nowrap;">${formatCurrency(price * qty)}</span>` : ""}
       `;
       modalItems.appendChild(li);
     });
@@ -5858,7 +5855,8 @@ if (modalEditBtn) modalEditBtn.addEventListener("click", (e) => {
   
   if (closeModalSecondaryBtn) closeModalSecondaryBtn.addEventListener("click", closeOrderModal);
 if (modalBackdrop) modalBackdrop.addEventListener("click", (e) => {
-  if (e.target === modalBackdrop) closeOrderModal();
+// Esc fecha o pedido aberto (no computador)
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && modalBackdrop?.classList.contains("open")) closeOrderModal(); });
 });
 if (modalPrevBtn) modalPrevBtn.addEventListener("click", () => regressStatus(activeOrderId));
 if (modalNextBtn) modalNextBtn.addEventListener("click", () => advanceStatus(activeOrderId));
