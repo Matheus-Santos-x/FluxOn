@@ -6459,6 +6459,8 @@ socket.on("order_updated", (order) => {
     orders = orders.filter(o => o.id !== order.id);
     return;
   }
+    // pedido que acabou de chegar (não estava na lista) → alerta
+  if (order.status === "pending" && !orders.some(o => o.id === order.id)) alertaNovoPedido(order);
   const idx = orders.findIndex(o => o.id === order.id);
   if (idx !== -1) {
     orders[idx] = { ...order, _frontStatus: toFrontStatus(order.status) };
