@@ -881,6 +881,8 @@ async function salvarAdminOperacao() {
     google_avaliacao_url: document.getElementById("admin-f-google-avaliacao").value.trim(),
     num_mesas: parseInt(document.getElementById("admin-f-mesas").value) || 0,
     pedido_minimo: parseFloat(document.getElementById("admin-f-pedido-minimo").value) || 0,
+        agendamento_ativo: document.getElementById("admin-f-agendamento").value === "1",
+    agendamento_antecedencia_min: (v => isNaN(v) ? 30 : Math.min(180, Math.max(0, v)))(parseInt(document.getElementById("admin-f-agendamento-min").value)),
     tempo_entrega_min: document.getElementById("admin-f-entrega-min").value ? parseInt(document.getElementById("admin-f-entrega-min").value) : null,
     tempo_entrega_max: document.getElementById("admin-f-entrega-max").value ? parseInt(document.getElementById("admin-f-entrega-max").value) : null,
     pagamento_online: toArray(document.getElementById("admin-f-pagamento-online").value),
@@ -6446,6 +6448,11 @@ socket.on("caixa_atualizado", (data) => {
 let _renderDebounce = null;
 socket.on("order_updated", (order) => {
   if (!order || !order.id) return;
+    // rascunho e agendado ficam fora do Kanban (o agendado aparece em "📅 Agendados")
+  if (order.status === "draft" || order.status === "scheduled") {
+    orders = orders.filter(o => o.id !== order.id);
+    return;
+  }
   const idx = orders.findIndex(o => o.id === order.id);
   if (idx !== -1) {
     orders[idx] = { ...order, _frontStatus: toFrontStatus(order.status) };
@@ -9965,3 +9972,95 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
+
+
+
+// ===== 📅 PEDIDOS AGENDADOS (pagos no Pix com a loja fechada; entram sozinhos perto do horário) =====
+let _agendados = [];
+const agHora = (iso) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "short", hour: "2-digit", minute: "2-digit" });
+
+async function carregarAgendados() {
+  const rid = getRestaurantId();
+  if (!rid) return;
+  try {
+    const r = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/agendados`, { headers: buildHeaders() });
+    if (!r.ok) return;
+    _agendados = (await r.json()).agendados || [];
+  } catch (e) { return; }
+  let btn = document.getElementById("tab-agendados");
+  if (!btn) {
+    const grupo = document.querySelector("#tabs-bar > div");
+    if (!grupo) return;
+    btn = document.createElement("button");
+    btn.className = "tab"; btn.id = "tab-agendados";
+    btn.addEventListener("click", abrirAgendados);
+    grupo.appendChild(btn);
+  }
+  btn.textContent = `📅 Agendados (${_agendados.length})`;
+  btn.style.display = _agendados.length ? "" : "none";
+  renderAgendados();
+}
+
+function renderAgendados() {
+  const modal = document.getElementById("agendados-modal");
+  if (!modal) return;
+  const itens = (o) => (o.itens || []).map(i => `${i.qty || i.quantidade || 1}x ${escapeHtml(i.name || i.nome || "")}`).join(", ");
+  modal.innerHTML = `
+    <div class="modal confirm-modal" style="max-width:560px; max-height:88vh; overflow-y:auto;">
+      <div class="modal-header"><h3>📅 Pedidos agendados</h3></div>
+      <div class="modal-body" style="gap:10px;">
+        ${_agendados.length ? _agendados.map(o => `
+          <div style="border:1px solid rgba(255,255,255,0.14); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; justify-content:space-between; gap:10px;">
+              <b style="color:rgba(252,228,228,0.95);">#${o.order_number} · ${escapeHtml(o.client_name || "")}</b>
+              <b style="color:rgba(251,191,36,1); white-space:nowrap;">${agHora(o.agendado_para)}</b>
+            </div>
+            <span style="font-size:13px; color:rgba(252,228,228,0.65);">${itens(o)}</span>
+            <span style="font-size:12px; color:rgba(252,228,228,0.45);">${escapeHtml(o.address || "")}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-top:4px;">
+              <b style="color:rgba(34,197,94,0.95);">${formatCurrency(Number(o.total_price))} · Pix pago</b>
+              <div style="display:flex; gap:8px;">
+                <button class="ghost-button" data-ag="cancelar:${o.id}">Cancelar e devolver Pix</button>
+                <button class="primary-button" data-ag="liberar:${o.id}">Mandar pra cozinha</button>
+              </div>
+            </div>
+          </div>`).join("") : `<span style="font-size:13px; color:rgba(252,228,228,0.5);">Nenhum pedido agendado.</span>`}
+        <p style="font-size:12px; color:rgba(252,228,228,0.45); margin:4px 0 0;">Cada pedido entra sozinho em "Pedidos Recebidos" um pouco antes do horário marcado.</p>
+      </div>
+      <div class="modal-actions"><button class="ghost-button" data-ag-fechar>Fechar</button></div>
+    </div>`;
+}
+
+function abrirAgendados() {
+  document.getElementById("agendados-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.id = "agendados-modal";
+  modal.className = "modal-backdrop open";
+  document.body.appendChild(modal);
+  modal.addEventListener("click", async (e) => {
+    if (e.target === modal || e.target.closest("[data-ag-fechar]")) return modal.remove();
+    const b = e.target.closest("[data-ag]");
+    if (!b || b.disabled) return;
+    const [acao, id] = b.dataset.ag.split(":");
+    const o = _agendados.find(x => x.id === id);
+    if (!o) return;
+    if (acao === "cancelar" && !confirm(`Cancelar o pedido #${o.order_number} de ${o.client_name || "cliente"}?\n\nO Pix de ${formatCurrency(Number(o.total_price))} volta para o cliente na hora e ele recebe um aviso no WhatsApp.`)) return;
+    b.disabled = true; b.textContent = acao === "cancelar" ? "Cancelando..." : "Enviando...";
+    try {
+      const r = await fetch(`${API_URL}/${id}/status`, {
+        method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ status: acao === "cancelar" ? "cancelled" : "pending" })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "Não foi possível atualizar o pedido");
+      if (acao === "cancelar" && d.estorno && d.estorno !== "ok")
+        alert(`Pedido cancelado, mas o Pix NÃO foi devolvido sozinho (${d.estorno}).\n\nDevolva pelo app do Mercado Pago.`);
+      if (acao === "liberar") { await fetchOrders(); renderBoard(); }
+    } catch (err) { alert(err.message); }
+    await carregarAgendados();
+  });
+  renderAgendados();
+}
+
+if (socket) socket.on("agendamentos_atualizados", () => carregarAgendados());
+setInterval(carregarAgendados, 60000);
+setTimeout(carregarAgendados, 1500);
