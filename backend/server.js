@@ -305,7 +305,7 @@ app.use("/api/v1/cardapio", (req, res, next) =>
 app.use("/api/v1/categorias", requireAuth);
 app.use("/api/v1/upload-image", requireAuth);
 app.use("/api/v1/pedidos-cliente", requireAuth);
-app.use("/api/v1/pedidos-mesa", requireAuth);
+app.use("/api/v1/pedidos-mesa", requireAuthWrite); // GET aberto pro cardápio QR (a rota esconde os dados do cliente)
 app.use("/api/v1/fidelidade/premios", requireAuth);
 app.use("/api/v1/fidelidade/:restaurant_id/clientes", requireAuth);
 app.use("/api/v1/pedidos", (req, res, next) => {
@@ -313,7 +313,9 @@ app.use("/api/v1/pedidos", (req, res, next) => {
   // o cardápio delivery atualiza o próprio rascunho sem login (a rota confere que ainda é rascunho)
   const rascunhoDelivery = req.method === "POST" && req.path === "/" && !!req.body?.order_id
     && req.body?.origin === "cardapio_delivery" && ["draft", "pending"].includes(req.body?.status);
-  return (criando || rascunhoDelivery) ? next() : requireAuth(req, res, next);
+  // o cardápio QR acrescenta itens na conta da mesa sem login (a rota confere origem, conta aberta, item e preço)
+  const adicionandoMesa = req.method === "PATCH" && /^\/[^/]+\/adicionar-itens$/.test(req.path);
+  return (criando || rascunhoDelivery || adicionandoMesa) ? next() : requireAuth(req, res, next);
 });
 
 // ===== RATE LIMITING =====
@@ -985,7 +987,14 @@ app.get("/api/v1/pedidos-mesa", async (req, res) => {
       .single();
 
     if (error || !data) return res.json({ pedido: null });
-    return res.json({ pedido: data });
+    if (readAuth(req)) return res.json({ pedido: data });
+    // cardápio QR (sem login): só o necessário pra acrescentar itens, com o telefone escondido
+    const tel = String(data.client_phone || "").replace(/\D/g, "");
+    return res.json({ pedido: {
+      id: data.id, order_number: data.order_number, status: data.status, table_number: data.table_number,
+      itens: data.itens, total_price: data.total_price, client_name: data.client_name,
+      client_phone: tel ? `•••••-${tel.slice(-4)}` : null, created_at: data.created_at
+    } });
   } catch (err) {
     return res.json({ pedido: null });
   }
@@ -2131,7 +2140,7 @@ app.patch("/api/v1/pedidos/:id/adicionar-itens", requireRowOwner("orders"), asyn
     // cliente pela mesa (QR, sem login): o servidor confere conta aberta, item pausado e preço
     let adicional = parseFloat(total_adicional || 0);
     if (!readAuth(req)) {
-      if (["finished", "cancelled", "canceled"].includes(pedidoAtual.status))
+      if (!ORIGINS_FORA_DO_KANBAN.includes(pedidoAtual.origin)) return sendError(res, 403, "Não autorizado");
         return sendError(res, 400, "Essa conta já foi fechada. Chame o garçom.");
       const pausado = await itemPausado(pedidoAtual.restaurant_id, itens_novos);
       if (pausado) return sendError(res, 400, `${pausado} acabou de esgotar. Tire do carrinho para continuar.`);
