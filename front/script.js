@@ -5855,9 +5855,10 @@ if (modalEditBtn) modalEditBtn.addEventListener("click", (e) => {
   
   if (closeModalSecondaryBtn) closeModalSecondaryBtn.addEventListener("click", closeOrderModal);
 if (modalBackdrop) modalBackdrop.addEventListener("click", (e) => {
+  if (e.target === modalBackdrop) closeOrderModal();
+});
 // Esc fecha o pedido aberto (no computador)
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && modalBackdrop?.classList.contains("open")) closeOrderModal(); });
-});
 if (modalPrevBtn) modalPrevBtn.addEventListener("click", () => regressStatus(activeOrderId));
 if (modalNextBtn) modalNextBtn.addEventListener("click", () => advanceStatus(activeOrderId));
 if (modalCancelBtn) modalCancelBtn.addEventListener("click", () => {
