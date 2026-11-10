@@ -2296,6 +2296,7 @@ const { data: orderAntes } = await supabase
       updateData.delivering_at = now;
     } else if (status === "finished") {
       updateData.delivered_at = now;
+     updateData.pagamento_parcial = null;
     } else if (status === "cancelled" || status === "canceled") {
       updateData.cancelled_at = now;
     }
@@ -5389,6 +5390,21 @@ app.post("/api/v1/restaurante/:restaurant_id/reimprimir-pedido", async (req, res
     return res.json({ success: true });
   } catch (err) {
     return sendError(res, 500, "Erro interno ao reimprimir");
+  }
+});
+
+// pagamento parcial da tela Cobrar: fica no pedido até finalizar (F5 não perde o que já foi pago)
+app.patch("/api/v1/pedidos/:id/parcial", requireRowOwner("orders"), async (req, res) => {
+  try {
+    const p = req.body?.pagamento_parcial ?? null;
+    if (p !== null && (typeof p !== "object" || !Array.isArray(p.pedidos) || !Array.isArray(p.pags) || p.pags.length > 30 || JSON.stringify(p).length > 8000))
+      return sendError(res, 400, "Pagamento parcial inválido");
+    const { error } = await supabase.from("orders").update({ pagamento_parcial: p })
+      .eq("id", req.params.id).neq("status", "finished");
+    if (error) return sendError(res, 500, "Erro ao salvar pagamento parcial");
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao salvar pagamento parcial");
   }
 });
 
