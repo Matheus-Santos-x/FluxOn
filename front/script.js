@@ -3813,7 +3813,7 @@ function openOrderModal(orderId) {
   const phone = normalizePhone(order.client_phone);
   const modalPhoneEl = document.getElementById("modal-phone");
   const modalTimeEl = document.getElementById("modal-time");
-  if (modalPhoneEl) modalPhoneEl.textContent = phone || "—";
+  if (modalPhoneEl) modalPhoneEl.textContent = (phone || "").replace(/^55(?=\d{10,11}$)/, "").replace(/^(\d{2})(\d{4,5})(\d{4})$/, "($1) $2-$3") || "—";
   if (modalTimeEl) modalTimeEl.textContent = formatDateTime(order.created_at);
 
   // Pagamento + Valor na mesma linha
@@ -3828,14 +3828,18 @@ function openOrderModal(orderId) {
   modalPaymentEl.textContent = order._frontStatus === "finalizado" 
     ? String(order.payment_method || "—") 
     : "Aguardando pagamento...";
-  modalTotalPriceEl.textContent = order.total_price ? formatCurrency(order.total_price) : "—";
+  modalTotalPriceEl.innerHTML = order.total_price ? `<span class="pm-rs">R$</span>${formatCurrency(order.total_price).replace(/^R\$\s*/, "")}` : "—";
 }
 
   // Endereço linha completa
   if (modalAddressRow && modalAddress) {
     const showAddress = isDelivery && !!String(order.address || "").trim();
     modalAddressRow.style.display = showAddress ? "" : "none";
-    modalAddress.textContent = showAddress ? String(order.address || "") : "";
+    // "Rua X, 70 - Bairro - Cidade/UF - CEP" → rua em destaque, o resto embaixo, e link pro mapa
+    const partes = String(order.address || "").split(" - ");
+    modalAddress.innerHTML = !showAddress ? "" : `<b>${escapeHtml(partes.shift())}</b>`
+      + (partes.length ? `<small>${escapeHtml(partes.join(" · "))}</small>` : "")
+      + `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}" target="_blank" rel="noopener">📍 Abrir no mapa</a>`;
   }
 
   // Itens
@@ -3855,7 +3859,7 @@ if (modalItems) {
           <span style="color:rgba(252,228,228,0.5); font-size:13px; font-weight:700;">${qty} un</span>
         </div>
         <div style="display:flex; align-items:center; flex-shrink:0;">
-          ${price > 0 ? `<span style="color:rgba(251,191,36,0.85); font-size:14px; font-weight:700; white-space:nowrap;">R$${(price * qty).toFixed(2)}</span>` : ""}
+          ${price > 0 ? `<span style="color:rgba(251,191,36,0.85); font-size:14px; font-weight:700; white-space:nowrap;">${formatCurrency(price * qty)}</span>` : ""}
         </div>
       `;
       modalItems.appendChild(li);
@@ -3863,6 +3867,8 @@ if (modalItems) {
   }
 
 if (modalNotes) modalNotes.textContent = order.notes || "";
+  const notasRow = document.getElementById("modal-notes-row");
+if (notasRow) notasRow.style.display = String(order.notes || "").trim() ? "" : "none";
   modalPrevBtn?.classList.toggle("hidden", ["cancelado", "finalizado", "recebido"].includes(order._frontStatus));
   // Botão imprimir — só aparece em "recebido"
 let printBtn = document.getElementById("modal-print-btn");
