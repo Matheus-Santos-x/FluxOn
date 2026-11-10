@@ -10172,3 +10172,143 @@ async function manterTelaAcesa() {
 document.addEventListener("visibilitychange", manterTelaAcesa);
 document.addEventListener("click", manterTelaAcesa, { once: true });
 manterTelaAcesa();
+
+
+// ===== NOVO PEDIDO: endereço pelo CEP (ou nome da rua) e forma de pagamento em botões =====
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const end = $("new-address"), termo = $("np-end-termo"), lista = $("np-end-opcoes"), busca = $("np-end-busca");
+  const escolhido = $("np-end-escolhido"), ruaEl = $("np-end-rua"), numEl = $("np-end-num"), restoEl = $("np-end-resto"), limpar = $("np-end-limpar");
+  if (end && termo && lista && escolhido) {
+    const nativo = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    const gravar = (v) => nativo.set.call(end, v);   // grava sem redesenhar
+    let atual = null, seq = 0, timer = null, cidadePromessa = null;
+
+    const cidadeTxt = (e) => [e.cidade, e.uf].filter(Boolean).join("/");
+    function telaBusca() {
+      atual = null; gravar("");
+      busca.style.display = ""; escolhido.style.display = "none"; limpar.style.display = "none";
+      termo.value = ""; lista.style.display = "none";
+    }
+    function telaEscolhido(linha1, linha2, pedeNumero) {
+      busca.style.display = "none"; escolhido.style.display = ""; limpar.style.display = "";
+      ruaEl.textContent = linha1; restoEl.textContent = linha2;
+      numEl.style.display = pedeNumero ? "" : "none";
+    }
+    // mesmo formato do cardápio: "Rua X, 70 - Bairro - Cidade/UF - CEP 00000-000"
+    function compor() {
+      if (!atual) return;
+      const n = numEl.value.trim();
+      const resto = [atual.bairro, cidadeTxt(atual), atual.cep && `CEP ${atual.cep}`].filter(Boolean).join(" - ");
+      const linha = atual.rua ? (n ? `${atual.rua}, ${n}` : "") : n;
+      gravar(linha ? `${linha}${resto ? " - " + resto : ""}` : "");   // sem número = incompleto (o Salvar avisa)
+    }
+    function escolher(e) {
+      atual = { rua: e.logradouro || "", bairro: e.bairro || "", cidade: e.localidade || "", uf: e.uf || "", cep: e.cep || "" };
+      try { localStorage.setItem("fluxon_cidade_entrega", JSON.stringify({ cidade: atual.cidade, uf: atual.uf })); } catch (x) {}
+      numEl.value = "";
+      numEl.placeholder = atual.rua ? "Nº" : "Rua e número";
+      telaEscolhido(atual.rua ? `${atual.rua},` : "", [atual.bairro, cidadeTxt(atual), atual.cep && `CEP ${atual.cep}`].filter(Boolean).join(" · "), true);
+      compor();
+      setTimeout(() => numEl.focus(), 30);
+    }
+    function usarDigitado(txt) {
+      atual = null; gravar(txt);
+      const p = txt.split(" - ");
+      telaEscolhido(p.shift(), p.join(" · "), false);
+    }
+    numEl.addEventListener("input", compor);
+    limpar.addEventListener("click", () => { telaBusca(); termo.focus(); });
+
+    // quando o código preenche o endereço (editar pedido) ou limpa (novo pedido), a tela acompanha
+    Object.defineProperty(end, "value", {
+      get() { return nativo.get.call(this); },
+      set(v) { const s = String(v || "").trim(); if (!s) telaBusca(); else usarDigitado(s); },
+      configurable: true
+    });
+
+    function mostrar(html) { lista.innerHTML = html; lista.style.display = ""; }
+    function listar(itens, txt) {
+      const manual = /[a-zà-ú]/i.test(txt) && txt.length >= 5
+        ? `<button type="button" class="np-opcao" data-manual="1"><b>✏️ Usar como está</b><span>${escapeHtml(txt)}</span></button>` : "";
+      if (!itens.length && !manual) return mostrar(`<div class="np-opcao np-info">Nenhum endereço encontrado.</div>`);
+      mostrar(itens.slice(0, 8).map((e, i) => `<button type="button" class="np-opcao" data-i="${i}"><b>${escapeHtml(e.logradouro || "CEP da cidade toda")}</b><span>${escapeHtml([e.bairro, [e.localidade, e.uf].filter(Boolean).join("/"), e.cep && "CEP " + e.cep].filter(Boolean).join(" · "))}</span></button>`).join("") + manual);
+      lista.onclick = (ev) => {
+        const b = ev.target.closest("button"); if (!b) return;
+        lista.style.display = "none";
+        if (b.dataset.manual) usarDigitado(txt); else escolher(itens[Number(b.dataset.i)]);
+      };
+    }
+    // cidade pra buscar pelo nome da rua: a do endereço do restaurante (ou a da última entrega)
+    function cidadeBase() {
+      if (!cidadePromessa) cidadePromessa = (async () => {
+        try {
+          const r = await fetch(`${API_BASE}/api/v1/restaurante/${getRestaurantId()}/config`);
+          const ender = String((await r.json()).endereco || "");
+          const cepRest = (ender.match(/\b\d{5}-?\d{3}\b/) || [])[0];
+          if (cepRest) {
+            const j = await (await fetch(`https://viacep.com.br/ws/${cepRest.replace(/\D/g, "")}/json/`)).json();
+            if (!j.erro && j.localidade) return { cidade: j.localidade, uf: j.uf };
+          }
+          const m = [...ender.matchAll(/([A-Za-zÀ-ÿ' ]{3,})\s*[\/-]\s*([A-Z]{2})\b/g)].pop();
+          if (m) return { cidade: m[1].trim(), uf: m[2] };
+        } catch (e) {}
+        try { return JSON.parse(localStorage.getItem("fluxon_cidade_entrega") || "null"); } catch (e) { return null; }
+      })();
+      return cidadePromessa;
+    }
+
+    termo.addEventListener("input", () => {
+      clearTimeout(timer);
+      const t = termo.value.trim(), d = t.replace(/\D/g, "");
+      const minha = ++seq;
+      if (t && /^[\d\s.-]+$/.test(t)) {                    // digitando o CEP
+        termo.value = d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5, 8)}` : d;
+        if (d.length < 8) return d.length >= 5 ? mostrar(`<div class="np-opcao np-info">Continue digitando o CEP (faltam ${8 - d.length} números)</div>`) : (lista.style.display = "none");
+        mostrar(`<div class="np-opcao np-info">Buscando endereço...</div>`);
+        fetch(`https://viacep.com.br/ws/${d.slice(0, 8)}/json/`).then(r => r.json()).then(j => {
+          if (minha !== seq) return;
+          if (j.erro) return mostrar(`<div class="np-opcao np-info">CEP não encontrado. Digite o nome da rua.</div>`);
+          listar([j], t);
+        }).catch(() => { if (minha === seq) mostrar(`<div class="np-opcao np-info">Sem conexão com a busca de CEP. Digite o endereço completo.</div>`); });
+        return;
+      }
+      if (t.length < 3) { lista.style.display = "none"; return; }
+      timer = setTimeout(async () => {                       // digitando o nome da rua
+        const c = await cidadeBase();
+        if (minha !== seq) return;
+        if (!c) return listar([], t);
+        mostrar(`<div class="np-opcao np-info">Buscando ruas em ${escapeHtml(c.cidade)}...</div>`);
+        try {
+          const r = await fetch(`https://viacep.com.br/ws/${encodeURIComponent(c.uf)}/${encodeURIComponent(c.cidade)}/${encodeURIComponent(t)}/json/`);
+          const arr = await r.json();
+          if (minha === seq) listar(Array.isArray(arr) ? arr : [], t);
+        } catch (e) { if (minha === seq) listar([], t); }
+      }, 350);
+    });
+    document.addEventListener("click", (e) => { if (!e.target.closest("#np-end-busca")) lista.style.display = "none"; });
+  }
+
+  // forma de pagamento em botões (o select continua escondido por baixo, o resto do código não muda)
+  const sel = $("new-payment"), chips = $("new-payment-chips");
+  if (sel && chips) {
+    const opcoes = [["pix", "Pix"], ["credito", "Crédito"], ["debito", "Débito"], ["dinheiro", "Dinheiro"], ["vale-refeição", "Vale-refeição"], ["vale-alimentação", "Vale-alimentação"]];
+    const pintar = () => {
+      chips.innerHTML = opcoes.map(([v, n]) => `<button type="button" class="np-chip ${sel.value === v ? "on" : ""}" data-v="${v}">${n}</button>`).join("");
+    };
+    const nativo = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+    Object.defineProperty(sel, "value", {   // quando o código muda o select (abrir/editar pedido), os botões acompanham
+      get() { return nativo.get.call(this); },
+      set(v) { nativo.set.call(this, v); pintar(); },
+      configurable: true
+    });
+    chips.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-v]");
+      if (!b) return;
+      sel.value = sel.value === b.dataset.v ? "" : b.dataset.v;   // tocar de novo desmarca
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    pintar();
+  }
+})();
+
