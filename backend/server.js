@@ -18,7 +18,10 @@ import crypto from "crypto";
 
 dotenv.config();
 
-// ===== REDIS =====
+// ===== REDIS (opcional) =====
+// Sem REDIS_URL: 1 servidor só — código de login na memória, impressão direta e socket sem Redis
+// (não gasta nada no Upstash). Com REDIS_URL: vários servidores — tudo isso passa pelo Redis.
+const REDIS_ON = !!process.env.REDIS_URL;
 const redisOpts = {
   tls: { rejectUnauthorized: false },
   lazyConnect: true,
@@ -26,16 +29,20 @@ const redisOpts = {
   retryStrategy: (times) => Math.min(times * 500, 5000)
 };
 
-const redisConnection = new Redis(process.env.REDIS_URL, {
-  ...redisOpts,
-  maxRetriesPerRequest: null
-});
-
-const pubClient = new Redis(process.env.REDIS_URL, redisOpts);
-const subClient = new Redis(process.env.REDIS_URL, redisOpts);
+const redisConnection = REDIS_ON ? new Redis(process.env.REDIS_URL, { ...redisOpts, maxRetriesPerRequest: null }) : null;
+const pubClient = REDIS_ON ? new Redis(process.env.REDIS_URL, redisOpts) : null;
+const subClient = REDIS_ON ? new Redis(process.env.REDIS_URL, redisOpts) : null;
 
 // ===== FILA DE IMPRESSÃO =====
-const printQueue = new Queue("impressao", { connection: redisConnection });
+// sem Redis: imprime na hora, direto (igual o worker faria), sem travar a resposta do pedido
+const printQueue = REDIS_ON ? new Queue("impressao", { connection: redisConnection }) : {
+  add: async (_nome, dados) => {
+    printByCategory(dados.order, dados.apiKey, dados.impressoras)
+      .then(ok => ok ? console.log(`✅ Impressão concluída — Pedido #${dados.order.order_number}`)
+                     : console.error(`❌ Impressão falhou — Pedido #${dados.order.order_number}`))
+      .catch(e => console.error(`❌ Impressão falhou — Pedido #${dados.order.order_number}:`, e.message));
+  }
+};
 
 // ===== CACHE IMPRESSORA =====
 const _impressoraCache = {};
@@ -65,6 +72,7 @@ const io = new Server(httpServer, {
 });
 
 async function setupRedisAdapter() {
+    if (!REDIS_ON) { console.log("ℹ️ Sem REDIS_URL: socket, login e impressão rodando sem Redis (1 servidor)"); return; }
   try {
     await Promise.all([pubClient.connect(), subClient.connect()]);
     io.adapter(createAdapter(pubClient, subClient, {
@@ -5523,7 +5531,8 @@ const is_caixa = toBool(impressora.is_caixa) || toBool(impressora.caixa);
   }
 }
 
-// ===== WORKER DE IMPRESSÃO =====
+// ===== WORKER DE IMPRESSÃO (só com Redis) =====
+if (REDIS_ON) {
 const printWorker = new Worker("impressao", async (job) => {
   const { order, apiKey, impressoras } = job.data;
   await printByCategory(order, apiKey, impressoras);
@@ -5541,6 +5550,7 @@ printWorker.on("completed", (job) => {
 printWorker.on("failed", (job, err) => {
   console.error(`❌ Impressão falhou — Pedido #${job.data.order.order_number}:`, err.message);
 });
+}
 
 // POST - Testa impressão
 app.post("/api/v1/restaurante/:restaurant_id/impressora/teste", async (req, res) => {
@@ -6879,12 +6889,28 @@ const clienteHash = (rid, tel, codigo) =>
   crypto.createHmac("sha256", process.env.JWT_SECRET || "fluxon-cliente").update(`${rid}:${tel}:${codigo}`).digest("hex");
 
 // códigos abertos: "restaurante:telefone" → { hash, expira, tentativas, pedidos: [horários] }
-// guardado no Redis: vale para todos os servidores e some sozinho depois de 1h
+// com Redis: vale para todos os servidores; sem Redis (ou se ele cair): fica na memória deste servidor
+const otpMemoria = new Map();
+const otpRedisOk = () => !!pubClient && pubClient.status === "ready";
 const otpLer = async (chave) => {
-  const v = await pubClient.get(`otp:${chave}`);
-  return v ? JSON.parse(v) : null;
+  if (otpRedisOk()) {
+    try { const v = await pubClient.get(`otp:${chave}`); return v ? JSON.parse(v) : null; }
+    catch (e) { console.warn("⚠️ OTP no Redis falhou, usando memória:", e.message); }
+  }
+  const m = otpMemoria.get(chave);
+  return m && m.ate > Date.now() ? JSON.parse(m.reg) : null;
 };
-const otpSalvar = (chave, reg) => pubClient.set(`otp:${chave}`, JSON.stringify(reg), "EX", 60 * 60);
+const otpSalvar = async (chave, reg) => {
+  if (otpRedisOk()) {
+    try { await pubClient.set(`otp:${chave}`, JSON.stringify(reg), "EX", 60 * 60); return; }
+    catch (e) { console.warn("⚠️ OTP no Redis falhou, usando memória:", e.message); }
+  }
+  otpMemoria.set(chave, { reg: JSON.stringify(reg), ate: Date.now() + 60 * 60 * 1000 });
+};
+setInterval(() => {
+  const agora = Date.now();
+  for (const [k, v] of otpMemoria) if (v.ate < agora) otpMemoria.delete(k);
+}, 10 * 60 * 1000).unref();
 
 // "(11) 99999-8888" ou "5511999998888" → "11999998888"
 function telefoneLocal(v) {
