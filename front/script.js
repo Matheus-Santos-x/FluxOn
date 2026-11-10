@@ -3477,8 +3477,25 @@ async function fetchOrders() {
 }
   }
 }
+
+// finalizar com o caixa fechado: a venda não entra no fechamento → confirma antes
+let _caixaOk = null; // consulta em andamento / resposta recente (30s), pra não perguntar a cada pedido
+function confirmarCaixaAberto() {
+  if (_caixaOk) return _caixaOk;
+  _caixaOk = (async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/v1/caixa/${getRestaurantId()}/aberto`, { headers: buildHeaders() });
+      if ((await r.json()).aberto) return true;
+    } catch (e) { return true; } // sem internet: não trava o atendimento
+    return confirm("O caixa está fechado: essa venda não vai entrar no fechamento do caixa.\n\nFinalizar mesmo assim?");
+  })();
+  _caixaOk.then(ok => setTimeout(() => { _caixaOk = null; }, ok ? 30000 : 0));
+  return _caixaOk;
+}
+
 async function updateOrderStatus(orderId, newFrontStatus) {
   const backStatus = toBackStatus(newFrontStatus);
+  if (backStatus === "finished" && !(await confirmarCaixaAberto())) { renderBoard(); return; }
   try {
     const resp = await fetch(`${API_URL}/${orderId}/status`, {
       method: "PATCH",
@@ -4177,10 +4194,18 @@ const COB_MAQ = ["pix", "credito", "debito"]; // vão pra maquininha quando o Me
 
 function abrirCobranca(pedidos, juntos) {
   document.getElementById("payment-modal")?.remove();
+    // conta que já tinha pagamento (F5, queda de internet): reabre a mesma cobrança com o que já foi pago
+  let salvo = pedidos.map(o => o.pagamento_parcial).find(s => s?.pedidos?.length) || null;
+  if (salvo) {
+    const grupo = salvo.pedidos.map(id => orders.find(x => x.id === id)).filter(Boolean);
+    if (grupo.length === salvo.pedidos.length) { pedidos = grupo; juntos = grupo.length > 1; }
+    else salvo = null;
+  }
   const total = cobR(pedidos.reduce((s, o) => s + parseFloat(o.total_price || 0), 0));
-  const pags = [];    
+  const pags = salvo?.pags ? [...salvo.pags] : []; 
   let metodo = null, digitado = 0, vp = null, vpErro = "", finalizando = false;
   let mpAtivo = false, aguard = null, maqErro = "";  
+  if (salvo?.aguard?.intent) aguard = { ...salvo.aguard };
 
   const modal = document.createElement("div");
   modal.id = "payment-modal";
@@ -4190,6 +4215,25 @@ function abrirCobranca(pedidos, juntos) {
   const pago = () => cobR(pags.reduce((s, p) => s + p.valor, 0));
   const falta = () => Math.max(0, cobR(total - pago()));
   const troco = () => cobR(pags.reduce((s, p) => s + (p.troco || 0), 0));
+  
+  // guarda no pedido o que já foi pago (e a cobrança aberta na maquininha): F5 não perde nada
+  let ultimoSalvo = JSON.stringify({ pags, aguard: aguard?.intent ? { metodo: aguard.metodo, valor: aguard.valor, intent: aguard.intent } : null });
+  let filaSalvar = Promise.resolve();
+  function salvarParcial() {
+    if (finalizando) return;
+    const estado = { pags, aguard: aguard?.intent ? { metodo: aguard.metodo, valor: aguard.valor, intent: aguard.intent } : null };
+    const txt = JSON.stringify(estado);
+    if (txt === ultimoSalvo) return;
+    ultimoSalvo = txt;
+    const corpo = estado.pags.length || estado.aguard ? JSON.parse(JSON.stringify({ pedidos: pedidos.map(o => o.id), ...estado })) : null;
+    pedidos.forEach(o => { o.pagamento_parcial = corpo; });
+    filaSalvar = filaSalvar.then(() => Promise.all(pedidos.map(o =>
+      fetch(`${API_BASE}/api/v1/pedidos/${o.id}/parcial`, {
+        method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ pagamento_parcial: corpo })
+      })
+    ))).catch(() => {});
+  }
+  
 
   function painelMetodo(f) {
     if (!metodo) return "";
@@ -4230,6 +4274,7 @@ function abrirCobranca(pedidos, juntos) {
   }
 
   function render() {
+    salvarParcial();
     const f = falta(), tr = troco(), travado = pags.length > 0 || !!aguard;
     const pode = f <= 0.009 && pags.length > 0 && !finalizando && !aguard;
     const p0 = pedidos[0];
@@ -4357,6 +4402,7 @@ function abrirCobranca(pedidos, juntos) {
     async fin() {
       if (falta() > 0.009 || !pags.length || finalizando) return;
       finalizando = true; render();
+            if (!(await confirmarCaixaAberto())) { finalizando = false; render(); return; }
       // cada pedido leva só a sua parte dos pagamentos (em centavos, sem sobra):
       // na mesa paga junta, a nota e o caixa de cada pedido batem com o total dele
       const textoDoPedido = (() => {
@@ -4420,6 +4466,12 @@ function abrirCobranca(pedidos, juntos) {
       if (aguard === a) { aguard = null; maqErro = e.message; render(); }
       return;
     }
+        esperarMaq(a);
+  }
+
+  // espera o cliente pagar na maquininha (até 3 min); também retoma a cobrança que estava aberta antes do F5
+  async function esperarMaq(a) {
+    const rid = getRestaurantId(), m = a.metodo, valor = a.valor;
     for (let t = 0; t < 60; t++) {
       await new Promise(ok => setTimeout(ok, 3000));
       if (aguard !== a || !document.body.contains(modal)) return;   // cancelado ou tela fechada
@@ -4453,7 +4505,7 @@ function abrirCobranca(pedidos, juntos) {
     const b = e.target.closest("[data-a]");
     if (!b || b.disabled) return;
     const [a, arg] = b.dataset.a.split(":");
-    if (acoes[a]) acoes[a](arg);
+  if (aguard) esperarMaq(aguard);
   });
 
   render();
