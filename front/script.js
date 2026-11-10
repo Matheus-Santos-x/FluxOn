@@ -10087,34 +10087,31 @@ function alertaNovoPedido(order) {
   alertaNotificar(order);
 }
 
-// toque de telefone antigo ("trrrim... trrrim... trrrim") por ~4,5 s: bem diferente do bip do Kanban
+// "ding-dong" de porta de loja, 2 vezes (~3,5 s)
 function alertaTocar() {
   if (Date.now() < _alertaSomAte) return; // já está tocando (vários pedidos juntos não embolam o som)
-  _alertaSomAte = Date.now() + 4500;
+  _alertaSomAte = Date.now() + 3500;
   try {
     if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (_audioCtx.state === "suspended") _audioCtx.resume();
     const ctx = _audioCtx, t0 = ctx.currentTime + 0.05;
-    const comp = ctx.createDynamicsCompressor();       // deixa o som "cheio" e mais alto sem estourar
-    comp.threshold.value = -24; comp.ratio.value = 10;
-    const saida = ctx.createGain(); saida.gain.value = 1.5;
-    comp.connect(saida); saida.connect(ctx.destination);
-    for (let toque = 0; toque < 3; toque++) {           // 3 toques de 1 s, com meio segundo de pausa
-      for (let i = 0; i < 20; i++) {                     // cada toque: 20 notas curtinhas alternando = "trrrim"
-        const t = t0 + toque * 1.5 + i * 0.05;
-        const osc = ctx.createOscillator(), g = ctx.createGain();
-        osc.type = "square";
-        osc.frequency.value = i % 2 ? 1480 : 1100;
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.7, t + 0.005);
-        g.gain.setValueAtTime(0.7, t + 0.04);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-        osc.connect(g); g.connect(comp);
-        osc.start(t); osc.stop(t + 0.055);
-      }
-    }
+    const saida = ctx.createGain(); saida.gain.value = 1.55;
+    saida.connect(ctx.destination);
+    const nota = (t, freq, vol, dur) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine"; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(saida); o.start(t); o.stop(t + dur + 0.05);
+    };
+    [0, 2.0].forEach(d => {                                   // "ding-dong"... "ding-dong"
+      [[659.3, 0], [523.3, 0.55]].forEach(([f, dd]) => {      // ding (mi) e dong (dó)
+        [[1, 0.5, 1.6], [2, 0.15, 1.0], [3, 0.06, 0.6]].forEach(([r, v, du]) => nota(t0 + d + dd, f * r, v, du));
+      });
+    });
   } catch (e) { /* navegador sem som: fica a faixa e a notificação */ }
-  try { navigator.vibrate?.([1000, 500, 1000, 500, 1000]); } catch (e) {}
+  try { navigator.vibrate?.([400, 150, 600, 850, 400, 150, 600]); } catch (e) {}
 }
 
 function alertaFaixa(o) {
