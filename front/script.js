@@ -4357,14 +4357,29 @@ function abrirCobranca(pedidos, juntos) {
     async fin() {
       if (falta() > 0.009 || !pags.length || finalizando) return;
       finalizando = true; render();
-      const paymentStr = pags.length === 1
-        ? cobTxtPag(pags[0])
-        : pags.map(p => `${cobTxtPag(p)} R$${p.valor.toFixed(2)}`).join(" + ");
+      // cada pedido leva só a sua parte dos pagamentos (em centavos, sem sobra):
+      // na mesa paga junta, a nota e o caixa de cada pedido batem com o total dele
+      const textoDoPedido = (() => {
+        const resto = pags.map(p => Math.round(p.valor * 100));
+        const mapa = new Map();
+        pedidos.forEach((o, i) => {
+          const ultimo = i === pedidos.length - 1;
+          let precisa = ultimo ? resto.reduce((s, c) => s + c, 0) : Math.round(parseFloat(o.total_price || 0) * 100);
+          const partes = [];
+          pags.forEach((p, j) => {
+            const usa = Math.min(resto[j], precisa);
+            if (usa > 0) { partes.push([p, usa]); resto[j] -= usa; precisa -= usa; }
+          });
+          mapa.set(o.id, partes.length <= 1 ? cobTxtPag((partes[0] || [pags[0]])[0])
+            : partes.map(([p, c]) => `${cobTxtPag(p)} R$${(c / 100).toFixed(2)}`).join(" + "));
+        });
+        return (o) => mapa.get(o.id);
+      })();
       try {
         await vpDescontar(pags, pedidos[0].id);
         await Promise.all(pedidos.map(async (o) => {
           await fetch(`${API_BASE}/api/v1/pedidos/${o.id}/payment`, {
-            method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ payment_method: paymentStr })
+            method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ payment_method: textoDoPedido(o) })
           });
           await fetch(`${API_URL}/${o.id}/status`, {
             method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ status: "finished" })
