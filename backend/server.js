@@ -64,6 +64,16 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 
 const app = express();
 app.set('trust proxy', 1);
+
+// ⏱️ toda requisição lenta (mais de 800 ms) aparece no log com 🐢 — mostra onde o sistema está demorando
+app.use((req, res, next) => {
+  const t = Date.now();
+  res.on("finish", () => {
+    const ms = Date.now() - t;
+    if (ms > 800) console.warn(`🐢 ${ms}ms ${req.method} ${req.originalUrl.split("?")[0]} → ${res.statusCode}`);
+  });
+  next();
+});
 const httpServer = createServer(app);
 const ordersEmImpressao = new Set();
 
@@ -367,10 +377,13 @@ const sendError = (res, status, message) => {
   return res.status(status).json({ error: message });
 };
 
+const _restaurantesQueExistem = new Set(); // restaurante não some: guarda o "sim" pra não perguntar ao banco toda vez
 async function restaurantExists(restaurant_id) {
+  if (_restaurantesQueExistem.has(restaurant_id)) return true;
   try {
     const { data, error } = await supabase.from("restaurants").select("id").eq("id", restaurant_id).limit(1);
     if (error) return false;
+    if (data && data.length > 0) _restaurantesQueExistem.add(restaurant_id);
     return data && data.length > 0;
   } catch (err) {
     return false;
@@ -2451,59 +2464,39 @@ console.log(`🖨️ Job de impressão adicionado — Pedido #${data.order_numbe
   }
 }
 
+    // responde já: a fila da pesquisa de satisfação e o caixa rodam por trás (a tela não espera)
+    res.json(data);
 
     if (status === "finished" || status === "delivered") {
-      try {
-        const { data: orderCompleto } = await supabase
-          .from("orders").select("*").eq("id", id).single();
+      (async () => {
+        await supabase.from("webhook_queue").insert([{
+          restaurant_id: data.restaurant_id, order_id: id, tipo: "satisfacao",
+          dispara_em: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+        }]);
 
-        if (orderCompleto) {
-          const isDelivery = String(orderCompleto.service_type || "").toLowerCase() === "delivery";
-
+        // caixa: só na 1ª vez que o pedido finaliza (finalizar de novo não soma em dobro)
+        if (status !== "finished" || orderAntes?.status === "finished") return;
+        const { data: caixaAberto } = await supabase
+          .from("caixa").select("id")
+          .eq("restaurant_id", data.restaurant_id).eq("status", "aberto")
+          .maybeSingle();
+        if (!caixaAberto) return;
+        const inc = { pix: [0, 0], credito: [0, 0], debito: [0, 0], dinheiro: [0, 0], maquininha: [0, 0], vale_refeicao: [0, 0], voucher: [0, 0] };
+        for (const p of repartirPagamento(data.payment_method, parseFloat(data.total_price || 0))) {
+          if (!inc[p.metodo]) { console.warn(`⚠️ Caixa: forma de pagamento não reconhecida "${data.payment_method}" — Pedido #${data.order_number}`); continue; }
+          inc[p.metodo][0] += p.valor;
+          inc[p.metodo][1] += 1;
         }
-      } catch (printErr) {
-        console.error("⚠️ Erro na impressão ao finalizar:", printErr.message);
-      }
-
-      await supabase.from("webhook_queue").insert([{
-  restaurant_id: data.restaurant_id,
-  order_id: id,
-  tipo: "satisfacao",
-  dispara_em: new Date(Date.now() + 30 * 60 * 1000).toISOString()
-}]);
-console.log(`✅ Webhook satisfação agendado na fila — Pedido ${id}`);
-
-      
-    // Atualiza caixa aberto (só na 1ª vez que o pedido finaliza: finalizar de novo não soma em dobro)
-if (status === "finished" && orderAntes?.status !== "finished") {
-  try {
-    const { data: caixaAberto } = await supabase
-      .from("caixa").select("id")
-      .eq("restaurant_id", data.restaurant_id).eq("status", "aberto")
-      .maybeSingle();
-
-    if (caixaAberto) {
-      const inc = { pix: [0, 0], credito: [0, 0], debito: [0, 0], dinheiro: [0, 0], maquininha: [0, 0], vale_refeicao: [0, 0], voucher: [0, 0] };
-      for (const p of repartirPagamento(data.payment_method, parseFloat(data.total_price || 0))) {
-        if (!inc[p.metodo]) { console.warn(`⚠️ Caixa: forma de pagamento não reconhecida "${data.payment_method}" — Pedido #${data.order_number}`); continue; }
-        inc[p.metodo][0] += p.valor;
-        inc[p.metodo][1] += 1;
-      }
-      if (Object.values(inc).some(([v]) => v > 0)) {
+        if (!Object.values(inc).some(([v]) => v > 0)) return;
         const args = { p_caixa_id: caixaAberto.id, p_total_pedidos: 1 };
         for (const [m, [v, q]] of Object.entries(inc)) { args[`p_valor_${m}`] = v; args[`p_qtd_${m}`] = q; }
         const { error: incErr } = await supabase.rpc("incrementar_caixa_v2", args);
         if (incErr) throw incErr;
         console.log(`💰 Caixa atualizado — Pedido #${data.order_number}`);
-      }
+      })().catch(e => console.error("⚠️ Erro ao fechar o pedido (satisfação/caixa):", e.message));
     }
-  } catch (caixaErr) {
-    console.error("⚠️ Erro ao atualizar caixa:", caixaErr.message);
-  }
-}
-    }
+    return;
 
-    return res.json(data);
   } catch (err) {
     return sendError(res, 500, "Erro ao atualizar pedido");
   }
@@ -2694,7 +2687,8 @@ const baseUrl = restData?.tracking_url;
 // Só gera o link se tiver tracking_url cadastrado
 const trackingLink = baseUrl ? `${baseUrl}?code=${trackingCode}` : null;
     
-// ⭐ FIDELIZAÇÃO
+// ⭐ FIDELIZAÇÃO (roda por trás: o pedido não espera os pontos)
+(async () => { try {
 try {
   if (phone && finalStatus !== "draft" && (!order_id || eraRascunho) && finalOrigin !== "fidelidade") {
     const cfgFid = await configFidelidade(restaurant_id);
@@ -2737,6 +2731,7 @@ try {
 } catch (loyaltyErr) {
   console.error("⚠️ Erro na fidelização:", loyaltyErr.message);
 }
+})();
 // ⭐ FIM FIDELIZAÇÃO
 
 emitOrderUpdate(restaurant_id, resultData); // dispara o socket
@@ -9201,11 +9196,19 @@ process.on("uncaughtException", (err) => {
 });
 
 // ===== HEALTH CHECK =====
-app.get("/health", (req, res) => {
+app.get("/health", async (req, res) => {
+  // supabase_ms: quanto o banco demora pra responder daqui do servidor (o normal é abaixo de 150)
+  const t = Date.now();
+  const db = await Promise.race([
+    supabase.from("restaurants").select("id").limit(1),
+    new Promise(ok => setTimeout(() => ok({ error: "timeout" }), 3000)) // nunca trava o health
+  ]);
   res.json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "4.0.0-dashboard-completo"
+    version: "4.0.0-dashboard-completo",
+    supabase_ms: Date.now() - t,
+    supabase_ok: !db.error
   });
 });
 
