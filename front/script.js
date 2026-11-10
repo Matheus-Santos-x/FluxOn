@@ -10072,3 +10072,94 @@ function abrirAgendados() {
 if (socket) socket.on("agendamentos_atualizados", () => carregarAgendados());
 setInterval(carregarAgendados, 60000);
 setTimeout(carregarAgendados, 1500);
+
+
+// ===== 🔔 ALERTA DE PEDIDO NOVO =====
+// Automático: quando chega pedido toca alto por uns 4 segundos e mostra uma faixa no topo por 8 segundos.
+// Ninguém precisa clicar pra parar. Pedido lançado aqui mesmo no Operacional (balcão) não toca.
+const ALERTA_ORIGENS_INTERNAS = ["balcao", "balcao_delivery"];
+let _alertaSomAte = 0, _faixaTimer = null, _faixaQtd = 0;
+
+function alertaNovoPedido(order) {
+  if (!order?.id || ALERTA_ORIGENS_INTERNAS.includes(String(order.origin || "").toLowerCase())) return;
+  alertaTocar();
+  alertaFaixa(order);
+  alertaNotificar(order);
+}
+
+// "plim-plom" 3 vezes (~4 s), em onda forte + harmônico: corta barulho de cozinha
+function alertaTocar() {
+  if (Date.now() < _alertaSomAte) return; // já está tocando (vários pedidos juntos não embolam o som)
+  _alertaSomAte = Date.now() + 4000;
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === "suspended") _audioCtx.resume();
+    const t0 = _audioCtx.currentTime + 0.05;
+    [0, 1.4, 2.8].forEach(rep => [[0, 1318.5], [0.22, 987.8]].forEach(([d, f]) => {
+      [[f, "square", 0.45], [f * 2, "sine", 0.25]].forEach(([freq, tipo, vol]) => {
+        const osc = _audioCtx.createOscillator(), g = _audioCtx.createGain(), t = t0 + rep + d;
+        osc.type = tipo; osc.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+        osc.connect(g); g.connect(_audioCtx.destination);
+        osc.start(t); osc.stop(t + 0.4);
+      });
+    }));
+  } catch (e) { /* navegador sem som: fica a faixa e a notificação */ }
+  try { navigator.vibrate?.([300, 120, 300, 900, 300, 120, 300]); } catch (e) {}
+}
+
+function alertaFaixa(o) {
+  let el = document.getElementById("alerta-pedido");
+  if (!el) {
+    if (!document.getElementById("alerta-pedido-css")) {
+      const css = document.createElement("style");
+      css.id = "alerta-pedido-css";
+      css.textContent = "@keyframes alertaPulso{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) scale(1.04)}}";
+      document.head.appendChild(css);
+    }
+    el = document.createElement("div");
+    el.id = "alerta-pedido";
+    el.style.cssText = "position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:99999;width:max-content;max-width:calc(100vw - 32px);padding:14px 22px;border-radius:14px;background:#dc2626;color:#fff;font-weight:800;font-size:16px;line-height:1.35;text-align:center;box-shadow:0 10px 40px rgba(220,38,38,.55);cursor:pointer;animation:alertaPulso 1s ease-in-out infinite;";
+    el.addEventListener("click", () => { el.remove(); _faixaQtd = 0; });
+    document.body.appendChild(el);
+    _faixaQtd = 0;
+  }
+  _faixaQtd++;
+  const onde = String(o.service_type || "").toLowerCase() === "delivery" ? "Delivery" : o.table_number ? `Mesa ${o.table_number}` : "Local";
+  el.textContent = _faixaQtd > 1
+    ? `🔔 ${_faixaQtd} pedidos novos`
+    : `🔔 Novo pedido #${o.order_number} · ${onde} · ${formatCurrency(Number(o.total_price))}`;
+  clearTimeout(_faixaTimer);
+  _faixaTimer = setTimeout(() => { el.remove(); _faixaQtd = 0; }, 8000);
+}
+
+// aba minimizada ou atrás de outra janela: avisa pelo sistema
+function alertaNotificar(o) {
+  try {
+    if (!document.hidden || !("Notification" in window) || Notification.permission !== "granted") return;
+    new Notification(`🔔 Novo pedido #${o.order_number}`, {
+      body: `${o.client_name || "Cliente"} · ${formatCurrency(Number(o.total_price))}`,
+      tag: `pedido-${o.id}`
+    });
+  } catch (e) {}
+}
+
+// no 1º toque na tela: libera o som, a notificação do sistema e a tela acesa
+document.addEventListener("click", () => {
+  try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch (e) {}
+}, { once: true });
+
+// tela sempre acesa enquanto o Operacional estiver aberto (não apaga e não perde pedido)
+let _telaAcesa = null;
+async function manterTelaAcesa() {
+  try {
+    if (!("wakeLock" in navigator) || document.hidden || _telaAcesa) return;
+    _telaAcesa = await navigator.wakeLock.request("screen");
+    _telaAcesa.addEventListener("release", () => { _telaAcesa = null; });
+  } catch (e) {}
+}
+document.addEventListener("visibilitychange", manterTelaAcesa);
+document.addEventListener("click", manterTelaAcesa, { once: true });
+manterTelaAcesa();
