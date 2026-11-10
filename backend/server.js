@@ -2184,6 +2184,7 @@ app.patch("/api/v1/pedidos/:id/adicionar-itens", requireRowOwner("orders"), asyn
     let adicional = parseFloat(total_adicional || 0);
     if (!readAuth(req)) {
       if (!ORIGINS_FORA_DO_KANBAN.includes(pedidoAtual.origin)) return sendError(res, 403, "Não autorizado");
+      if (["finished", "cancelled", "canceled"].includes(pedidoAtual.status))
         return sendError(res, 400, "Essa conta já foi fechada. Chame o garçom.");
       const pausado = await itemPausado(pedidoAtual.restaurant_id, itens_novos);
       if (pausado) return sendError(res, 400, `${pausado} acabou de esgotar. Tire do carrinho para continuar.`);
