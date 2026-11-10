@@ -6888,6 +6888,19 @@ const clienteLimitVerificar = rateLimit({
 const clienteHash = (rid, tel, codigo) =>
   crypto.createHmac("sha256", process.env.JWT_SECRET || "fluxon-cliente").update(`${rid}:${tel}:${codigo}`).digest("hex");
 
+
+// código de login SEM guardar nada: é calculado (HMAC) a partir do restaurante, do telefone e da
+// janela de 5 min. Vale de 10 a 15 min e funciona com 1 ou vários servidores, sem Redis e mesmo depois de deploy.
+const OTP_JANELA_MS = 5 * 60 * 1000;
+function otpCodigo(rid, tel, janela) {
+  const h = crypto.createHmac("sha256", process.env.JWT_SECRET || "fluxon-cliente").update(`otp:${rid}:${tel}:${janela}`).digest();
+  return String(h.readUInt32BE(0) % 1000000).padStart(6, "0");
+}
+function otpConfere(rid, tel, codigo) {
+  const j = Math.floor(Date.now() / OTP_JANELA_MS);
+  return [j, j - 1, j - 2].some(x => safeEqual(otpCodigo(rid, tel, x), codigo));
+}
+
 // códigos abertos: "restaurante:telefone" → { hash, expira, tentativas, pedidos: [horários] }
 // com Redis: vale para todos os servidores; sem Redis (ou se ele cair): fica na memória deste servidor
 const otpMemoria = new Map();
@@ -7048,7 +7061,7 @@ app.post("/api/v1/cliente/:restaurant_id/login/solicitar", clienteLimitSolicitar
       return sendError(res, 503, "Entrar pelo WhatsApp ainda não está disponível neste restaurante");
     }
 
-    const codigo = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+    const codigo = otpCodigo(rid, tel, Math.floor(Date.now() / OTP_JANELA_MS));
     reg.hash = clienteHash(rid, tel, codigo);
     reg.expira = agora + CLIENTE_OTP_MINUTOS * 60 * 1000;
     reg.tentativas = 0;
@@ -7093,16 +7106,17 @@ app.post("/api/v1/cliente/:restaurant_id/login/verificar", clienteLimitVerificar
     if (!tel || codigo.length !== 6) return invalido();
 
     const chave = `${rid}:${tel}`;
-    const reg = await otpLer(chave);
-    if (!reg || !reg.hash || reg.expira < Date.now() || reg.tentativas >= CLIENTE_OTP_MAX_TENTATIVAS) return invalido();
-    if (!safeEqual(clienteHash(rid, tel, codigo), reg.hash)) {
-      reg.tentativas++;
-    await otpSalvar(chave, reg);
+    // o código é recalculado aqui (não depende de memória nem de Redis); a memória só conta as tentativas erradas
+    const reg = (await otpLer(chave)) || { hash: null, expira: 0, tentativas: 0, pedidos: [] };
+    if ((reg.tentativas || 0) >= CLIENTE_OTP_MAX_TENTATIVAS) return invalido();
+    if (!otpConfere(rid, tel, codigo)) {
+      reg.tentativas = (reg.tentativas || 0) + 1;
+      await otpSalvar(chave, reg);
       return invalido();
     }
-    reg.hash = null; // código usado não vale de novo
-        await otpSalvar(chave, reg);
-
+    reg.tentativas = 0;
+    await otpSalvar(chave, reg);
+    
     // acha o cliente pelo telefone (com ou sem 55); se não existir, cria o cadastro
     const { data: achados } = await supabase.from("base_clientes").select("id, nome, token_fidelidade")
       .eq("restaurant_id", rid).in("numero", [tel, `55${tel}`]).limit(1);
