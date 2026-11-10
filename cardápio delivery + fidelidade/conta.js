@@ -239,23 +239,44 @@ async function endPrepararEtapa(){
 })();
 
 
-// logado: nome e telefone já estão na conta → pula a etapa "Seus dados" e vai direto pro endereço
+// logado: nome e telefone já estão na conta → abre direto no endereço, sem esperar o servidor
 (function(){
+  let rascunho = null; // a etapa "Seus dados" sendo salva em segundo plano
+
+  // deixa a conta carregada antes, pro checkout abrir na hora
+  setTimeout(() => { if(FID.token && !CONTA) contaCarregar(); }, 1500);
+
   const _openSheet = openSheet;
   openSheet = async function(){
     _openSheet();
     if(!FID.token || CHECKOUT_STEP !== 1) return;
-    if(!CONTA) await contaCarregar();
+    const passo1 = document.getElementById("step1");
+    if(!CONTA){ passo1.style.visibility = "hidden"; await contaCarregar(); passo1.style.visibility = ""; }
     const nome = String(CONTA?.nome || FID.cliente?.nome || "").trim();
     const tel = String(CONTA?.telefone || "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
     if(!nome || tel.length < 10) return;                 // conta sem nome/telefone: deixa preencher
-    const passo1 = document.getElementById("step1");
-    passo1.style.visibility = "hidden";                  // não pisca a tela de dados
     document.getElementById("inpNome").value = nome;
     document.getElementById("inpTelefone").value = tel;
-    try{ await document.getElementById("step1NextBtn").onclick(); }
-    finally{ passo1.style.visibility = ""; }             // se deu erro, a tela de dados aparece com o aviso
+    showStep(2);                                         // vai direto pro endereço
+    const v = getFieldValues();
+    rascunho = submitOrder(basePayload(v, { notes: v.obs, status: "draft", service_type: "delivery" }))
+      .then(r => { CURRENT_ORDER_ID = r.order?.id || CURRENT_ORDER_ID; })
+      .catch(err => {                                    // ex.: loja fechada → volta e mostra o motivo
+        showStep(1);
+        alert(err.message && err.message !== "Falha ao enviar pedido" ? err.message : "Não foi possível salvar seus dados. Tente novamente.");
+        throw err;
+      })
+      .finally(() => { rascunho = null; });
   };
+
+  // o "Continuar" do endereço espera o rascunho terminar (não cria pedido duplicado)
+  const btn2 = document.getElementById("step2NextBtn");
+  const _continuar = btn2.onclick;
+  btn2.onclick = async (ev) => {
+    if(rascunho){ try{ await rascunho; }catch(e){ return; } }
+    return _continuar.call(btn2, ev);
+  };
+
   // logado não volta pra "Seus dados" (não tem nada pra mudar lá)
   const _showStep = showStep;
   showStep = function(step){
