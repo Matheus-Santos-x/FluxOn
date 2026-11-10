@@ -3112,46 +3112,16 @@ input[type="number"] {
 @media (max-width:480px){.cob{padding:20px}.cob-total{font-size:36px}.cob-troco b{font-size:42px}}
 
 
-/* ================= MODAL DO PEDIDO (mesmo visual do "Novo Pedido") ================= */
-#modal .modal { width: min(640px, 94vw); padding: 22px 24px 18px; }
-#modal .modal-header { align-items: center; gap: 10px; }
-#modal .pm-titulo { flex: 1; margin: 0; font-size: 20px; font-weight: 800; color: rgba(252,228,228,.98); }
-#modal .pm-titulo #modal-id { color: rgba(249,115,115,.95); }
-#modal .pm-editar { background: transparent; border: 1px solid rgba(255,255,255,.14); color: rgba(252,228,228,.8); padding: 7px 12px; border-radius: 10px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s; }
-#modal .pm-editar:hover { border-color: rgba(249,115,115,.6); color: #fff; }
-#modal .pm-body { gap: 20px; margin-top: 18px; padding-right: 4px; }
-#modal .pm-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; }
-#modal .pm-campo { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-#modal .pm-campo > span:not(.pm-rotulo) { padding-bottom: 8px; border-bottom: 1px solid rgba(249,115,115,.28); color: rgba(252,228,228,.95); font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
-#modal .pm-rotulo { font-size: 12px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #fca5a5; }
-#modal #modal-address b { display: block; font-weight: 700; }
-#modal #modal-address small { display: block; margin-top: 3px; font-size: 13px; font-weight: 500; color: rgba(252,228,228,.6); }
-#modal #modal-address a { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: rgba(249,115,115,.95); text-decoration: none; }
-#modal .pm-itens { margin: 2px 0 0; }
-#modal .pm-obs { margin: 0; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(249,115,115,.35); background: transparent; color: rgba(252,228,228,.85); font-size: 14px; white-space: pre-wrap; }
-#modal .pm-rodape { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.06); }
-#modal .pm-total { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 34px; line-height: 1; color: rgba(252,228,228,.95); white-space: nowrap; }
-#modal .pm-total .pm-rs { color: rgba(249,115,115,.85); margin-right: 6px; }
-#modal .pm-acoes { flex: 1 1 auto; margin: 0; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-#modal .pm-acoes #modal-cancel { margin-right: auto; } /* cancelar fica na esquerda, o resto na direita */
-@media (max-width: 560px) {
-  #modal .modal { padding: 18px 16px 14px; }
-  #modal .pm-grade { grid-template-columns: 1fr; }
-  #modal .pm-rodape { flex-direction: column; align-items: stretch; }
-  #modal .pm-acoes > * { flex: 1; }
-}
-
-
 /* ================= MODAL DO PEDIDO (mesmo visual do "Novo Pedido" e do "Cobrar") ================= */
 #modal .modal { width: min(640px, 94vw); padding: 22px 24px 18px; }
-#modal .pm-topo { display: flex; align-items: center; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,.07); }
-#modal .pm-quem { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #f5e9e9; }
-#modal .pm-quem > #modal-customer { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#modal .pm-topo { display: flex; align-items: flex-start; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid rgba(239,68,68,.45); }
+#modal .pm-quem { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; font-size: 14px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #f5e9e9; }
+#modal .pm-quem > #modal-customer { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #modal .pm-tag { flex-shrink: 0; padding: 6px 12px; border-radius: 9px; background: rgba(239,68,68,.16); color: #fca5a5; }
 #modal .pm-editar { height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: transparent; color: #d8caca; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s; }
 #modal .pm-editar:hover { border-color: #ef4444; color: #fca5a5; }
-#modal .pm-x { width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: transparent; color: #d8caca; font-size: 20px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-#modal .pm-x:hover { border-color: #ef4444; color: #fca5a5; }
+#modal .pm-x { width: 36px; height: 36px; flex-shrink: 0; border: none; background: transparent; color: rgba(216,202,202,.55); font-size: 26px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: color .15s; }
+#modal .pm-x:hover { color: #fca5a5; }
 #modal .pm-body { gap: 20px; margin-top: 18px; padding-right: 4px; }
 #modal .pm-grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 24px; }
 #modal .pm-campo { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -3162,7 +3132,7 @@ input[type="number"] {
 #modal #modal-address a { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: rgba(249,115,115,.95); text-decoration: none; }
 #modal .pm-itens { margin: 2px 0 0; }
 #modal .pm-obs { margin: 0; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(249,115,115,.35); background: transparent; color: rgba(252,228,228,.85); font-size: 14px; white-space: pre-wrap; }
-#modal .pm-rodape { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.06); }
+#modal .pm-rodape { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(239,68,68,.45); }
 #modal .pm-total { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 34px; line-height: 1; color: rgba(252,228,228,.95); white-space: nowrap; }
 #modal .pm-total .pm-rs { color: rgba(249,115,115,.85); margin-right: 6px; }
 #modal .pm-acoes { flex: 1 1 auto; margin: 0; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
