@@ -4505,10 +4505,11 @@ function abrirCobranca(pedidos, juntos) {
     const b = e.target.closest("[data-a]");
     if (!b || b.disabled) return;
     const [a, arg] = b.dataset.a.split(":");
-  if (aguard) esperarMaq(aguard);
+    if (acoes[a]) acoes[a](arg);
   });
 
   render();
+  if (aguard) esperarMaq(aguard);
 }
 
 function showPaymentModal(orderId) {
