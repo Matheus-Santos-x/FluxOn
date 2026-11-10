@@ -2689,7 +2689,6 @@ const trackingLink = baseUrl ? `${baseUrl}?code=${trackingCode}` : null;
     
 // ⭐ FIDELIZAÇÃO (roda por trás: o pedido não espera os pontos)
 (async () => { try {
-try {
   if (phone && finalStatus !== "draft" && (!order_id || eraRascunho) && finalOrigin !== "fidelidade") {
     const cfgFid = await configFidelidade(restaurant_id);
     // pontos/selos contam só os itens, sem a taxa de entrega
