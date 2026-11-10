@@ -4427,6 +4427,7 @@ function abrirCobranca(pedidos, juntos) {
       })();
       try {
         await vpDescontar(pags, pedidos[0].id);
+                const impressoes = [];
         await Promise.all(pedidos.map(async (o) => {
           await fetch(`${API_BASE}/api/v1/pedidos/${o.id}/payment`, {
             method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ payment_method: textoDoPedido(o) })
@@ -4437,8 +4438,13 @@ function abrirCobranca(pedidos, juntos) {
           const idx = orders.findIndex(x => x.id === o.id);
           if (idx !== -1) orders[idx]._frontStatus = "finalizado";
           // mesa/juntos: sempre imprime o resumo; pedido único: só com a nota ligada
-          if (juntos || document.getElementById("home-nf-toggle")?.checked) { try { await imprimirResumo(o.id); } catch (e) {} }
+if (juntos || document.getElementById("home-nf-toggle")?.checked) impressoes.push(imprimirResumo(o.id).catch(() => {}));
         }));
+        // mostra "finalizado" e espera a impressão sair: no mínimo 1 s (dá pra ver) e no máximo 5 s (não trava)
+        const bf = modal.querySelector('[data-a="fin"]');
+        if (bf) { bf.textContent = impressoes.length ? "✓ Finalizado · imprimindo..." : "✓ Finalizado"; bf.classList.add("on"); }
+        const espera = (ms) => new Promise(ok => setTimeout(ok, ms));
+        await Promise.all([espera(1000), Promise.race([Promise.all(impressoes), espera(5000)])]);
         modal.remove();
         if (juntos) clearSelection();
         await fetchOrders();
