@@ -3147,3 +3147,29 @@ input[type="number"] {
   #modal .pm-rodape { flex-direction: column; align-items: stretch; }
   #modal .pm-acoes > * { flex: 1; }
 }
+
+
+/* ================= NOVO PEDIDO: campos com linha embaixo (igual Cliente e Telefone) ================= */
+#create-modal .np-campo { display: flex; flex-direction: column; gap: 4px; position: relative; }
+#create-modal .np-rotulo { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: rgba(252,228,228,.7); }
+#create-modal .np-input { width: 100%; box-sizing: border-box; border: none; border-bottom: 1px solid rgba(249,115,115,.4); border-radius: 0; background: transparent; padding: 8px 0; color: rgba(252,228,228,.95); font-size: 14px; font-family: inherit; outline: none; }
+#create-modal textarea.np-input { min-height: 44px; resize: vertical; }
+#create-modal #np-end-busca { position: relative; }
+#create-modal .np-opcoes { position: absolute; top: 100%; left: 0; right: 0; z-index: 9999; margin-top: 4px; max-height: 280px; overflow-y: auto; background: #141416; border: 1px solid rgba(249,115,115,.3); border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+#create-modal .np-opcao { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 11px 14px; border: none; border-bottom: 1px solid rgba(255,255,255,.05); background: transparent; text-align: left; color: rgba(252,228,228,.95); font-family: inherit; cursor: pointer; }
+#create-modal .np-opcao:last-child { border-bottom: none; }
+#create-modal button.np-opcao:hover { background: rgba(249,115,115,.1); }
+#create-modal .np-opcao b { font-size: 14px; }
+#create-modal .np-opcao span { font-size: 12px; color: rgba(252,228,228,.55); }
+#create-modal .np-info { font-size: 13px; color: rgba(252,228,228,.6); cursor: default; }
+#create-modal .np-end-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#create-modal .np-limpar { border: none; background: transparent; padding: 0; color: #fca5a5; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+#create-modal .np-limpar:hover { text-decoration: underline; }
+#create-modal .np-end-escolhido { display: flex; flex-direction: column; gap: 3px; padding: 6px 0 10px; border-bottom: 1px solid rgba(249,115,115,.4); }
+#create-modal .np-end-linha1 { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+#create-modal .np-end-linha1 b { font-size: 15px; font-weight: 700; color: rgba(252,228,228,.95); }
+#create-modal .np-num { width: 120px; border: none; border-bottom: 1px dashed rgba(249,115,115,.7); background: transparent; padding: 2px 0; color: #fff; font: inherit; font-size: 15px; font-weight: 700; outline: none; }
+#create-modal #np-end-resto { font-size: 13px; color: rgba(252,228,228,.6); }
+#create-modal .np-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0 10px; border-bottom: 1px solid rgba(249,115,115,.4); }
+#create-modal .np-chip { padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: transparent; color: rgba(252,228,228,.8); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; }
+#create-modal .np-chip.on { border-color: rgba(249,115,115,.9); background: rgba(239,68,68,.16); color: #fca5a5; }
