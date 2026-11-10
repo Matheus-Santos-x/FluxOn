@@ -787,7 +787,7 @@ document.getElementById("step1NextBtn").onclick = async () => {
     showStep(2);
   }catch(err){
     console.error(err);
-    alert("Não foi possível salvar seus dados. Tente novamente.");
+    alert(err.message && err.message !== "Falha ao enviar pedido" ? err.message : "Não foi possível salvar seus dados. Tente novamente.");
      
   }finally{
     btn.disabled = false; btn.textContent = "Continuar";
@@ -813,7 +813,7 @@ document.getElementById("step2NextBtn").onclick = async () => {
     showStep(3);
   }catch(err){
     console.error(err);
-    alert("Não foi possível salvar o endereço. Tente novamente.");
+    alert(err.message && err.message !== "Falha ao enviar pedido" ? err.message : "Não foi possível salvar o endereço. Tente novamente.");
   }finally{
     btn.disabled = false; btn.textContent = "Continuar";
   }
