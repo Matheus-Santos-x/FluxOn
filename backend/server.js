@@ -2332,7 +2332,7 @@ async function estornarSeloFidelidade(order) {
 // "pix R$30.00 + dinheiro R$20.00" → [{ metodo: "pix", valor: 30 }, { metodo: "dinheiro", valor: 20 }]
 // as partes são ajustadas ao total DESTE pedido (mesa paga junta antiga trazia a conta inteira em cada pedido)
 const tipoPagamento = (t) =>
-  t.includes("refeicao") || t.includes("refeição") ? "vale_refeicao"
+  t.includes("refeicao") || t.includes("refeição") || t.includes("alimentacao") || t.includes("alimentação") ? "vale_refeicao"
   : t.includes("vale") || t.includes("voucher") ? "voucher"
   : t.includes("pix") ? "pix"
   : t.includes("credito") || t.includes("crédito") ? "credito"
@@ -4839,6 +4839,7 @@ function formaPagamentoNFCe(texto) {
   if (t.includes("credito") || t.includes("crédito") || t.includes("credit")) return "03";
   if (t.includes("debito") || t.includes("débito") || t.includes("debit")) return "04";
   if (t.includes("pix")) return "17";
+ if (t.includes("alimentacao") || t.includes("alimentação")) return "10";
   if (t.includes("refeicao") || t.includes("refeição")) return "11";
   if (t.includes("vale") || t.includes("voucher")) return "12";
   return "99";
