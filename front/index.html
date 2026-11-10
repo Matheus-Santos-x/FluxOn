@@ -1728,6 +1728,19 @@ input:focus, textarea:focus, select:focus {
                 <input id="admin-f-entrega-max" type="number" min="0" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
               </label>
             </div>
+                        <div style="display:flex; gap:10px;">
+              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Pedido agendado (loja fechada)</span>
+                <select id="admin-f-agendamento" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;">
+                  <option value="0">Desligado</option>
+                  <option value="1">Ligado (só Pix online)</option>
+                </select>
+              </label>
+              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Entra na cozinha (min antes)</span>
+                <input id="admin-f-agendamento-min" type="number" min="0" max="180" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
+              </label>
+            </div>
             <label style="display:flex; flex-direction:column; gap:4px;">
               <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Pagamento online (separado por vírgula)</span>
               <input id="admin-f-pagamento-online" placeholder="pix, credito" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
