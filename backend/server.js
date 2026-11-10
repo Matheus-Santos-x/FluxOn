@@ -6663,14 +6663,12 @@ const clienteHash = (rid, tel, codigo) =>
   crypto.createHmac("sha256", process.env.JWT_SECRET || "fluxon-cliente").update(`${rid}:${tel}:${codigo}`).digest("hex");
 
 // códigos abertos: "restaurante:telefone" → { hash, expira, tentativas, pedidos: [horários] }
-const clienteCodigos = new Map();
-setInterval(() => {
-  const agora = Date.now();
-  for (const [k, v] of clienteCodigos) {
-    v.pedidos = v.pedidos.filter(t => agora - t < 60 * 60 * 1000);
-    if (v.expira < agora && !v.pedidos.length) clienteCodigos.delete(k);
-  }
-}, 10 * 60 * 1000).unref();
+// guardado no Redis: vale para todos os servidores e some sozinho depois de 1h
+const otpLer = async (chave) => {
+  const v = await pubClient.get(`otp:${chave}`);
+  return v ? JSON.parse(v) : null;
+};
+const otpSalvar = (chave, reg) => pubClient.set(`otp:${chave}`, JSON.stringify(reg), "EX", 60 * 60);
 
 // "(11) 99999-8888" ou "5511999998888" → "11999998888"
 function telefoneLocal(v) {
@@ -6793,7 +6791,7 @@ app.post("/api/v1/cliente/:restaurant_id/login/solicitar", clienteLimitSolicitar
 
     const chave = `${rid}:${tel}`;
     const agora = Date.now();
-    const reg = clienteCodigos.get(chave) || { hash: null, expira: 0, tentativas: 0, pedidos: [] };
+    const reg = (await otpLer(chave)) || { hash: null, expira: 0, tentativas: 0, pedidos: [] };
     reg.pedidos = reg.pedidos.filter(t => agora - t < 60 * 60 * 1000);
     if (reg.pedidos.length >= 5) return sendError(res, 429, "Muitos códigos pedidos. Tente de novo mais tarde.");
     if (reg.pedidos.length && agora - reg.pedidos[reg.pedidos.length - 1] < 45 * 1000)
@@ -6813,7 +6811,7 @@ app.post("/api/v1/cliente/:restaurant_id/login/solicitar", clienteLimitSolicitar
     reg.expira = agora + CLIENTE_OTP_MINUTOS * 60 * 1000;
     reg.tentativas = 0;
     reg.pedidos.push(agora);
-    clienteCodigos.set(chave, reg);
+    await otpSalvar(chave, reg);
 
     const { data: rest } = await supabase.from("restaurants").select("name").eq("id", rid).maybeSingle();
     const mensagem = `Seu código para entrar no cardápio ${rest?.name || ""} é *${codigo}*. Vale por ${CLIENTE_OTP_MINUTOS} minutos. Não compartilhe com ninguém.`;
@@ -6853,13 +6851,15 @@ app.post("/api/v1/cliente/:restaurant_id/login/verificar", clienteLimitVerificar
     if (!tel || codigo.length !== 6) return invalido();
 
     const chave = `${rid}:${tel}`;
-    const reg = clienteCodigos.get(chave);
+    const reg = await otpLer(chave);
     if (!reg || !reg.hash || reg.expira < Date.now() || reg.tentativas >= CLIENTE_OTP_MAX_TENTATIVAS) return invalido();
     if (!safeEqual(clienteHash(rid, tel, codigo), reg.hash)) {
       reg.tentativas++;
+    await otpSalvar(chave, reg);
       return invalido();
     }
     reg.hash = null; // código usado não vale de novo
+        await otpSalvar(chave, reg);
 
     // acha o cliente pelo telefone (com ou sem 55); se não existir, cria o cadastro
     const { data: achados } = await supabase.from("base_clientes").select("id, nome, token_fidelidade")
@@ -8930,6 +8930,15 @@ app.patch("/admin/owners/:id", requireAdmin, async (req, res) => {
 });
 
 /* ============ FIM DO BLOCO OWNER ============ */
+
+// ===== PROTEÇÃO CONTRA QUEDA =====
+process.on("unhandledRejection", (err) => {
+  console.error("❌ Promise sem tratamento:", err?.stack || err);
+});
+process.on("uncaughtException", (err) => {
+  console.error("❌ Erro fatal, reiniciando:", err?.stack || err);
+  setTimeout(() => process.exit(1), 1000).unref();
+});
 
 // ===== HEALTH CHECK =====
 app.get("/health", (req, res) => {
