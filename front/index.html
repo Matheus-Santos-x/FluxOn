@@ -1763,66 +1763,31 @@ input:focus, textarea:focus, select:focus {
 <div class="modal-backdrop" id="modal">
   <div class="modal">
     <div class="modal-header">
-      <div style="display:flex; align-items:baseline; gap:10px;">
-  <div>
-    <p class="modal-label">Pedido</p>
-    <h3 id="modal-id" style="display:inline;"></h3>
-  </div>
-  <button class="ghost-button" id="modal-edit-btn" style="padding:4px 10px; font-size:12px; border-radius:8px;">✏️ Editar</button>
-</div>
+      <h3 class="pm-titulo">Pedido <span id="modal-id"></span></h3>
+      <button class="pm-editar" id="modal-edit-btn">✏️ Editar</button>
       <button class="icon-button" id="close-modal" aria-label="Fechar modal">&times;</button>
     </div>
-    <div class="modal-body">
-      <div class="modal-row-inline">
-        <span class="muted" style="min-width: 90px;">Cliente</span>
-        <span id="modal-customer"></span>
+    <div class="modal-body pm-body">
+      <div class="pm-grade">
+        <div class="pm-campo"><span class="pm-rotulo">Cliente</span><span id="modal-customer"></span></div>
+        <div class="pm-campo"><span class="pm-rotulo">Telefone</span><span id="modal-phone"></span></div>
+        <div class="pm-campo"><span class="pm-rotulo">Data</span><span id="modal-time"></span></div>
+        <div class="pm-campo" id="modal-payment-price-row" style="display:none;"><span class="pm-rotulo">Pagamento</span><span id="modal-payment"></span></div>
       </div>
-      <div style="display: flex; gap: 10px;">
-        <div class="modal-row-inline" style="flex: 1;">
-          <span class="muted" style="min-width: 90px;">Número</span>
-          <span id="modal-phone"></span>
-        </div>
-        <div class="modal-row-inline" style="flex: 1;">
-          <span class="muted" style="min-width: 70px;">Data</span>
-          <span id="modal-time"></span>
-        </div>
-      </div>
-      <div id="modal-payment-price-row" style="display: none;">
-        <div style="display: flex; gap: 10px;">
-          <div class="modal-row-inline" style="flex: 1;">
-            <span class="muted" style="min-width: 110px;">Pagamento</span>
-            <span id="modal-payment"></span>
-          </div>
-          <div class="modal-row-inline" style="flex: 1;">
-            <span class="muted" style="min-width: 70px;">Valor</span>
-            <span id="modal-total-price"></span>
-          </div>
-        </div>
-      </div>
-      <div class="modal-row-inline" id="modal-address-row" style="display:none;">
-        <span class="muted" style="min-width: 90px;">Endereço</span>
-        <span id="modal-address"></span>
-      </div>
-      <div class="modal-section">
-        <p class="modal-label">Itens</p>
-        <ul id="modal-items" class="item-list"></ul>
-      </div>
-      <div class="modal-section">
-        <p class="modal-label">Observações</p>
-        <p id="modal-notes" class="notes"></p>
-      </div>
+      <div class="pm-campo" id="modal-address-row" style="display:none;"><span class="pm-rotulo">Endereço de entrega</span><span id="modal-address"></span></div>
+      <div class="pm-campo"><span class="pm-rotulo">Itens</span><ul id="modal-items" class="item-list pm-itens"></ul></div>
+      <div class="pm-campo" id="modal-notes-row"><span class="pm-rotulo">Observações</span><p id="modal-notes" class="pm-obs"></p></div>
     </div>
-   <div class="modal-actions" style="justify-content:space-between;">
-  <div style="display:flex; gap:10px;">
-    <button class="danger-button" id="modal-cancel">Cancelar Pedido</button>
-  </div>
-  <div style="display:flex; gap:10px;">
-    <button class="ghost-button" id="modal-prev">Voltar etapa</button>
-    <button class="primary-button" id="modal-next"></button>
+    <div class="pm-rodape">
+      <div class="pm-total" id="modal-total-price"></div>
+      <div class="modal-actions pm-acoes">
+        <button class="danger-button" id="modal-cancel">Cancelar pedido</button>
+        <button class="ghost-button" id="modal-prev">Voltar etapa</button>
+        <button class="primary-button" id="modal-next"></button>
+      </div>
     </div>
   </div>
 </div>
-  </div>
 
 <!-- MODAL DE CRIAÇÃO DE PEDIDO -->
   <div class="modal-backdrop" id="create-modal">
