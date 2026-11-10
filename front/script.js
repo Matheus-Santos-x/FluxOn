@@ -10087,27 +10087,34 @@ function alertaNovoPedido(order) {
   alertaNotificar(order);
 }
 
-// "plim-plom" 3 vezes (~4 s), em onda forte + harmônico: corta barulho de cozinha
+// toque de telefone antigo ("trrrim... trrrim... trrrim") por ~4,5 s: bem diferente do bip do Kanban
 function alertaTocar() {
   if (Date.now() < _alertaSomAte) return; // já está tocando (vários pedidos juntos não embolam o som)
-  _alertaSomAte = Date.now() + 4000;
+  _alertaSomAte = Date.now() + 4500;
   try {
     if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (_audioCtx.state === "suspended") _audioCtx.resume();
-    const t0 = _audioCtx.currentTime + 0.05;
-    [0, 1.4, 2.8].forEach(rep => [[0, 1318.5], [0.22, 987.8]].forEach(([d, f]) => {
-      [[f, "square", 0.45], [f * 2, "sine", 0.25]].forEach(([freq, tipo, vol]) => {
-        const osc = _audioCtx.createOscillator(), g = _audioCtx.createGain(), t = t0 + rep + d;
-        osc.type = tipo; osc.frequency.value = freq;
+    const ctx = _audioCtx, t0 = ctx.currentTime + 0.05;
+    const comp = ctx.createDynamicsCompressor();       // deixa o som "cheio" e mais alto sem estourar
+    comp.threshold.value = -24; comp.ratio.value = 10;
+    const saida = ctx.createGain(); saida.gain.value = 1.5;
+    comp.connect(saida); saida.connect(ctx.destination);
+    for (let toque = 0; toque < 3; toque++) {           // 3 toques de 1 s, com meio segundo de pausa
+      for (let i = 0; i < 20; i++) {                     // cada toque: 20 notas curtinhas alternando = "trrrim"
+        const t = t0 + toque * 1.5 + i * 0.05;
+        const osc = ctx.createOscillator(), g = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.value = i % 2 ? 1480 : 1100;
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
-        osc.connect(g); g.connect(_audioCtx.destination);
-        osc.start(t); osc.stop(t + 0.4);
-      });
-    }));
+        g.gain.exponentialRampToValueAtTime(0.7, t + 0.005);
+        g.gain.setValueAtTime(0.7, t + 0.04);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+        osc.connect(g); g.connect(comp);
+        osc.start(t); osc.stop(t + 0.055);
+      }
+    }
   } catch (e) { /* navegador sem som: fica a faixa e a notificação */ }
-  try { navigator.vibrate?.([300, 120, 300, 900, 300, 120, 300]); } catch (e) {}
+  try { navigator.vibrate?.([1000, 500, 1000, 500, 1000]); } catch (e) {}
 }
 
 function alertaFaixa(o) {
