@@ -1824,48 +1824,49 @@ padding:0;
   </div>
 </label>
 
-       <div id="delivery-outer-wrap" style="
-background:transparent;
-border:1px solid rgba(255,255,255,0.08);
-  border-radius:12px;
-  padding:10px 14px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-">
+       <div id="delivery-outer-wrap" style="display:flex; flex-direction:column; gap:14px;">
 <!-- CAMPOS SEMPRE VISÍVEIS — KANBAN É DELIVERY-ONLY -->
-  <div id="delivery-address-wrap" style="display:flex; flex-direction:column; gap:8px;">
-    
-    <!-- ENDEREÇO -->
-    <div style="display:flex; flex-direction:column; gap:6px;">
-      <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px;">Endereço para entrega</span>
-      <input
-        id="new-address"
-        type="text"
-        placeholder="Rua, número, bairro, complemento..."
-        style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); outline:none; font-size:14px; font-family:inherit;"
-      />
+  <div id="delivery-address-wrap" style="display:flex; flex-direction:column; gap:14px;">
+
+    <!-- ENDEREÇO: digita o CEP (ou o nome da rua), escolhe na lista e só completa o número -->
+    <div class="np-campo">
+      <div class="np-end-topo">
+        <span class="np-rotulo">Endereço para entrega</span>
+        <button type="button" class="np-limpar" id="np-end-limpar" style="display:none;">Limpar endereço</button>
+      </div>
+      <div id="np-end-busca">
+        <input id="np-end-termo" class="np-input" placeholder="Digite o CEP ou o nome da rua" autocomplete="off" />
+        <div id="np-end-opcoes" class="np-opcoes" style="display:none;"></div>
+      </div>
+      <div id="np-end-escolhido" class="np-end-escolhido" style="display:none;">
+        <div class="np-end-linha1"><b id="np-end-rua"></b><input id="np-end-num" class="np-num" placeholder="Nº" autocomplete="off" /></div>
+        <small id="np-end-resto"></small>
+      </div>
+      <input id="new-address" type="hidden" />
     </div>
 
     <!-- FORMA DE PAGAMENTO -->
-    <div style="display:flex; flex-direction:column; gap:6px;">
-      <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px;">Forma de pagamento</span>
-      <select id="new-payment" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); outline:none; font-size:14px; font-family:inherit; appearance:none; cursor:pointer;">
+    <div class="np-campo">
+      <span class="np-rotulo">Forma de pagamento</span>
+      <div id="new-payment-chips" class="np-chips"></div>
+      <select id="new-payment" style="display:none;">
         <option value="">Selecione...</option>
         <option value="pix">PIX</option>
         <option value="credito">Cartão de crédito</option>
         <option value="debito">Cartão de débito</option>
         <option value="dinheiro">Dinheiro</option>
+        <option value="vale-refeição">Vale-refeição</option>
+        <option value="vale-alimentação">Vale-alimentação</option>
       </select>
     </div>
 
   </div>
 </div>
 
-        <label style="gap:4px;">
-  <span style="font-size:11px; font-weight:800; letter-spacing:1.2px; color:rgba(252,228,228,0.7);">OBSERVAÇÕES</span>
-  <textarea id="new-notes" placeholder="Sem cebola, bebida sem gelo" style="min-height:90px; border:1px solid rgba(249,115,115,0.3); border-radius:10px; background:rgba(28,28,30,0.3); padding:10px 14px; resize:none; color:rgba(252,228,228,0.7); outline:none; font-size:14px; font-family:inherit;"></textarea>
-</label>
+        <div class="np-campo">
+  <span class="np-rotulo">Observações</span>
+  <textarea id="new-notes" class="np-input" rows="2" placeholder="Sem cebola, bebida sem gelo"></textarea>
+</div>
 
         <div class="modal-actions" style="align-items:center; gap:12px; flex-wrap:wrap; justify-content:space-between;">
           <div style="display:inline-flex; align-items:center; gap:6px;">
