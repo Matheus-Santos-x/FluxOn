@@ -706,6 +706,8 @@ async function selecionarAdminRestaurante(id) {
     document.getElementById("admin-f-google-avaliacao").value = cfg.google_avaliacao_url || "";
     document.getElementById("admin-f-mesas").value = cfg.num_mesas ?? 10;
     document.getElementById("admin-f-pedido-minimo").value = cfg.pedido_minimo ?? 0;
+        document.getElementById("admin-f-agendamento").value = cfg.agendamento_ativo ? "1" : "0";
+    document.getElementById("admin-f-agendamento-min").value = cfg.agendamento_antecedencia_min ?? 30;
     document.getElementById("admin-f-entrega-min").value = cfg.tempo_entrega_min ?? "";
     document.getElementById("admin-f-entrega-max").value = cfg.tempo_entrega_max ?? "";
     document.getElementById("admin-f-pagamento-online").value = (cfg.pagamento_online || []).join(", ");
