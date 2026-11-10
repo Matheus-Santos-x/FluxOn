@@ -439,7 +439,7 @@ function normalizePhone(input) {
 }
 
 const pick = (obj = {}, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
-const CONFIG_CAMPOS = ["nome_exibicao","logo_url","logo_fisico_url","banner_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega","google_avaliacao_url"];
+const CONFIG_CAMPOS = ["nome_exibicao","logo_url","logo_fisico_url","banner_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega","google_avaliacao_url","agendamento_ativo","agendamento_antecedencia_min"];
 
 
 /* ========================================
@@ -961,6 +961,7 @@ app.get("/orders/:restaurant_id", requireOwner, async (req, res) => {
       .eq("restaurant_id", restaurant_id)
       .or(`status.in.(pending,preparing,mounting,delivering),created_at.gte.${cutoff.toISOString()}`)
       .not("origin", "in", `(${ORIGINS_FORA_DO_KANBAN.join(",")})`)
+       .not("status", "in", "(draft,scheduled)") // rascunho e agendado não aparecem no Kanban
       .order("created_at", { ascending: true });
 
     if (error) return sendError(res, 500, "Erro ao listar pedidos");
@@ -1273,6 +1274,17 @@ const PIX_PROVEDORES = {
       const p = await r.json();
       if (!r.ok) return null;
       return { pago: p.status === "approved", valor: Number(p.transaction_amount) || 0 };
+    },
+    // devolve o valor inteiro do Pix
+    async estornar({ cred, ref, referencia }) {
+      const r = await fetch(`https://api.mercadopago.com/v1/payments/${ref}/refunds`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${cred.mp_access_token}`, "Content-Type": "application/json", "X-Idempotency-Key": `estorno-${referencia}` },
+        body: "{}"
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.message || `Mercado Pago respondeu ${r.status}`);
+      return d;
     }
   }
   // próximos bancos entram aqui, no mesmo formato
@@ -1370,7 +1382,7 @@ PIX_TIPOS.pedido = {
   publico: true,
   async preparar({ restaurant_id, dados, pagador }) {
     const { data: ped } = await supabase.from("orders")
-      .select("id, order_number, status, origin, itens, total_price, taxa_entrega, address, client_phone")
+    .select("id, order_number, status, origin, itens, total_price, taxa_entrega, address, client_phone, agendado_para")
       .eq("id", dados.order_id).eq("restaurant_id", restaurant_id).maybeSingle();
     if (!ped || ped.status !== "draft" || ped.origin !== "cardapio_delivery")
       throw new PixErro(404, "Pedido não encontrado ou já confirmado");
@@ -1378,6 +1390,12 @@ PIX_TIPOS.pedido = {
       throw new PixErro(400, "Complete os dados do pedido antes de pagar");
     if (normalizePhone(ped.client_phone) !== pagador.telefone)
       throw new PixErro(403, "O telefone não confere com o do pedido");
+    
+    // 📅 loja fechada: só paga pedido agendado, e pra um horário que ainda não passou
+    const func = await funcionamento(restaurant_id);
+    if (!func.aberto && !ped.agendado_para) throw new PixErro(400, "Estamos fechados agora. Escolha o horário do seu pedido.");
+    if (ped.agendado_para && new Date(ped.agendado_para).getTime() < Date.now() - 15 * 60 * 1000)
+      throw new PixErro(400, "O horário escolhido já passou. Escolha outro.");
 
     const valor = Math.round(Number(ped.total_price) * 100) / 100;
     const { data: cfg } = await supabase.from("restaurante_config")
@@ -1395,19 +1413,21 @@ PIX_TIPOS.pedido = {
     return { valor, descricao: `Pedido #${ped.order_number} - ${pagador.nome}`.slice(0, 200), referencia_id: String(ped.id) };
   },
   async aoPagar({ cobranca }) {
-    const { data: ped } = await supabase.from("orders").select("id, notes, client_name, client_phone, total_price, taxa_entrega")
+    const { data: ped } = await supabase.from("orders").select("id, notes, client_name, client_phone, total_price, taxa_entrega, agendado_para")
       .eq("id", cobranca.referencia_id).eq("restaurant_id", cobranca.restaurant_id).eq("status", "draft").maybeSingle();
     if (!ped) throw new Error("o pedido não estava mais aguardando pagamento");
     if (Number(cobranca.valor) + 0.009 < Number(ped.total_price)) throw new Error("valor pago menor que o total do pedido");
-    const notes = [ped.notes, "✅ PAGO ONLINE (Pix)"].filter(Boolean).join(" | ");
+    const agendado = !!ped.agendado_para;
+    const notes = [ped.notes, "✅ PAGO ONLINE (Pix)", agendado ? `📅 AGENDADO para ${horaSP(ped.agendado_para)}` : null].filter(Boolean).join(" | ");
     const { data: ok } = await supabase.from("orders")
-      .update({ status: "pending", payment_method: "Pix", notes, update_at: new Date().toISOString() })
+      .update({ status: agendado ? "scheduled" : "pending", payment_method: "Pix", notes, update_at: new Date().toISOString() })
       .eq("id", ped.id).eq("status", "draft").select().maybeSingle();
     if (!ok) throw new Error("outra confirmação chegou primeiro");
     // pontos/selos contam só os itens, sem a taxa de entrega
     await pedidoFidelizar(cobranca.restaurant_id, normalizePhone(ped.client_phone), ped.client_name,
       (Number(ped.total_price) || 0) - (Number(ped.taxa_entrega) || 0));
-    emitOrderUpdate(cobranca.restaurant_id, ok);
+    if (agendado) io.to(cobranca.restaurant_id).emit("agendamentos_atualizados"); // fica fora do Kanban até a hora
+    else emitOrderUpdate(cobranca.restaurant_id, ok);
   },
   async aoFalhar() { /* o rascunho continua; o cliente pode tentar de novo */ }
 };
@@ -1955,6 +1975,29 @@ app.get("/api/v1/dominio/:servico/:dominio", async (req, res) => {
   return sendError(res, 404, "Domínio não encontrado");
 });
 
+// devolve o Pix de um pedido (agendado cancelado pelo restaurante) direto no banco
+async function pixEstornarPedido(restaurant_id, order_id) {
+  const { data: cob } = await supabase.from("cobrancas_pix").select("*")
+    .eq("restaurant_id", restaurant_id).eq("tipo", "pedido").eq("referencia_id", String(order_id))
+    .eq("status", "pago").is("estornado_em", null).maybeSingle();
+  if (!cob) return { ok: false, motivo: "Pix pago não encontrado ou já devolvido" };
+  const cfg = await pixConfig(restaurant_id);
+  const prov = cfg && cfg.tipo === cob.provedor ? PIX_PROVEDORES[cfg.tipo] : null;
+  if (!prov?.estornar) return { ok: false, motivo: "este banco não tem devolução automática" };
+  // marca antes de chamar o banco: dois cliques não devolvem duas vezes
+  const { data: marcado } = await supabase.from("cobrancas_pix").update({ estornado_em: new Date().toISOString() })
+    .eq("id", cob.id).is("estornado_em", null).select("id").maybeSingle();
+  if (!marcado) return { ok: false, motivo: "a devolução já está em andamento" };
+  try {
+    await prov.estornar({ cred: cfg.cred, ref: cob.pagamento_ref, referencia: cob.id });
+    console.log(`↩️ Pix devolvido: pedido ${order_id} (R$ ${cob.valor})`);
+    return { ok: true, valor: cob.valor };
+  } catch (e) {
+    await supabase.from("cobrancas_pix").update({ estornado_em: null, pendencia: `devolução falhou: ${e.message}`.slice(0, 300) }).eq("id", cob.id);
+    return { ok: false, motivo: e.message };
+  }
+}
+
 /* ---- motor ---- */
 async function pixCriarCobranca({ restaurant_id, tipo, dados, pagador }) {
   const def = PIX_TIPOS[tipo];
@@ -2313,6 +2356,7 @@ const { data: orderAntes } = await supabase
     
       if (status === "pending") {
       updateData.confirmed_at = now;
+    if (orderAntes?.status === "scheduled") updateData.created_at = now; // agendado mandado pra cozinha agora
     } else if (status === "preparing") {
       updateData.preparing_at = now;
     } else if (status === "mounting") {
@@ -2336,6 +2380,20 @@ const { data: orderAntes } = await supabase
     if (error || !data) return sendError(res, 500, "Erro ao atualizar pedido");
     if ((status === "cancelled" || status === "canceled") && orderAntes && orderAntes.status !== "cancelled" && orderAntes.status !== "canceled") {
       estornarSeloFidelidade({ ...orderAntes, restaurant_id: data.restaurant_id });
+    }
+        // 📅 agendado cancelado pelo restaurante: devolve o Pix e avisa o cliente no WhatsApp
+    if ((status === "cancelled" || status === "canceled") && orderAntes?.status === "scheduled") {
+      const est = await pixEstornarPedido(data.restaurant_id, id);
+      if (est.ok) {
+        const { data: rest } = await supabase.from("restaurants").select("name").eq("id", data.restaurant_id).maybeSingle();
+        const primeiro = String(data.client_name || "").trim().split(" ")[0];
+        voucherWhatsApp(data.restaurant_id, rest?.name || null, data.client_name, data.client_phone,
+          `Olá${primeiro ? ", " + primeiro : ""}! Seu pedido agendado #${data.order_number}${rest?.name ? " no " + rest.name : ""} foi cancelado pelo restaurante e o Pix de ${voucherMoeda(est.valor)} foi devolvido. O valor volta para a sua conta em instantes.`);
+      } else {
+        console.error(`❌ estorno Pix do pedido ${id}: ${est.motivo}`);
+      }
+      io.to(data.restaurant_id).emit("agendamentos_atualizados");
+      return res.json({ ...data, estorno: est.ok ? "ok" : est.motivo });
     }
     emitOrderUpdate(data.restaurant_id, data);
     
@@ -2487,6 +2545,23 @@ app.post("/api/v1/pedidos", async (req, res) => {
       }
     }
 
+        // 📅 loja fechada: delivery só entra agendado e pago no Pix (o pedido espera a hora certa)
+    let agendado_para = null;
+    if (ehDeliveryPublico) {
+      const func = await funcionamento(restaurant_id);
+      if (!func.aberto) {
+        const ag = await agendamentoDe(restaurant_id, func);
+        const abre = func.proximo ? ` Abrimos ${quandoAbreTexto(func.proximo.inicio)}.` : "";
+        if (!ag.disponivel) return sendError(res, 400, `Estamos fechados agora.${abre}`);
+        if (finalStatus === "pending") return sendError(res, 400, `Estamos fechados agora.${abre} Agende seu pedido pagando no Pix.`);
+        if (req.body?.agendado_para) {
+          const quer = new Date(req.body.agendado_para).getTime();
+          const slot = ag.slots.find(s => Math.abs(s.getTime() - quer) < 60 * 1000);
+          if (!slot) return sendError(res, 400, "Esse horário não está mais disponível. Escolha outro.");
+          agendado_para = slot.toISOString();
+        }
+      }
+    }
         if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0) {
       const pausado = await itemPausado(restaurant_id, normalizedItems);
       if (pausado) return sendError(res, 400, `${pausado} acabou de esgotar. Tire do carrinho para continuar.`);
@@ -2587,9 +2662,9 @@ const nextNumber = numData || 1;
 
     // 🛵 grava a taxa de entrega no pedido (delivery do cardápio)
     if (ehDeliveryPublico && resultData?.id) {
-      const { error: errTaxa } = await supabase.from("orders").update({ taxa_entrega }).eq("id", resultData.id);
-      if (errTaxa) console.error("⚠️ taxa_entrega não gravada:", errTaxa.message);
-      else resultData.taxa_entrega = taxa_entrega;
+      const { error: errTaxa } = await supabase.from("orders").update({ taxa_entrega, agendado_para }).eq("id", resultData.id);
+      if (errTaxa) console.error("⚠️ taxa_entrega/agendado_para não gravados:", errTaxa.message);
+      else Object.assign(resultData, { taxa_entrega, agendado_para });
     }
 
     // Gera código único: primeiros 8 caracteres do restaurant_id + order_number
@@ -4397,6 +4472,8 @@ app.get("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
       tempo_entrega_min: config?.tempo_entrega_min ?? null,
       tempo_entrega_max: config?.tempo_entrega_max ?? null,
       pedido_minimo: config?.pedido_minimo ?? 0,
+     agendamento_ativo: !!config?.agendamento_ativo,
+      agendamento_antecedencia_min: config?.agendamento_antecedencia_min ?? 30,
       endereco: config?.endereco || "",
       pagamento_online: config?.pagamento_online || [],
       pagamento_entrega: config?.pagamento_entrega || [],
@@ -4431,6 +4508,117 @@ app.patch("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
    🕐 HORÁRIOS DE FUNCIONAMENTO
 ======================================== */
 
+/* ========================================
+   🕒 HORÁRIO DE FUNCIONAMENTO + 📅 PEDIDO AGENDADO
+   Horário que passa da meia-noite (18:00 → 02:00) conta como um período só.
+   Loja fechada: o delivery só aceita pedido agendado e pago no Pix; ele fica
+   "scheduled" e entra na cozinha X minutos antes do horário escolhido.
+======================================== */
+const horaSP = (d) => new Date(d).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+
+// "hoje às 18:00" / "amanhã às 18:00" / "sexta às 18:00"
+function quandoAbreTexto(data, agora = new Date()) {
+  const dia = (d) => new Date(d.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  if (dia(data) === dia(agora)) return `hoje às ${horaSP(data)}`;
+  if (dia(data) === dia(new Date(agora.getTime() + 864e5))) return `amanhã às ${horaSP(data)}`;
+  const semana = data.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long" }).split("-")[0];
+  return `${semana} às ${horaSP(data)}`;
+}
+
+// períodos reais de funcionamento, de ontem até daqui 7 dias
+function periodosFuncionamento(horarios, agora = new Date()) {
+  const lista = [];
+  const hojeSP = new Date(agora.getTime() - 3 * 60 * 60 * 1000); // getUTC* = data de São Paulo
+  for (let d = -1; d <= 7; d++) {
+    const dia = new Date(Date.UTC(hojeSP.getUTCFullYear(), hojeSP.getUTCMonth(), hojeSP.getUTCDate() + d));
+    const ymd = dia.toISOString().slice(0, 10);
+    for (const h of horarios) {
+      if (Number(h.dia_semana) !== dia.getUTCDay()) continue;
+      const ab = String(h.abertura).slice(0, 5);
+      const fe = String(h.fechamento).slice(0, 5) === "24:00" ? "00:00" : String(h.fechamento).slice(0, 5);
+      const inicio = new Date(`${ymd}T${ab}:00${RESERVA_FUSO}`);
+      let fim = new Date(`${ymd}T${fe}:00${RESERVA_FUSO}`);
+      if (isNaN(inicio) || isNaN(fim)) continue;
+      if (fim <= inicio) fim = new Date(fim.getTime() + 864e5); // passa da meia-noite
+      lista.push({ inicio, fim });
+    }
+  }
+  return lista.sort((a, b) => a.inicio - b.inicio);
+}
+
+// sem horário cadastrado = sempre aberto (não trava restaurante que ainda não configurou)
+function funcionamentoDe(horarios, agora = new Date()) {
+  if (!horarios.length) return { aberto: true, atual: null, proximo: null };
+  const periodos = periodosFuncionamento(horarios, agora);
+  const atual = periodos.find(p => p.inicio <= agora && agora < p.fim) || null;
+  return { aberto: !!atual, atual, proximo: periodos.find(p => p.inicio > agora) || null };
+}
+
+async function funcionamento(restaurant_id) {
+  const { data } = await supabase.from("restaurante_horarios")
+    .select("dia_semana, abertura, fechamento").eq("restaurant_id", restaurant_id).eq("ativo", true);
+  return funcionamentoDe(data || []);
+}
+
+// dá pra agendar? (ligado no admin + Pix online + loja fechada) → horários do próximo período, de 30 em 30 min
+async function agendamentoDe(restaurant_id, func) {
+  if (func.aberto || !func.proximo) return { disponivel: false, slots: [] };
+  const [{ data: cfg }, pix] = await Promise.all([
+    supabase.from("restaurante_config").select("agendamento_ativo").eq("restaurant_id", restaurant_id).maybeSingle(),
+    pixConfig(restaurant_id)
+  ]);
+  if (!cfg?.agendamento_ativo || !pix) return { disponivel: false, slots: [] };
+  const passo = 30 * 60 * 1000, ini = func.proximo.inicio.getTime();
+  const ultimo = Math.max(ini, func.proximo.fim.getTime() - passo);
+  const slots = [];
+  for (let t = ini; t <= ultimo; t += passo) slots.push(new Date(t));
+  return { disponivel: true, slots };
+}
+
+// lista dos agendados pro Operacional
+app.get("/api/v1/restaurante/:restaurant_id/agendados", requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("orders")
+      .select("id, order_number, client_name, client_phone, itens, total_price, address, notes, agendado_para, created_at")
+      .eq("restaurant_id", req.params.restaurant_id).eq("status", "scheduled")
+      .order("agendado_para", { ascending: true }).limit(100);
+    if (error) return sendError(res, 500, "Erro ao listar agendados");
+    return res.json({ agendados: data || [] });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao listar agendados");
+  }
+});
+
+// a cada minuto: agendado que chegou na hora (horário - antecedência) vira pedido novo na cozinha
+async function liberarAgendados() {
+  try {
+    const limite = new Date(Date.now() + 180 * 60 * 1000).toISOString();
+    const { data: lista } = await supabase.from("orders").select("id, restaurant_id, agendado_para")
+      .eq("status", "scheduled").lte("agendado_para", limite).limit(200);
+    if (!lista?.length) return;
+    const antecedencia = {};
+    for (const o of lista) {
+      if (!(o.restaurant_id in antecedencia)) {
+        const { data } = await supabase.from("restaurante_config").select("agendamento_antecedencia_min")
+          .eq("restaurant_id", o.restaurant_id).maybeSingle();
+        antecedencia[o.restaurant_id] = Math.min(180, Math.max(0, Number(data?.agendamento_antecedencia_min ?? 30)));
+      }
+      if (new Date(o.agendado_para).getTime() - antecedencia[o.restaurant_id] * 60 * 1000 > Date.now()) continue;
+      const agora = new Date().toISOString();
+      const { data: ok } = await supabase.from("orders")
+        .update({ status: "pending", created_at: agora, confirmed_at: agora, update_at: agora })
+        .eq("id", o.id).eq("status", "scheduled").select().maybeSingle();
+      if (!ok) continue; // outro servidor liberou primeiro
+      emitOrderUpdate(ok.restaurant_id, ok);
+      io.to(ok.restaurant_id).emit("agendamentos_atualizados");
+      console.log(`📅 Agendado liberado: pedido #${ok.order_number} (${horaSP(ok.agendado_para)})`);
+    }
+  } catch (e) {
+    console.error("⚠️ liberarAgendados:", e.message);
+  }
+}
+setInterval(liberarAgendados, 60 * 1000).unref();
+
 // GET - Lista os horários e já calcula se está aberto AGORA
 app.get("/api/v1/restaurante/:restaurant_id/horarios", async (req, res) => {
   try {
@@ -4445,25 +4633,21 @@ app.get("/api/v1/restaurante/:restaurant_id/horarios", async (req, res) => {
 
     if (error) return sendError(res, 500, "Erro ao buscar horários");
 
-    // calcula "aberto agora" no fuso de São Paulo (mesmo padrão que
-    // você já usa no printOrder)
-    const agora = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-    const diaAtual = agora.getDay(); // 0=domingo ... 6=sábado
-    const horaAtual = agora.toTimeString().slice(0, 5); // "HH:MM"
-
-    const periodoAtivo = (data || []).find(h =>
-      h.dia_semana === diaAtual &&
-      horaAtual >= h.abertura.slice(0, 5) &&
-      horaAtual <= h.fechamento.slice(0, 5)
-    );
-
+    const func = funcionamentoDe(data || []);
+    const ag = await agendamentoDe(restaurant_id, func);
     return res.json({
       horarios: data || [],
       status: {
-        aberto: !!periodoAtivo,
-        fechamento_atual: periodoAtivo ? periodoAtivo.fechamento.slice(0, 5) : null
+        aberto: func.aberto,
+        fechamento_atual: func.atual ? horaSP(func.atual.fim) : null,
+        abre_texto: !func.aberto && func.proximo ? quandoAbreTexto(func.proximo.inicio) : null
+      },
+      agendamento: {
+        disponivel: ag.disponivel,
+        slots: ag.slots.map(s => ({ iso: s.toISOString(), hora: horaSP(s) }))
       }
     });
+    
   } catch (err) {
     return sendError(res, 500, "Erro interno");
   }
