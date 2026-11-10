@@ -3123,7 +3123,7 @@ input[type="number"] {
 #modal .pm-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; }
 #modal .pm-campo { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 #modal .pm-campo > span:not(.pm-rotulo) { padding-bottom: 8px; border-bottom: 1px solid rgba(249,115,115,.28); color: rgba(252,228,228,.95); font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
-#modal .pm-rotulo { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: rgba(252,228,228,.55); }
+#modal .pm-rotulo { font-size: 12px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #fca5a5; }
 #modal #modal-address b { display: block; font-weight: 700; }
 #modal #modal-address small { display: block; margin-top: 3px; font-size: 13px; font-weight: 500; color: rgba(252,228,228,.6); }
 #modal #modal-address a { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: rgba(249,115,115,.95); text-decoration: none; }
@@ -3132,7 +3132,8 @@ input[type="number"] {
 #modal .pm-rodape { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.06); }
 #modal .pm-total { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 34px; line-height: 1; color: rgba(252,228,228,.95); white-space: nowrap; }
 #modal .pm-total .pm-rs { color: rgba(249,115,115,.85); margin-right: 6px; }
-#modal .pm-acoes { margin: 0; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+#modal .pm-acoes { flex: 1 1 auto; margin: 0; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+#modal .pm-acoes #modal-cancel { margin-right: auto; } /* cancelar fica na esquerda, o resto na direita */
 @media (max-width: 560px) {
   #modal .modal { padding: 18px 16px 14px; }
   #modal .pm-grade { grid-template-columns: 1fr; }
@@ -3155,7 +3156,7 @@ input[type="number"] {
 #modal .pm-grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 24px; }
 #modal .pm-campo { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 #modal .pm-campo > span:not(.pm-rotulo) { padding-bottom: 8px; border-bottom: 1px solid rgba(249,115,115,.28); color: rgba(252,228,228,.95); font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
-#modal .pm-rotulo { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: rgba(252,228,228,.55); }
+#modal .pm-rotulo { font-size: 12px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #fca5a5; }
 #modal #modal-address b { display: block; font-weight: 700; }
 #modal #modal-address small { display: block; margin-top: 3px; font-size: 13px; font-weight: 500; color: rgba(252,228,228,.6); }
 #modal #modal-address a { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: rgba(249,115,115,.95); text-decoration: none; }
@@ -3164,7 +3165,8 @@ input[type="number"] {
 #modal .pm-rodape { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.06); }
 #modal .pm-total { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 34px; line-height: 1; color: rgba(252,228,228,.95); white-space: nowrap; }
 #modal .pm-total .pm-rs { color: rgba(249,115,115,.85); margin-right: 6px; }
-#modal .pm-acoes { margin: 0; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+#modal .pm-acoes { flex: 1 1 auto; margin: 0; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+#modal .pm-acoes #modal-cancel { margin-right: auto; } /* cancelar fica na esquerda, o resto na direita */
 @media (max-width: 560px) {
   #modal .modal { padding: 18px 16px 14px; }
   #modal .pm-grade { grid-template-columns: 1fr 1fr; }
