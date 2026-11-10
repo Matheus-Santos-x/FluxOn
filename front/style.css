@@ -3114,10 +3114,12 @@ input[type="number"] {
 
 /* ================= MODAL DO PEDIDO (mesmo visual do "Novo Pedido" e do "Cobrar") ================= */
 #modal .modal { width: min(640px, 94vw); padding: 22px 24px 18px; }
-#modal .pm-topo { display: flex; align-items: flex-start; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid rgba(239,68,68,.45); }
-#modal .pm-quem { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; font-size: 14px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #f5e9e9; }
+#modal .pm-topo { display: flex; align-items: center; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid rgba(239,68,68,.18); }
+#modal .pm-quem { flex: 1; min-width: 0; display: flex; align-items: center; gap: 16px; font-size: 14px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #f5e9e9; }
 #modal .pm-quem > #modal-customer { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#modal .pm-tag { flex-shrink: 0; padding: 6px 12px; border-radius: 9px; background: rgba(239,68,68,.16); color: #fca5a5; }
+#modal .pm-tag { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 14px; border-radius: 10px; background: rgba(239,68,68,.16); color: #fca5a5; line-height: 1.1; }
+#modal .pm-tag small { font-size: 10px; font-weight: 800; letter-spacing: .14em; opacity: .75; }
+#modal .pm-tag b { font-size: 16px; font-weight: 800; letter-spacing: .04em; white-space: nowrap; }
 #modal .pm-editar { height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.1); background: transparent; color: #d8caca; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s; }
 #modal .pm-editar:hover { border-color: #ef4444; color: #fca5a5; }
 #modal .pm-x { width: 36px; height: 36px; flex-shrink: 0; border: none; background: transparent; color: rgba(216,202,202,.55); font-size: 26px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: color .15s; }
@@ -3132,7 +3134,7 @@ input[type="number"] {
 #modal #modal-address a { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: rgba(249,115,115,.95); text-decoration: none; }
 #modal .pm-itens { margin: 0; gap: 0; }
 #modal .pm-obs { margin: 0; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(249,115,115,.35); background: transparent; color: rgba(252,228,228,.85); font-size: 14px; white-space: pre-wrap; }
-#modal .pm-rodape { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(239,68,68,.45); }
+#modal .pm-rodape { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(239,68,68,.18); }
 #modal .pm-total { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 34px; line-height: 1; color: rgba(252,228,228,.95); white-space: nowrap; }
 #modal .pm-total .pm-rs { color: rgba(249,115,115,.85); margin-right: 6px; }
 #modal .pm-acoes { flex: 1 1 auto; margin: 0; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
