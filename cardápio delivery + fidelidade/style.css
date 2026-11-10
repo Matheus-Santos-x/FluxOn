@@ -1834,3 +1834,11 @@ backdrop-filter:blur(10px);
 .end-add{width:100%;min-height:48px;border-radius:14px;border:1.5px dashed color-mix(in srgb,var(--red) 55%,transparent);color:var(--red);font-size:14px;font-weight:800}
 .end-add.sel{background:color-mix(in srgb,var(--red) 7%,var(--bg))}
 
+
+/* ================= 📅 PEDIDO AGENDADO (loja fechada) ================= */
+.ag-box{display:flex; flex-direction:column; gap:6px; padding:14px; margin-bottom:12px; border-radius:var(--radius); background:var(--surface); border:1px solid var(--line);}
+.ag-box b{font-size:15px; color:var(--text);}
+.ag-box span, .ag-box small{font-size:13px; line-height:1.4; color:var(--muted);}
+.ag-box label{margin-top:6px; font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--muted);}
+.ag-box select{width:100%; min-height:46px; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); font:inherit; font-size:15px;}
+
