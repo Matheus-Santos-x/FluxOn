@@ -3130,7 +3130,7 @@ input[type="number"] {
 #modal #modal-address b { display: block; font-weight: 700; }
 #modal #modal-address small { display: block; margin-top: 3px; font-size: 13px; font-weight: 500; color: rgba(252,228,228,.6); }
 #modal #modal-address a { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: rgba(249,115,115,.95); text-decoration: none; }
-#modal .pm-itens { margin: 2px 0 0; }
+#modal .pm-itens { margin: 0; gap: 0; }
 #modal .pm-obs { margin: 0; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(249,115,115,.35); background: transparent; color: rgba(252,228,228,.85); font-size: 14px; white-space: pre-wrap; }
 #modal .pm-rodape { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(239,68,68,.45); }
 #modal .pm-total { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 34px; line-height: 1; color: rgba(252,228,228,.95); white-space: nowrap; }
