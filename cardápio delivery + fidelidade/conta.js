@@ -237,3 +237,41 @@ async function endPrepararEtapa(){
       .catch(() => {});
   };
 })();
+
+
+// logado: nome e telefone já estão na conta → pula a etapa "Seus dados" e vai direto pro endereço
+(function(){
+  const _openSheet = openSheet;
+  openSheet = async function(){
+    _openSheet();
+    if(!FID.token || CHECKOUT_STEP !== 1) return;
+    if(!CONTA) await contaCarregar();
+    const nome = String(CONTA?.nome || FID.cliente?.nome || "").trim();
+    const tel = String(CONTA?.telefone || "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+    if(!nome || tel.length < 10) return;                 // conta sem nome/telefone: deixa preencher
+    const passo1 = document.getElementById("step1");
+    passo1.style.visibility = "hidden";                  // não pisca a tela de dados
+    document.getElementById("inpNome").value = nome;
+    document.getElementById("inpTelefone").value = tel;
+    try{ await document.getElementById("step1NextBtn").onclick(); }
+    finally{ passo1.style.visibility = ""; }             // se deu erro, a tela de dados aparece com o aviso
+  };
+  // logado não volta pra "Seus dados" (não tem nada pra mudar lá)
+  const _showStep = showStep;
+  showStep = function(step){
+    _showStep(step);
+    if(step === 2 && FID.token && CONTA?.nome) document.getElementById("sheetBackBtn").style.visibility = "hidden";
+  };
+})();
+
+// observação vai pra última etapa, logo acima do total
+(function(){
+  const obs = document.getElementById("inpObs"), campo = obs?.closest(".field");
+  const total = document.querySelector("#step3 .total-row");
+  if(!campo || !total) return;
+  total.before(campo);
+  campo.style.marginTop = "16px";
+  const rotulo = campo.querySelector("label");
+  if(rotulo) rotulo.textContent = "Alguma observação? (opcional)";
+  obs.placeholder = "Ex: sem cebola, maionese à parte...";
+})();
