@@ -40,8 +40,8 @@ const rua = (() => {
           </div>
           <button type="button" class="menu-mais" data-acao="mais" aria-label="Mais opções do pedido #${esc(p.numero)}">⋯</button>
         </div>
-        <p class="ped-bairro">${esc(p.endereco.bairro || p.endereco.rua || "Endereço não informado")}</p>
-        ${p.endereco.bairro ? `<p class="ped-rua">${esc(p.endereco.rua)}${p.endereco.resto ? ` · ${esc(p.endereco.resto)}` : ""}</p>` : ""}
+        <p class="ped-end">${esc(p.endereco.rua || p.endereco.bairro || "Endereço não informado")}</p>
+        ${p.endereco.bairro || p.endereco.resto ? `<p class="ped-rua">${esc([p.endereco.bairro, p.endereco.resto].filter(Boolean).join(" · "))}</p>` : ""}
         ${pagamentoHtml(p.pagamento, p.total)}
         ${p.obs ? `<p class="ped-obs">📝 ${esc(p.obs)}</p>` : ""}
         ${itens ? `<p class="ped-itens">${esc(itens)}</p>` : ""}
@@ -130,7 +130,7 @@ const rua = (() => {
         : `<div class="cobrar outro"><small>${pg.tipo === "cartao" ? "Passar na maquininha" : esc(pg.texto)}</small><b>${moeda(p.total)}</b></div>`;
     abrirFolha(`
       <h3>Entregar o #${esc(p.numero)}?</h3>
-      <p>${esc(p.cliente)} · ${esc(p.endereco.bairro || p.endereco.rua)}</p>
+      <p>${esc(p.cliente)} · ${esc(p.endereco.rua || p.endereco.bairro)}</p>
       ${caixa}
       <div class="botoes">
         <button class="btn ok grande" type="button" id="btn-confirma-entrega">${pg.tipo === "pago" ? "Entreguei" : pg.tipo === "dinheiro" ? "Recebi e entreguei" : "Cobrei e entreguei"}</button>
