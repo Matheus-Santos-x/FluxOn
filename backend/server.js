@@ -1731,6 +1731,33 @@ app.patch("/admin/restaurants/:id/vouchers", requireAdmin, async (req, res) => {
   }
 });
 
+// ===== MAPA (TomTom por restaurante) =====
+app.get("/admin/restaurants/:id/mapa", requireAdmin, async (req, res) => {
+  try {
+    const d = await getIntegracao(req.params.id, "tomtom");
+    return res.json({ tomtom: d?.key || "" });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao carregar o mapa");
+  }
+});
+
+app.patch("/admin/restaurants/:id/mapa", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const key = String(req.body?.tomtom || "").trim();
+    if (key && !/^[A-Za-z0-9_-]{16,80}$/.test(key)) return sendError(res, 400, "Essa chave do TomTom não parece certa. Copie de novo no painel do TomTom.");
+    const { error } = await supabase.from("integracoes").upsert({
+      restaurant_id: id, tipo: "tomtom", dados: { key: key || null }, ativo: !!key,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "restaurant_id,tipo" });
+    if (error) return sendError(res, 500, "Erro ao salvar: " + error.message);
+    await logAdminAction(req.auth.email, "editar_mapa", { restaurant_id: id, tomtom: !!key });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
 /* ========================================
    📅 RESERVA DE MESA
    O cliente escolhe pessoas, dia, horário e a mesa na página de Reservas,
