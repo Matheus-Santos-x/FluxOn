@@ -15,7 +15,7 @@ const mapa = (() => {
   function camadaBase() {
     baseChave = chaveTT();
     return baseChave
-      ? L.tileLayer(`https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key=${encodeURIComponent(baseChave)}&language=pt-BR`, { maxZoom: 20, attribution: "© TomTom" })
+      ? L.tileLayer(`https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key=${encodeURIComponent(baseChave)}&language=pt-BR&tileSize=512`, { tileSize: 512, zoomOffset: -1, minZoom: 12, maxZoom: 18, maxNativeZoom: 16, updateWhenZooming: false, updateWhenIdle: true, keepBuffer: 1, attribution: "© TomTom" }) // econômico: quadrado de 512 e sem baixar de novo acima do zoom 16
       : L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" });
   }
   function trocarBase() { if (m && chaveTT() !== baseChave) { base?.remove(); base = camadaBase().addTo(m); base.bringToBack(); } }
