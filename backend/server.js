@@ -15,6 +15,7 @@ import Redis from "ioredis";
 import ws from "ws";
 import OpenAI from "openai";
 import crypto from "crypto";
+import { registrarEntregador, entregadorAoAtualizarPedido } from "./entregador.js";
 
 dotenv.config();
 
@@ -152,6 +153,7 @@ io.on("connection", (socket) => {
 // Função global para emitir atualização de pedido
 function emitOrderUpdate(restaurant_id, order) {
   io.to(restaurant_id).emit("order_updated", order);
+  entregadorAoAtualizarPedido(order); // app do entregador e mapa do cliente ficam sabendo na hora
 }
 
 const ALLOWED_ORIGINS_FIXED = [
@@ -9580,6 +9582,9 @@ app.get("/health", async (req, res) => {
     supabase_ok: !db.error
   });
 });
+
+// ===== ENTREGADORES (app do entregador, mapa ao vivo e acertos) — tudo no entregador.js =====
+registrarEntregador({ app, io, supabase, emitOrderUpdate, getIntegracao, readAuth, ALLOWED_ORIGINS_FIXED, PORT, OWNER_OTP_WEBHOOK_URL, OWNER_OTP_WEBHOOK_SECRET });
 
 // ===== ERROR HANDLER =====
 app.use((err, req, res, next) => {
