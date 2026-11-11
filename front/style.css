@@ -3173,3 +3173,6 @@ input[type="number"] {
 #create-modal .np-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0 10px; border-bottom: 1px solid rgba(249,115,115,.4); }
 #create-modal .np-chip { padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: transparent; color: rgba(252,228,228,.8); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; }
 #create-modal .np-chip.on { border-color: rgba(249,115,115,.9); background: rgba(239,68,68,.16); color: #fca5a5; }
+#create-modal .np-status { min-height: 0; font-size: 12px; font-weight: 700; color: rgba(252,228,228,.55); }
+#create-modal .np-status:empty { display: none; }
+#create-modal .np-status.ok { color: #86efac; }
