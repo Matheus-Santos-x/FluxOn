@@ -879,7 +879,7 @@ document.getElementById("submitOrderBtn").onclick = async () => {
 /* ============================================================
    PIX ONLINE — o pedido só vai pra cozinha depois que o banco confirma
    ============================================================ */
-let PIX_COBRANCA = null, PIX_TIMER = null, PIX_ORDER_NUMBER = null, PIX_TRACKING = null;
+let PIX_COBRANCA = null, PIX_TIMER = null, PIX_ORDER_NUMBER = null, PIX_TRACKING = null, PIX_CODIGO = null;
 
 function pararPix(){ clearInterval(PIX_TIMER); PIX_TIMER = null; }
 
@@ -901,7 +901,7 @@ async function iniciarPix(v){
     }));
     CURRENT_ORDER_ID = result.order?.id || CURRENT_ORDER_ID;
     PIX_ORDER_NUMBER = result.order?.order_number ?? null;
-    PIX_TRACKING = result.tracking_link || null;
+    PIX_CODIGO = result.tracking_code || null;
 
     const res = await fetch(`${CONFIG.API_BASE}/api/v1/pix/${RESTAURANT_ID}/cobrancas`, {
       method: "POST",
@@ -979,7 +979,7 @@ function mostrarPix(){
       const d = await r.json();
       if(d.status === "pago"){
         pararPix(); PIX_COBRANCA = null;
-        showSuccess({ order: { order_number: PIX_ORDER_NUMBER }, tracking_link: PIX_TRACKING });
+        showSuccess({ order: { order_number: PIX_ORDER_NUMBER }, tracking_link: PIX_TRACKING, tracking_code: PIX_CODIGO });
         return;
       }
       if(d.status === "expirado"){ pararPix(); expirou(); }
@@ -998,17 +998,25 @@ function showSuccess(result){
   document.getElementById("checkoutForm").style.display = "none";
   const successView = document.getElementById("successView");
   successView.style.display = "block";
-  const trackingLink = result.tracking_link || null;
+  // o pedido fica guardado neste celular: o cardápio vira a tela de rastreio enquanto ele estiver em andamento
+  const trackingCode = result.tracking_code || null;
+  if(trackingCode) rastreio.adicionar(trackingCode, result.order?.order_number);
+  const trackingLink = trackingCode ? null : (result.tracking_link || null);
   successView.innerHTML = `
     <div class="success-view">
       <div class="success-badge">✓</div>
       <h2>Pedido enviado!</h2>
       <p>Recebemos seu pedido e já vamos começar o preparo. Você pode acompanhar o status pelo número abaixo.</p>
       <div class="order-num">#${result.order?.order_number ?? "----"}</div>
-      ${trackingLink ? `<a class="checkout-btn" href="${trackingLink}" target="_blank" rel="noopener" style="display:block; text-decoration:none; margin-bottom:10px;">Acompanhar meu pedido</a>` : ""}
-      <button class="checkout-btn" id="closeSuccessBtn" ${trackingLink ? `style="background:var(--surface); color:var(--text);"` : ""}>Fechar</button>
+      ${trackingCode ? `<button class="checkout-btn" id="acompanharBtn" style="margin-bottom:10px;">Acompanhar meu pedido</button>`
+        : trackingLink ? `<a class="checkout-btn" href="${trackingLink}" target="_blank" rel="noopener" style="display:block; text-decoration:none; margin-bottom:10px;">Acompanhar meu pedido</a>` : ""}
+      <button class="checkout-btn" id="closeSuccessBtn" ${trackingCode || trackingLink ? `style="background:var(--surface); color:var(--text);"` : ""}>Fechar</button>
     </div>
   `;
+  document.getElementById("acompanharBtn")?.addEventListener("click", () => {
+    document.getElementById("closeSuccessBtn").click();
+    rastreio.abrirUltimo(trackingCode);
+  });
   document.getElementById("closeSuccessBtn").onclick = () => {
     CART = [];
     updateCartUI();
