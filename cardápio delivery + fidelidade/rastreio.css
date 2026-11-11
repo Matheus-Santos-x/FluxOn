@@ -1,23 +1,25 @@
 /* ================= RASTREIO DO PEDIDO (dentro do cardápio) =================
    Usa as cores do cardápio (--red, --bg, --surface, --text...), então segue o tema claro/escuro do restaurante. */
 
-/* faixa "Acompanhar" no cardápio (sobe quando o carrinho aparece) */
+/* faixa no topo do app de pedidos: "Pedido #184 · Em rota · Toque pra ver no mapa"
+   fica entre os botões do menu e do Entrar; quando a barra de categorias gruda no topo, desce pra baixo da tela */
 .rt-faixa{
-  position:fixed; z-index:49; left:16px; right:16px; max-width:520px; margin:0 auto;
-  bottom:calc(18px + env(safe-area-inset-bottom));
-  display:flex; align-items:center; gap:12px; padding:11px 12px 11px 14px; border-radius:16px;
-  background:var(--surface); color:var(--text); border:1px solid var(--line); text-align:left;
-  box-shadow:0 14px 34px -12px rgba(0,0,0,.55); font-family:var(--font-body); cursor:pointer;
-  animation:rtSobe .4s cubic-bezier(.2,.9,.3,1.1);
+  position:fixed; z-index:62; top:calc(10px + env(safe-area-inset-top)); left:62px; right:62px; max-width:420px; margin:0 auto;
+  display:flex; align-items:center; gap:10px; padding:6px 10px 6px 6px; min-height:44px; border-radius:14px;
+  background:var(--red); color:#fff; border:0; text-align:left;
+  box-shadow:0 10px 26px -8px color-mix(in srgb, var(--red) 70%, transparent), 0 2px 8px rgba(0,0,0,.3);
+  font-family:var(--font-body); cursor:pointer; animation:rtDesce .4s cubic-bezier(.2,.9,.3,1.1);
 }
-body:has(.cart-fab.visible) .rt-faixa{ bottom:calc(92px + env(safe-area-inset-bottom)); }
+body:not(.com-menu) .rt-faixa{ left:12px; }
+body.nav-presa .rt-faixa{ top:auto; bottom:calc(18px + env(safe-area-inset-bottom)); left:16px; right:16px; max-width:520px; }
+body.nav-presa:has(.cart-fab.visible) .rt-faixa{ bottom:calc(92px + env(safe-area-inset-bottom)); }
 body.aba-fid .rt-faixa, body.rt-aberto .rt-faixa{ display:none; }
-@keyframes rtSobe{ from{ transform:translateY(30px); opacity:0; } }
-.rt-faixa-ic{ width:40px; height:40px; border-radius:12px; display:grid; place-items:center; font-size:21px; background:color-mix(in srgb, var(--red) 14%, transparent); flex-shrink:0; }
-.rt-faixa-txt{ flex:1; min-width:0; display:grid; line-height:1.2; }
-.rt-faixa-txt b{ font-size:14.5px; font-weight:800; }
-.rt-faixa-txt small{ font-size:13px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.rt-faixa-acao{ padding:9px 13px; border-radius:11px; background:var(--red); color:#fff; font-weight:800; font-size:13px; flex-shrink:0; }
+@keyframes rtDesce{ from{ transform:translateY(-16px); opacity:0; } }
+.rt-faixa-ic{ width:32px; height:32px; border-radius:10px; display:grid; place-items:center; font-size:17px; background:rgba(255,255,255,.2); flex-shrink:0; }
+.rt-faixa-txt{ flex:1; min-width:0; display:grid; line-height:1.15; }
+.rt-faixa-txt b{ font-size:13.5px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rt-faixa-txt small{ font-size:12px; opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rt-faixa-seta{ font-size:24px; font-weight:800; line-height:1; opacity:.9; }
 
 /* tela cheia: mapa atrás, cartão embaixo */
 .rt-tela{ position:fixed; inset:0; z-index:200; display:none; background:var(--bg); font-family:var(--font-body); color:var(--text); }
