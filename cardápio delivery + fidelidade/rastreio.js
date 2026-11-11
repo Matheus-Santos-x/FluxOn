@@ -296,7 +296,7 @@ const rastreio = (() => {
     if (d.restaurante?.tomtom && R.tt !== d.restaurante.tomtom) { // restaurante com TomTom: troca o fundo do mapa
       R.tt = d.restaurante.tomtom;
       R.base?.remove();
-      R.base = L.tileLayer(`https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key=${encodeURIComponent(R.tt)}&language=pt-BR`, { maxZoom: 20, attribution: "© TomTom" }).addTo(R.mapa);
+      R.base = L.tileLayer(`https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key=${encodeURIComponent(R.tt)}&language=pt-BR&tileSize=512`, { tileSize: 512, zoomOffset: -1, minZoom: 12, maxZoom: 18, maxNativeZoom: 16, updateWhenZooming: false, updateWhenIdle: true, keepBuffer: 1, attribution: "© TomTom" }).addTo(R.mapa); // econômico
       R.base.bringToBack();
     }
     const [loja, casaEndereco] = await Promise.all([geo(d.restaurante.endereco || RESTAURANT_CONFIG.endereco), d.destino ? null : geo(d.pedido.delivery ? d.pedido.endereco : "")]);
