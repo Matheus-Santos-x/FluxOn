@@ -10,6 +10,9 @@
     ["10d", "10 dias"], ["30d", "30 dias"], ["custom", "Personalizado"]
   ];
   const st = { token: null, owner: null, restaurants: [], view: "overview", screen: "home", period: "7d", from: "", to: "", reqId: 0, dash: null, ov: null };
+  // abas de baixo (no computador ficam no topo): cada tela pertence a uma delas
+  const ABAS = [["home", "Início", "casa"], ["t-dinheiro", "Dinheiro", "wallet"], ["t-clientes", "Clientes", "users"], ["t-mais", "Mais", "grade"]];
+  const RAIZES = ABAS.map((a) => a[0]);
 
   /* ---------- utilitários ---------- */
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -41,9 +44,38 @@
     users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>',
     bolt: '<path d="M13 3L4 14h7l-1 7 9-11h-7z"/>',
     star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
-    chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 10h8"/><path d="M8 13h5"/>'
+    chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 10h8"/><path d="M8 13h5"/>',
+    casa: '<path d="M4 10.5L12 4l8 6.5V20h-5v-5.5h-6V20H4z"/>',
+    grade: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
+    voltar: '<path d="M15 5l-7 7 7 7"/>',
+    sair: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 16l-4-4 4-4M6 12h10"/>',
+    celular: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M12 7v7M9.5 11.5L12 14l2.5-2.5"/>',
+    alerta: '<path d="M12 4l9 16H3z"/><path d="M12 10v4"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
+    relogio: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    coroa: '<path d="M4 8l4 4 4-7 4 7 4-4-1.5 11h-13z"/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>'
   };
   const ic = (n) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
+
+  /* ---------- cor do restaurante (deixa a cor legível no fundo escuro) ---------- */
+  function corDoRestaurante(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+    if (!m) return null;
+    let [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16));
+    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    if (lum < 0.1) return null; // quase preto: fica o vermelho FluxON
+    if (lum < 0.28) { const k = (0.28 - lum) / (1 - lum); [r, g, b] = [r, g, b].map((v) => Math.round(v + (255 - v) * k * 1.4)); }
+    if (lum > 0.82) [r, g, b] = [r, g, b].map((v) => Math.round(v * 0.8));
+    return `rgb(${Math.min(255, r)}, ${Math.min(255, g)}, ${Math.min(255, b)})`;
+  }
+  function aplicarCor(r) {
+    const c = (r && corDoRestaurante(r.cor_primaria)) || "";
+    document.documentElement.style.setProperty("--acc", c || "var(--red)");
+  }
+  const logoDe = (r, cls = "") => {
+    const ok = r && /^https:\/\//.test(r.logo_url || "");
+    return `<span class="logo ${cls}" style="--c:${(r && corDoRestaurante(r.cor_primaria)) || "var(--red)"}">${ok ? `<img src="${esc(r.logo_url)}" alt="" loading="lazy" onerror="this.remove()">` : ""}<em>${esc(iniciais(r ? r.name : "?"))}</em></span>`;
+  };
 
   /* ---------- planos ---------- */
   const nivel = (p) => ["essential", "advanced", "executive", "custom"].indexOf(String(p || "").toLowerCase());
@@ -152,13 +184,20 @@
   }
   $("in-cpf").addEventListener("input", (e) => { e.target.value = maskCpf(e.target.value); });
   $("in-tel").addEventListener("input", (e) => { e.target.value = maskTel(e.target.value); });
-  $("in-code").addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6); });
+  $("in-code").addEventListener("input", (e) => {
+    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6);
+    document.querySelectorAll(".otp-casas i").forEach((c, i) => { c.textContent = e.target.value[i] || ""; c.classList.toggle("on", i === e.target.value.length); });
+    if (e.target.value.length === 6) $("form-verificar").requestSubmit();
+  });
+  $("in-code").addEventListener("focus", () => document.querySelector(".otp").classList.add("foco"));
+  $("in-code").addEventListener("blur", () => document.querySelector(".otp").classList.remove("foco"));
   $("form-solicitar").addEventListener("submit", async (e) => {
     e.preventDefault(); setMsg(""); const b = $("btn-solicitar"); b.disabled = true;
     const ok = await solicitar(); b.disabled = false;
     if (ok) {
       $("form-solicitar").classList.add("hidden"); $("form-verificar").classList.remove("hidden");
-      $("login-sub").textContent = "Enviamos um código para o seu WhatsApp.";
+      $("login-titulo").textContent = "Confira o seu WhatsApp.";
+      $("login-sub").textContent = "Mandamos um código de 6 números. Ele vale por alguns minutos.";
       setMsg("Se os dados estiverem corretos, o código chega em instantes.", true);
       cooldown(45); $("in-code").focus();
     }
@@ -167,7 +206,8 @@
     setMsg(""); $("btn-reenviar").disabled = true;
     if (await solicitar()) { setMsg("Código reenviado.", true); cooldown(45); } else $("btn-reenviar").disabled = false;
   });
-  $("btn-voltar").addEventListener("click", () => { clearInterval(cooldownTimer); $("login-sub").textContent = "Acesse os números dos seus restaurantes."; loginView(); });
+  const textoLogin = () => { $("login-titulo").textContent = "Seus restaurantes na palma da mão."; $("login-sub").textContent = "Entre com o CPF e o WhatsApp cadastrados."; };
+  $("btn-voltar").addEventListener("click", () => { clearInterval(cooldownTimer); textoLogin(); loginView(); });
   $("form-verificar").addEventListener("submit", async (e) => {
     e.preventDefault(); setMsg("");
     const codigo = $("in-code").value;
@@ -176,13 +216,13 @@
     try {
       const r = await api("/owner/auth/verificar", { method: "POST", body: JSON.stringify({ cpf: $("in-cpf").value.replace(/\D/g, ""), telefone: $("in-tel").value.replace(/\D/g, ""), codigo }) });
       st.token = r.token; store.set(TOKEN_KEY, r.token);
-      $("in-code").value = ""; $("in-cpf").value = ""; $("in-tel").value = "";
+      $("in-code").value = ""; $("in-cpf").value = ""; $("in-tel").value = ""; document.querySelectorAll(".otp-casas i").forEach((c) => { c.textContent = ""; });
       await entrar();
     } catch (err) { setMsg(err.message); } finally { b.disabled = false; }
   });
   function sair(silencioso) {
     st.token = null; st.owner = null; st.restaurants = []; store.del(TOKEN_KEY);
-    clearInterval(cooldownTimer); $("login-sub").textContent = "Acesse os números dos seus restaurantes.";
+    clearInterval(cooldownTimer); textoLogin(); aplicarCor(null);
     loginView(); if (silencioso) setMsg("Sessão expirada. Entre novamente.");
   }
 
@@ -244,36 +284,71 @@
     else toast("Toque nos 3 pontinhos (⋮) do navegador e depois em \"Instalar app\" ou \"Adicionar à tela inicial\".", 9000);
   }
 
+  const itensConta = (cls = "") =>
+    (podeInstalar() ? `<button class="${cls}" data-act="instalar" role="menuitem">${ic("celular")}<span class="name">Instalar o app no celular</span></button>` : "") +
+    `<button class="${cls}" data-act="sair" role="menuitem">${ic("sair")}<span class="name">Sair</span></button>` +
+    `<button class="${cls} danger" data-act="sair-todos" role="menuitem">${ic("lock")}<span class="name">Sair de todos os aparelhos</span></button>`;
   function montarAvatar() {
     const a = $("avatar"); a.textContent = iniciais(st.owner.nome);
-    a.setAttribute("aria-label", "Contas de " + st.owner.nome);
-    const multi = st.restaurants.length > 1, itens = [];
-    if (multi) itens.push(`<button data-v="overview" class="${st.view === "overview" ? "on" : ""}" role="menuitem"><span class="dot">∑</span><span class="name">Visão geral</span>${st.view === "overview" ? '<span class="tick">✓</span>' : ""}</button>`);
-    itens.push(`<div class="sec">${multi ? "Restaurantes" : "Restaurante"}</div>`);
-    st.restaurants.forEach((r) => itens.push(`<button data-v="${esc(r.id)}" class="${st.view === r.id ? "on" : ""}" role="menuitem"><span class="dot">${esc(iniciais(r.name))}</span><span class="name">${esc(r.name)}</span>${st.view === r.id ? '<span class="tick">✓</span>' : ""}</button>`));
-    $("menu").innerHTML =
-      `<div class="who"><b>${esc(st.owner.nome)}</b><span class="muted">Dono${multi ? ` · ${st.restaurants.length} unidades` : ""}</span></div>` + itens.join("") +
-      `<div class="sec">Conta</div>` +
-      (podeInstalar() ? `<button data-act="instalar" role="menuitem"><span class="name">📲 Instalar app no celular</span></button>` : "") +
-      `<button data-act="sair" role="menuitem"><span class="name">Sair</span></button>` +
-      `<button class="danger" data-act="sair-todos" role="menuitem"><span class="name">Sair de todos os aparelhos</span></button>`;
+    a.setAttribute("aria-label", "Conta de " + st.owner.nome);
+    const multi = st.restaurants.length > 1;
+    $("menu").innerHTML = `<div class="who"><span class="who-av">${esc(iniciais(st.owner.nome))}</span><div><b>${esc(st.owner.nome)}</b><span class="muted">${multi ? `Dono de ${st.restaurants.length} restaurantes` : "Dono"}</span></div></div>` + itensConta();
+    // troca de restaurante (topo)
+    const r = st.restaurants.find((x) => x.id === st.view);
+    $("troca-logo").innerHTML = r ? logoDe(r) : `<span class="logo logo-geral">${ic("grade")}</span>`;
+    $("title").textContent = r ? r.name : "Visão geral";
+    $("troca-sub").textContent = r ? (multi ? "Trocar restaurante" : "Seu restaurante") : `${st.restaurants.length} restaurantes`;
+    $("troca").classList.toggle("so-um", !multi);
+    aplicarCor(r);
+    const linha = (v, logo, nome, sub) => `<button data-v="${esc(v)}" class="${st.view === v ? "on" : ""}" role="menuitem">${logo}<span class="name">${esc(nome)}${sub ? `<small>${esc(sub)}</small>` : ""}</span>${st.view === v ? `<span class="tick">${ic("check")}</span>` : ""}</button>`;
+    $("troca-menu").innerHTML = `<div class="sec">Ver os números de</div>` +
+      (multi ? linha("overview", `<span class="logo logo-geral">${ic("grade")}</span>`, "Todos os restaurantes", "Visão geral e ranking") : "") +
+      st.restaurants.map((x) => linha(x.id, logoDe(x), x.name, "")).join("");
   }
-  const abrirMenu = (abrir) => { $("menu").classList.toggle("hidden", !abrir); $("avatar").setAttribute("aria-expanded", String(abrir)); };
-  $("avatar").addEventListener("click", (e) => { e.stopPropagation(); abrirMenu($("menu").classList.contains("hidden")); });
-  document.addEventListener("click", (e) => { if (!e.target.closest(".avatar-wrap")) abrirMenu(false); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") abrirMenu(false); });
-  $("menu").addEventListener("click", async (e) => {
-    const b = e.target.closest("button"); if (!b) return;
-    if (b.dataset.v) { irPara(b.dataset.v); abrirMenu(false); return; }
-    if (b.dataset.act === "instalar") { abrirMenu(false); instalarApp(); return; }
-    if (b.dataset.act === "sair") { abrirMenu(false); sair(); }
-    if (b.dataset.act === "sair-todos") { abrirMenu(false); try { await api("/owner/auth/sair-todos", { method: "POST" }); } catch {} sair(); }
-  });
+  const menus = { menu: "avatar", "troca-menu": "troca", "bell-panel": "bell" };
+  function abrirMenuDe(id, abrir) {
+    Object.entries(menus).forEach(([m, b]) => {
+      const on = m === id && abrir;
+      $(m).classList.toggle("hidden", !on); $(b).setAttribute("aria-expanded", String(on));
+    });
+    $("fundo-menu").classList.toggle("hidden", !abrir);
+    document.body.classList.toggle("menu-aberto", !!abrir);
+  }
+  const abrirMenu = (abrir) => abrirMenuDe("menu", abrir);
+  $("avatar").addEventListener("click", (e) => { e.stopPropagation(); abrirMenuDe("menu", $("menu").classList.contains("hidden")); });
+  $("troca").addEventListener("click", (e) => { e.stopPropagation(); if (st.restaurants.length > 1) abrirMenuDe("troca-menu", $("troca-menu").classList.contains("hidden")); });
+  $("fundo-menu").addEventListener("click", () => abrirMenuDe("", false));
+  document.addEventListener("click", (e) => { if (!e.target.closest(".menu, #avatar, #troca, #bell")) abrirMenuDe("", false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") abrirMenuDe("", false); });
+  async function acaoConta(act) {
+    abrirMenuDe("", false);
+    if (act === "instalar") { instalarApp(); return; }
+    if (act === "sair") sair();
+    if (act === "sair-todos") { try { await api("/owner/auth/sair-todos", { method: "POST" }); } catch {} sair(); }
+  }
+  $("menu").addEventListener("click", (e) => { const b = e.target.closest("button[data-act]"); if (b) acaoConta(b.dataset.act); });
+  $("troca-menu").addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if (b) { abrirMenuDe("", false); irPara(b.dataset.v); } });
   function irPara(v) {
     st.view = v; st.screen = "home"; store.set("fluxon_owner_view", v);
     montarAvatar(); carregar(); window.scrollTo({ top: 0 });
   }
-$("back").addEventListener("click", () => { const de = st.screen; st.screen = PAI[de] || "home"; window.scrollTo({ top: 0 }); if (de === "custos") carregar(); else render(); });
+  function voltar() { const de = st.screen; st.screen = PAI[de] || "home"; window.scrollTo({ top: 0 }); if (de === "custos") carregar(); else render(); }
+  $("tela-cabeca").addEventListener("click", (e) => { if (e.target.closest("[data-voltar]")) voltar(); });
+  // abas
+  function abaDe(tela) { let t = tela, n = 0; while (!RAIZES.includes(t) && PAI[t] && n++ < 5) t = PAI[t]; return RAIZES.includes(t) ? t : "home"; }
+  function montarAbas(ov) {
+    const atual = abaDe(st.screen);
+    const html = ABAS.map(([k, n, i]) => `<button data-aba="${k}" class="${atual === k ? "on" : ""}" aria-current="${atual === k ? "page" : "false"}">${ic(i)}<span>${n}</span></button>`).join("");
+    ["abas-baixo", "abas-topo"].forEach((id) => { $(id).innerHTML = ov ? "" : html; $(id).classList.toggle("hidden", ov); });
+    document.body.classList.toggle("com-abas", !ov);
+  }
+  ["abas-baixo", "abas-topo"].forEach((id) => $(id).addEventListener("click", (e) => {
+    const b = e.target.closest("[data-aba]"); if (!b) return;
+    const k = b.dataset.aba;
+    if (st.screen === k) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+    const de = st.screen; st.screen = k; window.scrollTo({ top: 0 });
+    if (abaDe(de) === "t-dinheiro" && (de === "custos" || PAI[de] === "custos")) carregar(); else render();
+  }));
 
   /* ---------- sino de avisos ---------- */
   const sino = { itens: [] };
@@ -286,17 +361,13 @@ $("back").addEventListener("click", () => { const de = st.screen; st.screen = PA
         .then((d) => (d.itens || []).map((i) => ({ ...i, loja: r }))).catch(() => [])));
     sino.itens = listas.flat();
     $("bell-dot").classList.toggle("hidden", !sino.itens.length);
-    $("bell-panel").innerHTML = `<div class="who"><b>Avisos</b>${sino.itens.length ? "" : '<span class="muted">Nenhum aviso por enquanto.</span>'}</div>` +
-      sino.itens.map((i) => `<button data-ir="${esc(i.ir)}" data-loja="${esc(i.loja.id)}" role="menuitem"><span class="name wrap"><b>${esc(i.titulo)}</b><br><span class="muted" style="font-size:12px">${esc(i.texto)}${st.restaurants.length > 1 ? " · " + esc(i.loja.name) : ""}</span></span><span class="tick">›</span></button>`).join("");
+    const caixa = $("avisos-home");
+    if (caixa) caixa.innerHTML = sino.itens.map((i) => `<button class="aviso-home" data-go="${esc(i.ir)}">${ic("alerta")}<span><b>${esc(i.titulo)}</b><small>${esc(i.texto)}</small></span><span class="chev">›</span></button>`).join("");
+    $("bell-panel").innerHTML = `<div class="sec">Avisos</div>${sino.itens.length ? "" : '<p class="menu-vazio">Tudo em dia. Nenhum aviso agora.</p>'}` +
+      sino.itens.map((i) => `<button data-ir="${esc(i.ir)}" data-loja="${esc(i.loja.id)}" role="menuitem"><span class="aviso-ic">${ic("alerta")}</span><span class="name wrap"><b>${esc(i.titulo)}</b><small>${esc(i.texto)}${st.restaurants.length > 1 ? " · " + esc(i.loja.name) : ""}</small></span><span class="tick">›</span></button>`).join("");
   }
-  const abrirSino = (abrir) => {
-    $("bell-panel").classList.toggle("hidden", !abrir);
-    $("bell").setAttribute("aria-expanded", String(abrir));
-    if (abrir) abrirMenu(false);
-  };
+  const abrirSino = (abrir) => abrirMenuDe("bell-panel", abrir);
   $("bell").addEventListener("click", (e) => { e.stopPropagation(); abrirSino($("bell-panel").classList.contains("hidden")); });
-  document.addEventListener("click", (e) => { if (!e.target.closest(".bell-wrap")) abrirSino(false); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") abrirSino(false); });
   $("bell-panel").addEventListener("click", (e) => {
     const b = e.target.closest("[data-ir]"); if (!b) return;
     abrirSino(false);
@@ -311,9 +382,8 @@ $("back").addEventListener("click", () => { const de = st.screen; st.screen = PA
   async function carregar() {
     if (st.period === "custom" && !(st.from && st.to)) { $("content").innerHTML = `<div class="empty">Escolha as datas e toque em Aplicar.</div>`; return; }
     const my = ++st.reqId;
-    const r = st.restaurants.find((x) => x.id === st.view);
-    $("title").textContent = r ? r.name : "Visão geral";
-    $("content").innerHTML = `<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>`;
+    $("tela-cabeca").classList.add("hidden");
+    $("content").innerHTML = `<div class="skeleton alto"></div><div class="grid4"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div><div class="skeleton"></div>`;
     try {
 if (st.view === "overview") {
         const [d, fins] = await Promise.all([api("/owner/overview?" + qs()), Promise.all(st.restaurants.map((r) => api(`/owner/restaurants/${encodeURIComponent(r.id)}/financeiro?` + qs()).catch(() => null)))]);
@@ -332,25 +402,52 @@ if (st.view === "overview") {
       const b = $("retry"); if (b) b.onclick = carregar;
     }
   }
+  $("content").addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches('[role="button"]')) { e.preventDefault(); e.target.click(); } });
   $("content").addEventListener("click", (e) => {
     const o = e.target.closest("[data-open]"); if (o) { irPara(o.dataset.open); return; }
+    const a = e.target.closest("[data-act]"); if (a && !a.closest(".menu")) { acaoConta(a.dataset.act); return; }
     const g = e.target.closest("[data-go]"); if (g) { st.screen = g.dataset.go; render(); window.scrollTo({ top: 0 }); }
   });
 
-const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos", fidmodelo: "fidelidade", fidpiso: "fidelidade" };
-  const SEM_PERIODO = ["home", "custos", "cuing", "cufichas", "cudesp", "fidelidade", "fidmodelo", "fidpiso"];
+  const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos", fidmodelo: "fidelidade", fidpiso: "fidelidade",
+    dre: "t-dinheiro", custos: "t-dinheiro", canais: "t-dinheiro", caixa: "t-dinheiro",
+    clientes: "t-clientes", fidelidade: "t-clientes", avaliacoes: "t-clientes",
+    operacao: "t-mais", previsao: "t-mais", pdf: "t-mais" };
+  const SEM_PERIODO = ["t-clientes", "t-mais", "custos", "cuing", "cufichas", "cudesp", "fidelidade", "fidmodelo", "fidpiso"];
   const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", fidmodelo: "Modelo de fidelidade", fidpiso: "Piso dos prêmios", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF", avaliacoes: "Avaliações" };
   function render() {
     const ov = st.view === "overview";
-    $("back").classList.toggle("hidden", ov || st.screen === "home");
-    $("periods").classList.toggle("hidden", !ov && SEM_PERIODO.includes(st.screen));
-    $("custom").classList.toggle("hidden", (!ov && SEM_PERIODO.includes(st.screen)) || st.period !== "custom");
-    if (ov) { $("title").textContent = "Visão geral"; $("content").innerHTML = telaOverview(st.ov); return; }
+    const semPer = !ov && SEM_PERIODO.includes(st.screen);
+    $("periodo-linha").classList.toggle("hidden", semPer);
+    $("custom").classList.toggle("hidden", semPer || st.period !== "custom");
+    montarAbas(ov);
+    const cab = $("tela-cabeca"), raiz = ov || RAIZES.includes(st.screen);
+    cab.classList.toggle("hidden", raiz);
+    if (!raiz) cab.innerHTML = `<button class="voltar" data-voltar aria-label="Voltar">${ic("voltar")}</button><h1>${esc(TITULOS[st.screen] || "")}</h1>`;
+    $("content").dataset.tela = ov ? "overview" : st.screen;
+    if (ov) { $("content").innerHTML = telaOverview(st.ov); animarNumeros(); return; }
     const d = st.dash;
-    $("title").textContent = st.screen === "home" ? d.restaurant.name : TITULOS[st.screen];
-    const T = { home: telaHome, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, fidmodelo: telaFidModelo, fidpiso: telaFidPiso, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf, avaliacoes: telaAvaliacoes }[st.screen];
+    const T = { home: telaHome, "t-dinheiro": telaDinheiro, "t-clientes": telaClientesMenu, "t-mais": telaMais, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, fidmodelo: telaFidModelo, fidpiso: telaFidPiso, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf, avaliacoes: telaAvaliacoes }[st.screen];
     $("content").innerHTML = T(d);
     if (st.screen === "pdf") bindPdf(d);
+    if (st.screen === "home" && sino.itens.length) atualizarSinoLocal();
+    animarNumeros();
+  }
+  function atualizarSinoLocal() {
+    const caixa = $("avisos-home"); if (!caixa) return;
+    caixa.innerHTML = sino.itens.filter((i) => i.loja.id === st.view).map((i) => `<button class="aviso-home" data-go="${esc(i.ir)}">${ic("alerta")}<span><b>${esc(i.titulo)}</b><small>${esc(i.texto)}</small></span><span class="chev">›</span></button>`).join("");
+  }
+  // o número grande sobe de 0 até o valor (uma vez por carga de dados)
+  function animarNumeros() {
+    const els = document.querySelectorAll("[data-contar]");
+    const chave = st.view + "|" + qs() + "|" + st.screen;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches || animarNumeros.feito === chave) return;
+    animarNumeros.feito = chave;
+    els.forEach((el) => {
+      const alvo = Number(el.dataset.contar), fmt = el.dataset.fmt === "int" ? int : brl, t0 = performance.now(), dur = 900;
+      const passo = (t) => { const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3); el.textContent = fmt(alvo * e); if (p < 1) requestAnimationFrame(passo); };
+      requestAnimationFrame(passo);
+    });
   }
 
   /* ---------- peças visuais ---------- */
@@ -360,14 +457,14 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
     const seta = cls === "up" ? "▲" : cls === "down" ? "▼" : "•";
     return `<span class="delta ${cls}">${seta} ${pct(Math.abs(v))} <span class="muted" style="font-weight:400">${rotulo}</span></span>`;
   }
-  const nota = (p) => `<p class="period-note">${fmtData(p.from)}${p.from !== p.to ? " a " + fmtData(p.to) : ""} · ${p.days} ${p.days === 1 ? "dia" : "dias"}</p>`;
+  const nota = (p) => `<p class="period-note">${ic("calc")}${fmtData(p.from)}${p.from !== p.to ? " a " + fmtData(p.to) : ""}, ${p.days} ${p.days === 1 ? "dia" : "dias"}</p>`;
 
   function spark(vals) {
     if (vals.length < 2) return "";
-    const W = 300, H = 54, max = Math.max(...vals, 1), min = Math.min(...vals, 0), rng = max - min || 1;
+    const W = 300, H = 70, max = Math.max(...vals, 1), min = Math.min(...vals, 0), rng = max - min || 1;
     const pts = vals.map((v, i) => [(i / (vals.length - 1)) * W, H - 4 - ((v - min) / rng) * (H - 10)]);
     const l = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
-    return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff5a36" stop-opacity=".35"/><stop offset="1" stop-color="#ff5a36" stop-opacity="0"/></linearGradient></defs><path class="a" d="${l} L${W} ${H} L0 ${H} Z"/><path class="l" d="${l}"/></svg>`;
+    return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--acc)" stop-opacity=".45"/><stop offset="1" style="stop-color:var(--acc)" stop-opacity="0"/></linearGradient></defs><path class="a" d="${l} L${W} ${H} L0 ${H} Z"/><path class="l" d="${l}"/></svg>`;
   }
   function barras(items, picoIdx = -1) {
     const max = Math.max(...items.map((x) => x.v), 1);
@@ -486,21 +583,21 @@ const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "cus
 const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.cmv.disponivel);
     const resultado = comCustos.reduce((x, f) => x + (f.lucro_liquido || 0), 0);
     const itens = d.ranking.map((r) => `
-      <li><button data-open="${esc(r.restaurant_id)}">
-        <div class="rank-top"><span class="pos ${r.position === 1 ? "p1" : ""}">${r.position}</span><span class="nm">${esc(r.name)}</span><span class="rv">${brl(r.revenue)}</span></div>
+      <li><button data-open="${esc(r.restaurant_id)}" style="--acc:${corDoRestaurante((st.restaurants.find((x) => x.id === r.restaurant_id) || {}).cor_primaria) || "var(--red)"}">
+        <div class="rank-top">${logoDe(st.restaurants.find((x) => x.id === r.restaurant_id) || { name: r.name })}<span class="nm">${esc(r.name)}${r.position === 1 && d.ranking.length > 1 ? `<span class="coroa">${ic("coroa")}</span>` : ""}</span><span class="rv">${brl(r.revenue)}</span></div>
         <div class="bar"><i style="width:${Math.max(2, Math.min(100, r.share))}%"></i></div>
         <div class="rank-sub"><span>${int(r.orders)} pedidos</span><span>ticket ${brl(r.ticket)}</span><span>${pct(r.share)} do total</span>${delta(r.growth_revenue, "")}</div>
       </button></li>`).join("");
     const melhor = d.ranking[0], pior = d.ranking[d.ranking.length - 1];
     return nota(d.period) + `
-      <section class="hero"><span class="label">Faturamento total · ${t.units} ${t.units === 1 ? "unidade" : "unidades"}</span><span class="value">${brl(t.revenue)}</span>${delta(t.growth_revenue)}</section>
+      <section class="hero"><span class="label">Faturamento somado de ${t.units} ${t.units === 1 ? "restaurante" : "restaurantes"}</span><span class="value" data-contar="${Number(t.revenue) || 0}">${brl(t.revenue)}</span>${delta(t.growth_revenue)}</section>
       <section class="grid4">
         <div class="kpi"><span class="label">Pedidos</span><span class="value">${int(t.orders)}</span>${delta(t.growth_orders, "")}</div>
         <div class="kpi"><span class="label">Ticket médio</span><span class="value">${brl(t.ticket)}</span></div>
         <div class="kpi"><span class="label">Cancelados</span><span class="value">${int(t.cancelados || 0)}</span></div>
  <div class="kpi"><span class="label">Resultado</span><span class="value">${comCustos.length ? brl(resultado) : "—"}</span><span class="sub">${comCustos.length ? `${comCustos.length} de ${st.restaurants.length} unidades com custos` : "cadastre os custos de cada unidade"}</span></div>
       </section>
-      <section class="card"><h2>Ranking por faturamento</h2>${d.ranking.length ? `<ul class="rank">${itens}</ul>` : `<div class="empty">Nenhuma unidade vinculada.</div>`}
+      <section class="card"><h2>Quem vendeu mais</h2>${d.ranking.length ? `<ul class="rank">${itens}</ul>` : `<div class="empty">Nenhuma unidade vinculada.</div>`}
         ${d.ranking.length > 1 ? `<p class="peak">Vendendo mais: <b>${esc(melhor.name)}</b> · Vendendo menos: <b>${esc(pior.name)}</b></p>` : ""}</section>
       <p class="foot">Toque em uma unidade para ver todas as métricas dela.</p>`;
   }
@@ -532,12 +629,70 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
     </section>${avisos ? `<p class="foot" style="text-align:left;margin:-4px 0 8px">${avisos}</p>` : ""}`;
   }
 
+  // linha de menu com cadeado quando o plano não libera
+  const linhaMenu = (d, go, icone, t, s, rec) => { const ok = !rec || pode(d, rec); return `<li><button class="row-btn" data-go="${go}"><span class="row-ic">${ic(icone)}</span><span class="row-t"><b>${t}</b><span>${s}</span></span>${ok ? "" : `<span class="tag red">${planoDe(d, rec)}</span>`}<span class="chev">›</span></button></li>`; };
+  const periodoTexto = (p) => p.days === 1 ? (p.key === "today" ? "hoje" : fmtData(p.from)) : `${fmtData(p.from)} a ${fmtData(p.to)}`;
+  function heroVendas(d, rotulo = "Faturamento") {
+    const k = d.kpis, horas = d.period.days === 1 && Array.isArray(d.horas);
+    const serie = horas ? d.horas.map((x) => x.revenue) : d.timeline.map((x) => x.revenue);
+    return `<section class="hero"><div class="hero-topo"><span class="label">${rotulo}<span class="hero-per">${esc(periodoTexto(d.period))}</span></span>${delta(k.growth.revenue)}</div>
+      <span class="value" data-contar="${Number(k.revenue) || 0}">${brl(k.revenue)}</span>${spark(serie)}</section>`;
+  }
   function telaHome(d) {
-    const card = (go, icone, t, rec) => { const ok = !rec || pode(d, rec); return `<li><button class="tile" data-go="${go}"><span class="tile-ic">${ic(icone)}</span><b>${t}</b>${ok ? "" : `<span class="tag red">${planoDe(d, rec)}</span>`}</button></li>`; };
-    const grupo = (t, itens) => `<section class="grp"><h2>${t}</h2><ul class="tiles">${itens.join("")}</ul></section>`;
-    return grupo("Dinheiro", [card("dre", "wallet", "Lucro e operação"), card("custos", "box", "Custos e estoque", "custos"), card("canais", "pie", "Rentabilidade por canal", "canais"), card("caixa", "file", "Vendas por dia", "vendas")]) +
-      grupo("Clientes", [card("clientes", "users", "Clientes e origem", "clientes"), card("fidelidade", "star", "Fidelidade", "fidelidade"), card("avaliacoes", "chat", "Avaliações")]) +
-      grupo("Mais", [card("operacao", "bolt", "Operação e IA", "operacao"), card("previsao", "trend", "Previsão de demanda", "previsao"), card("pdf", "print", "Exportar PDF", "pdf")]);
+    const k = d.kpis, f = finOk() ? st.fin : null;
+    const lucro = f ? (f.despesas.cadastradas ? f.lucro_liquido : f.lucro_bruto) : null;
+    const melhor = [...d.timeline].sort((a, b) => b.revenue - a.revenue)[0];
+    const pico = Array.isArray(d.horas) ? [...d.horas].sort((a, b) => b.orders - a.orders)[0] : null;
+    const dicas = [
+      d.period.days > 1 && melhor && melhor.revenue > 0 ? `<div class="dica-chip">${ic("trend")}<span>Melhor dia<b>${DIAS[new Date(melhor.date + "T12:00:00").getDay()]} ${fmtData(melhor.date)}</b></span></div>` : "",
+      pico && pico.orders > 0 ? `<div class="dica-chip">${ic("relogio")}<span>Horário mais cheio<b>${pico.h}h às ${(pico.h + 1) % 24}h</b></span></div>` : "",
+      d.top_produtos[0] ? `<div class="dica-chip">${ic("star")}<span>Campeão de vendas<b>${esc(d.top_produtos[0].nome)}</b></span></div>` : ""
+    ].join("");
+    return heroVendas(d) + `
+      <div id="avisos-home" class="avisos-home"></div>
+      <section class="grid4">
+        <div class="kpi"><span class="label">Pedidos</span><span class="value" data-contar="${Number(k.orders) || 0}" data-fmt="int">${int(k.orders)}</span>${delta(k.growth.orders, "")}</div>
+        <div class="kpi"><span class="label">Ticket médio</span><span class="value">${brl(k.ticket)}</span>${delta(k.growth.ticket, "")}</div>
+        ${f ? `<div role="button" tabindex="0" class="kpi kpi-link" data-go="dre"><span class="label">${f.despesas.cadastradas ? "Lucro líquido" : "Lucro bruto"}</span><span class="value ${lucro >= 0 ? "pos" : "neg"}">${brl(lucro)}</span><span class="sub">margem ${pct(f.receita > 0 ? (lucro / f.receita) * 100 : 0)}</span></div>`
+            : `<div role="button" tabindex="0" class="kpi kpi-link kpi-convite" data-go="custos"><span class="label">Lucro</span><span class="value">?</span><span class="sub">Cadastre seus custos para ver</span></div>`}
+        <div class="kpi"><span class="label">Cancelados</span><span class="value">${int(k.cancelados)}</span></div>
+      </section>
+      ${dicas ? `<section class="dicas">${dicas}</section>` : ""}
+      <div class="duas">${secProdutos(d)}${secCanais(d)}</div>`;
+  }
+  function telaDinheiro(d) {
+    const f = finOk() ? st.fin : null;
+    return `<div class="tela-titulo"><h1>Dinheiro</h1><p>Quanto entrou, quanto custou e quanto sobrou.</p></div>
+      ${f ? `<section class="hero hero-lucro"><div class="hero-topo"><span class="label">${f.despesas.cadastradas ? "Sobrou no período" : "Lucro bruto do período"}<span class="hero-per">${esc(periodoTexto(d.period))}</span></span></div>
+          <span class="value ${(f.despesas.cadastradas ? f.lucro_liquido : f.lucro_bruto) >= 0 ? "" : "neg"}" data-contar="${Number(f.despesas.cadastradas ? f.lucro_liquido : f.lucro_bruto) || 0}">${brl(f.despesas.cadastradas ? f.lucro_liquido : f.lucro_bruto)}</span>
+          <div class="hero-linha"><span>Entrou <b>${brl(f.receita)}</b></span><span>Mercadoria <b>${pct(f.cmv.pct, 0)}</b></span>${f.despesas.cadastradas ? `<span>Despesas <b>${brl(f.despesas.total)}</b></span>` : ""}</div></section>`
+        : cardsLucro()}
+      <section class="card"><ul class="list">
+        ${linhaMenu(d, "dre", "wallet", "Lucro e operação", "A conta do período: faturamento, custos e o que sobrou")}
+        ${linhaMenu(d, "custos", "box", "Custos e estoque", "Compras, fichas dos pratos e despesas", "custos")}
+        ${linhaMenu(d, "canais", "pie", "Rentabilidade por canal", "Quanto sobra no salão, balcão e delivery", "canais")}
+        ${linhaMenu(d, "caixa", "file", "Vendas por dia", "Dia a dia do período e os mais vendidos", "vendas")}
+      </ul></section>`;
+  }
+  function telaClientesMenu(d) {
+    return `<div class="tela-titulo"><h1>Clientes</h1><p>Quem compra, quem volta e o que eles acham.</p></div>
+      <section class="card"><ul class="list">
+        ${linhaMenu(d, "clientes", "users", "Clientes e origem", "Novos, recorrentes e de onde vêm os pedidos", "clientes")}
+        ${linhaMenu(d, "fidelidade", "star", "Fidelidade", "Pontos ou selos e o piso dos prêmios", "fidelidade")}
+        ${linhaMenu(d, "avaliacoes", "chat", "Avaliações", "Notas, reclamações e sugestões")}
+      </ul></section>`;
+  }
+  function telaMais(d) {
+    return `<div class="tela-titulo"><h1>Mais</h1><p>Operação, previsões e relatórios.</p></div>
+      <section class="card"><ul class="list">
+        ${linhaMenu(d, "operacao", "bolt", "Operação e IA", "Tempo de cada etapa, horário de pico e a IA", "operacao")}
+        ${linhaMenu(d, "previsao", "trend", "Previsão de demanda", "Quanto deve vender nos próximos 7 dias", "previsao")}
+        ${linhaMenu(d, "pdf", "print", "Exportar PDF", "Relatório do período pra salvar ou mandar", "pdf")}
+      </ul></section>
+      <section class="card"><h2>Sua conta</h2><div class="conta-acoes">
+        <div class="who"><span class="who-av">${esc(iniciais(st.owner.nome))}</span><div><b>${esc(st.owner.nome)}</b><span class="muted">${st.restaurants.length > 1 ? `Dono de ${st.restaurants.length} restaurantes` : "Dono"}</span></div></div>
+        ${itensConta("row-acao").replace(/ role="menuitem"/g, "")}
+      </div></section>`;
   }
 
   function contaDre() {
@@ -564,7 +719,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
       : `<div class="kpi"><span class="label">ROI do FluxON</span><span class="value">${(k.roi || 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}×</span><span class="sub">faturamento ÷ mensalidade</span></div>`;
     const completo = exec && finOk();
     return nota(d.period) + `
-      <section class="hero"><span class="label">Faturamento</span><span class="value">${brl(k.revenue)}</span>${delta(k.growth.revenue)}${spark(serie)}</section>
+      <section class="hero"><div class="hero-topo"><span class="label">Faturamento<span class="hero-per">${esc(periodoTexto(d.period))}</span></span>${delta(k.growth.revenue)}</div><span class="value" data-contar="${Number(k.revenue) || 0}">${brl(k.revenue)}</span>${spark(serie)}</section>
       ${completo ? contaDre() : cardsLucro()}
       ${exec ? "" : lockCard(`A conta completa, com impostos e despesas, faz parte do plano ${planoDe(d, "dre_completa")}.`, planoDe(d, "dre_completa"))}
       <section class="grid4">

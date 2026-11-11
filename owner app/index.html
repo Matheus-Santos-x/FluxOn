@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>FluxON Owner</title>
-<meta name="theme-color" content="#0a0a0b">
+<meta name="theme-color" content="#120d0e">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -12,32 +12,45 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="FluxON Owner">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+<!-- LOGIN -->
 <main id="login-screen" class="login hidden">
+  <div class="login-fundo" aria-hidden="true"></div>
   <div class="login-card">
-    <div class="brand big"><img class="brand-img" src="fenix-logo-png.png" alt="" onerror="this.style.display='none'"><span>FluxON <b>Owner</b></span></div>
-    <p class="muted" id="login-sub">Acesse os números dos seus restaurantes.</p>
+    <div class="login-marca">
+      <img src="fenix-logo-png.png" alt="" onerror="this.style.display='none'">
+      <span>FluxON <b>Owner</b></span>
+    </div>
+    <h1 id="login-titulo">Seus restaurantes na palma da mão.</h1>
+    <p class="muted" id="login-sub">Entre com o CPF e o WhatsApp cadastrados.</p>
 
     <form id="form-solicitar" autocomplete="on" novalidate>
       <label>CPF
         <input id="in-cpf" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" maxlength="14">
       </label>
-      <label>WhatsApp cadastrado
+      <label>WhatsApp
         <input id="in-tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" maxlength="15">
       </label>
       <button class="btn primary" type="submit" id="btn-solicitar">Receber código no WhatsApp</button>
     </form>
 
     <form id="form-verificar" class="hidden" novalidate>
-      <label>Código de 6 dígitos
-        <input id="in-code" inputmode="numeric" autocomplete="one-time-code" placeholder="••••••" maxlength="6" class="code">
+      <label>Código de 6 números
+        <span class="otp">
+          <input id="in-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" class="code" aria-label="Código de 6 números">
+          <span class="otp-casas" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        </span>
       </label>
       <button class="btn primary" type="submit" id="btn-verificar">Entrar</button>
-      <button class="btn ghost" type="button" id="btn-reenviar" disabled>Reenviar código</button>
-      <button class="btn link" type="button" id="btn-voltar">Trocar CPF ou telefone</button>
+      <div class="login-acoes">
+        <button class="btn link" type="button" id="btn-voltar">Trocar CPF ou telefone</button>
+        <button class="btn link" type="button" id="btn-reenviar" disabled>Reenviar código</button>
+      </div>
     </form>
 
     <p class="msg" id="login-msg" role="alert"></p>
@@ -48,12 +61,17 @@
   </button>
 </main>
 
+<!-- APP -->
 <div id="app" class="hidden">
   <header class="topbar">
     <div class="topbar-row">
-      <button id="back" class="iconbtn hidden" aria-label="Voltar">‹</button>
-      <div class="brand small"><img class="brand-img" src="fenix-logo-png.png" alt="" onerror="this.style.display='none'"><span id="title">Visão geral</span></div>
-            <div class="bell-wrap">
+      <button id="troca" class="troca" aria-haspopup="true" aria-expanded="false" aria-label="Trocar restaurante">
+        <span class="troca-logo" id="troca-logo"></span>
+        <span class="troca-txt"><small id="troca-sub">Restaurante</small><b id="title">Visão geral</b></span>
+        <svg class="ic chev-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
+      </button>
+      <nav class="abas abas-topo" id="abas-topo" aria-label="Seções"></nav>
+      <div class="bell-wrap">
         <button id="bell" class="iconbtn bell" aria-haspopup="true" aria-expanded="false" aria-label="Avisos">
           <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
           <span id="bell-dot" class="bell-dot hidden"></span>
@@ -61,22 +79,29 @@
         <div id="bell-panel" class="menu hidden" role="menu"></div>
       </div>
       <div class="avatar-wrap">
-        <button id="avatar" class="avatar" aria-haspopup="true" aria-expanded="false" aria-label="Contas"></button>
+        <button id="avatar" class="avatar" aria-haspopup="true" aria-expanded="false" aria-label="Conta"></button>
         <div id="menu" class="menu hidden" role="menu"></div>
       </div>
     </div>
-    <div class="periods" id="periods" role="tablist" aria-label="Período"></div>
-    <div class="custom hidden" id="custom">
-      <input type="date" id="c-from" aria-label="De">
-      <span class="muted">até</span>
-      <input type="date" id="c-to" aria-label="Até">
-      <button class="btn small primary" id="c-apply">Aplicar</button>
+    <div class="periodo-linha" id="periodo-linha">
+      <div class="periods" id="periods" role="tablist" aria-label="Período"></div>
+      <div class="custom hidden" id="custom">
+        <input type="date" id="c-from" aria-label="De">
+        <span class="muted">até</span>
+        <input type="date" id="c-to" aria-label="Até">
+        <button class="btn small primary" id="c-apply">Ver</button>
+      </div>
     </div>
   </header>
+  <div id="troca-menu" class="menu troca-menu hidden" role="menu"></div>
 
+  <div id="tela-cabeca" class="tela-cabeca hidden"></div>
   <main id="content" class="content" aria-live="polite"></main>
+
+  <nav class="abas abas-baixo" id="abas-baixo" aria-label="Seções"></nav>
 </div>
 
+<div id="fundo-menu" class="fundo-menu hidden"></div>
 <div id="print-area"></div>
 <div id="toast" class="toast hidden" role="status"></div>
 <script src="config.js"></script>
