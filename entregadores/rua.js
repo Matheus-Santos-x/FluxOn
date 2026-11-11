@@ -1,7 +1,8 @@
-/* rua.js — aba "Na rua": as entregas que estão com o entregador, na ordem em que pegou.
-   Cada uma tem rota (Google Maps / Waze), ligar, WhatsApp, o que cobrar e o botão Entregue. */
+/* rua.js — aba "Na rua": o mapa na tela toda e, por cima, o painel com as entregas na ordem da rota.
+   Cada entrega tem rota (Google Maps / Waze), ligar, WhatsApp, o que cobrar e o botão Entregue. */
 const rua = (() => {
-  let tRec = null, ultimaLista = "";
+  let tRec = null;
+  const _entreguesAgora = new Set();
 
   async function recarregar() {
     if (!S.conta) return;
@@ -15,12 +16,17 @@ const rua = (() => {
       desenhar();
     } catch {}
   }
-  const _entreguesAgora = new Set();
   function mudou() { clearTimeout(tRec); tRec = setTimeout(recarregar, 200); }
 
   const linkMaps = (end) => `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(end.completo)}`;
   const linkWaze = (end) => `https://waze.com/ul?q=${encodeURIComponent(end.completo)}&navigate=yes`;
   const linkZap = (tel, msg) => `https://wa.me/55${tel}?text=${encodeURIComponent(msg)}`;
+
+  // entregas na ordem da rota (a mais perto primeiro); sem rota ainda, na ordem em que pegou
+  function emOrdem() {
+    const ordem = S.rotaOrdem || [];
+    return [...S.naRua].sort((a, b) => (ordem.indexOf(a.id) + 1 || 999) - (ordem.indexOf(b.id) + 1 || 999));
+  }
 
   function cardHtml(p, i) {
     const itens = p.itens.map((x) => `${x.qtd}× ${x.nome}`).join(", ");
@@ -49,15 +55,27 @@ const rua = (() => {
       </article>`;
   }
 
+  // sem entrega: o mapa continua na tela e o painel mostra o que fazer agora
+  function vazioHtml() {
+    const pausa = S.eu && !S.eu.disponivel;
+    const n = S.fila.length;
+    if (pausa) return `<b>Você está em pausa</b><p>Toque na bolinha lá em cima quando for rodar de novo.</p>`;
+    if (n) return `<b>${plural(n, "pedido pronto", "pedidos prontos")} pra sair</b><p>Escolha os que vai levar e toque em Iniciar rota.</p>
+      <button class="btn primario grande largo" type="button" data-ir="pedidos">Ver ${n === 1 ? "o pedido" : "os pedidos"}</button>`;
+    if (S.emPreparo) return `<b>Nada pronto ainda</b><p>${plural(S.emPreparo, "pedido está", "pedidos estão")} na cozinha. Aparece${S.emPreparo === 1 ? "" : "m"} em Pedidos na hora que ficar${S.emPreparo === 1 ? "" : "em"} pronto${S.emPreparo === 1 ? "" : "s"}.</p>`;
+    return `<b>Tudo tranquilo por aqui</b><p>Quando um pedido ficar pronto, ele aparece em Pedidos na hora.</p>`;
+  }
+
   function desenhar() {
     troco.desenhar();
     const tem = S.naRua.length > 0;
-    $("rua-vazio").classList.toggle("hidden", tem || S.acertos.length > 0);
+    $("rua-vazio").classList.toggle("hidden", tem);
+    $("rua-vazio").innerHTML = tem ? "" : vazioHtml();
     $("rua-conteudo").classList.toggle("hidden", !tem);
     $("badge-rua").textContent = S.naRua.length || (S.acertos.length ? "$" : "");
     $("badge-rua").classList.toggle("hidden", !tem && !S.acertos.length);
-    mapa.precisa(tem);
-    if (!tem) return;
+    mapa.atualizar({ visivel: S.aba === "rua", temEntrega: tem });
+    if (!tem) { mapa.limparRota(); return; }
 
     const r = troco.resumo(S.naRua);
     $("resumo-rua").innerHTML = [
@@ -66,18 +84,17 @@ const rua = (() => {
       r.troco ? `<span class="chip dinheiro">Levar ${moeda(r.troco)} de troco</span>` : "",
       r.maquininha ? `<span class="chip">💳 Maquininha</span>` : ""
     ].join("");
-    $("rua-lista").innerHTML = S.naRua.map(cardHtml).join("");
-    $("btn-rota-todas").classList.toggle("hidden", S.naRua.length < 2);
-
-    // o mapa só redesenha os pinos se a lista mudou (não a cada atualização)
-    const chave = S.naRua.map((p) => p.id).join();
-    if (chave !== ultimaLista && S.aba === "rua") { ultimaLista = chave; mapa.desenharEntregas(S.naRua); }
+    $("rua-lista").innerHTML = emOrdem().map(cardHtml).join("");
+    mapa.desenharEntregas(S.naRua);
   }
-  // o mapa só desenha com a aba aberta (o Leaflet precisa da tela visível pra medir)
-  function aoMostrar() { if (!S.naRua.length) return; ultimaLista = S.naRua.map((p) => p.id).join(); mapa.desenharEntregas(S.naRua); }
 
+  // abrir/recolher o painel pra ver mais do mapa
+  $("painel-alca").addEventListener("click", () => { $("painel").classList.toggle("recolhido"); });
+  $("painel").addEventListener("click", (e) => { const b = e.target.closest("[data-ir]"); if (b) app.irPara(b.dataset.ir); });
+
+  // navegação de verdade fica com o Google Maps (todas as entregas, na ordem da rota)
   $("btn-rota-todas").addEventListener("click", () => {
-    const ends = S.naRua.map((p) => p.endereco.completo);
+    const ends = emOrdem().map((p) => p.endereco.completo);
     const destino = ends[ends.length - 1];
     const meio = ends.slice(0, -1).slice(0, 9).join("|");
     window.open(`https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(destino)}${meio ? "&waypoints=" + encodeURIComponent(meio) : ""}`, "_blank");
@@ -168,5 +185,5 @@ const rua = (() => {
     if (p && t) t.textContent = `saiu ${haQuanto(p.saiu_em)}`;
   }); }, 30000);
 
-  return { recarregar, mudou, desenhar, aoMostrar };
+  return { recarregar, mudou, desenhar };
 })();

@@ -1,38 +1,85 @@
-/* mapa.js — localização do entregador (só enquanto tem entrega), envio pro cliente e pro restaurante,
-   tela sempre acesa durante a rota, e o mapa (OpenStreetMap, gratuito) da aba "Na rua". */
+/* mapa.js — o mapa da aba "Na rua" (OpenStreetMap, gratuito, em tons de cinza: só as ruas),
+   a localização do entregador e a rota das entregas.
+   A localização é lida no celular pra mostrar onde ele está; pro cliente e pro restaurante
+   ela só vai enquanto ele está com entrega. Entregou tudo, para de mandar. */
 const mapa = (() => {
   const INTERVALO = 3000;                 // manda a posição no máximo a cada 3 segundos
   let watch = null, ultimaEnviada = 0, pos = null, travaTela = null, perguntou = false;
-  let m = null, marcadorEu = null, pinos = [], ajustouVista = false;
+  let m = null, marcadorEu = null, marcadorLoja = null, lojaPos = null, pinos = [], linha = null;
+  let seguindo = true, rotaChave = "", girando = false;
+
+  /* ---------- mapa ---------- */
+  function iniciar() {
+    if (m || !window.L) return;
+    m = L.map("mapa", { zoomControl: false, attributionControl: true }).setView([-22.6, -48.8], 14);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
+    m.on("dragstart", () => { seguindo = false; });
+    $("btn-centralizar").onclick = () => { seguindo = true; enquadrar(); };
+    const tocarGps = () => { if (watch === null) estadoPermissao().then((st) => st === "denied" ? ajudaBloqueada() : ligar()); };
+    $("gps").onclick = tocarGps;
+    $("gps").onkeydown = (e) => { if (e.key === "Enter") tocarGps(); };
+    mostrarLoja();
+  }
+  function mostrar() { iniciar(); if (m) setTimeout(() => { m.invalidateSize(); enquadrar(); }, 60); }
+
+  // o restaurante aparece no mapa (e é o ponto de partida da rota quando ainda não tem GPS)
+  async function mostrarLoja() {
+    const end = S.conta?.restaurante?.endereco;
+    if (!end || !m) return;
+    const c = await geocodificar({ completo: end, rua: end, resto: "" });
+    if (!c || !m) return;
+    lojaPos = c;
+    marcadorLoja?.remove();
+    marcadorLoja = L.marker([c.lat, c.lng], { icon: L.divIcon({ className: "", html: '<div class="loja">🏪</div>', iconSize: [32, 32], iconAnchor: [16, 16] }) }).addTo(m);
+    if (!pos) enquadrar();
+  }
+
+  function enquadrar() {
+    if (!m) return;
+    const pts = pinos.map((p) => p.getLatLng());
+    if (marcadorEu) pts.push(marcadorEu.getLatLng());
+    if (!pts.length && marcadorLoja) pts.push(marcadorLoja.getLatLng());
+    if (!pts.length) return;
+    const painel = $("painel")?.offsetHeight || 0;
+    if (pts.length === 1) {
+      m.setView(pts[0], 16, { animate: false });
+      m.panBy([0, painel / 2], { animate: false }); // fica acima do painel de baixo
+    } else {
+      m.fitBounds(L.latLngBounds(pts), { paddingTopLeft: [40, 90], paddingBottomRight: [40, painel + 30], maxZoom: 16 });
+    }
+  }
 
   /* ---------- localização ---------- */
   function gps(txt, cls = "") { const g = $("gps"); if (g) { g.textContent = txt; g.className = `gps ${cls}`; } }
+  async function estadoPermissao() { try { return (await navigator.permissions.query({ name: "geolocation" })).state; } catch { return "prompt"; } }
 
-  async function estadoPermissao() {
-    try { return (await navigator.permissions.query({ name: "geolocation" })).state; } catch { return "prompt"; }
-  }
-
-  // chamado pela aba "Na rua": tem entrega → liga; não tem → desliga
-  async function precisa(temEntrega) {
-    if (!temEntrega) { pararLocalizacao(); return; }
-    if (watch !== null) return;
+  // chamado sempre que muda a aba ou as entregas
+  async function atualizar({ visivel, temEntrega }) {
+    if (!visivel && !temEntrega) { parar(); return; }
+    if (watch !== null) { temEntrega ? manterTelaAcesa() : soltarTela(); rotulo(); return; }
     if (!("geolocation" in navigator)) { gps("⚠️ Este celular não tem localização", "erro"); return; }
     const st = await estadoPermissao();
     if (st === "granted") return ligar();
-    if (st === "denied") { gps("⚠️ Localização bloqueada · toque", "erro"); return; }
-    if (!perguntou) { perguntou = true; explicar(); } else gps("📍 Localização desligada · toque", "erro");
+    if (st === "denied") { gps("⚠️ Localização bloqueada · toque aqui", "erro"); return; }
+    if (temEntrega && !perguntou) { perguntou = true; explicar(); }
+    else gps("📍 Toque pra ligar a localização", "erro");
+  }
+  function rotulo() {
+    if (watch === null) return;
+    if (!pos) gps("📍 Procurando sinal…");
+    else gps(S.naRua.length ? "📡 O cliente está vendo você" : "", "ok");
   }
 
   function explicar() {
     abrirFolha(`
       <h3>Ligar a localização?</h3>
-      <p>O cliente vê você chegando no mapa e o restaurante sabe onde estão as entregas. A localização só é usada enquanto você está com pedido. Entregou tudo, desliga sozinha.</p>
+      <p>O cliente vê você chegando no mapa e o restaurante sabe onde estão as entregas. Sua localização só é enviada enquanto você está com pedido. Entregou tudo, para sozinha.</p>
       <div class="botoes">
         <button class="btn primario grande" type="button" id="btn-ligar-gps">📍 Ligar localização</button>
         <button class="btn link" type="button" id="btn-agora-nao">Agora não</button>
       </div>`);
     $("btn-ligar-gps").onclick = () => { fecharFolha(); ligar(); };
-    $("btn-agora-nao").onclick = () => { fecharFolha(); gps("📍 Localização desligada · toque", "erro"); };
+    $("btn-agora-nao").onclick = () => { fecharFolha(); gps("📍 Toque pra ligar a localização", "erro"); };
   }
 
   function ajudaBloqueada() {
@@ -50,17 +97,19 @@ const mapa = (() => {
     if (watch !== null || !("geolocation" in navigator)) return;
     gps("📍 Procurando sinal…");
     watch = navigator.geolocation.watchPosition(recebeu, (err) => {
-      if (err.code === 1) { pararLocalizacao(); gps("⚠️ Localização bloqueada · toque", "erro"); }
+      if (err.code === 1) { parar(); gps("⚠️ Localização bloqueada · toque aqui", "erro"); }
       else gps("📍 Sinal fraco, tentando…", "erro");
     }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
-    manterTelaAcesa();
+    if (S.naRua.length) manterTelaAcesa();
   }
 
   function recebeu(p) {
+    const primeira = !pos;
     pos = { lat: p.coords.latitude, lng: p.coords.longitude, precisao: p.coords.accuracy, rumo: p.coords.heading };
-    gps(`📍 Localização ligada`, "ok");
+    rotulo();
     desenharEu();
     enviar();
+    if (primeira && S.naRua.length) { rotaChave = ""; desenharEntregas(S.naRua); } // a rota agora sai de onde ele está
   }
 
   function enviar(forcar) {
@@ -70,10 +119,10 @@ const mapa = (() => {
     ultimaEnviada = agora;
     tempoReal.enviar("posicao", pos);
   }
-  // o GPS do celular às vezes para de mandar quando a pessoa está parada: reenvia a última a cada 15s
+  // parado no semáforo o GPS às vezes não manda nada: reenvia a última a cada 15s
   setInterval(() => { if (watch !== null && pos && Date.now() - ultimaEnviada > 15000) enviar(true); }, 5000);
 
-  function pararLocalizacao() {
+  function parar() {
     if (watch !== null) { try { navigator.geolocation.clearWatch(watch); } catch {} }
     watch = null;
     soltarTela();
@@ -85,34 +134,24 @@ const mapa = (() => {
   }
   function soltarTela() { try { travaTela?.release(); } catch {} travaTela = null; }
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && watch !== null) { manterTelaAcesa(); enviar(true); }
+    if (document.visibilityState === "visible" && watch !== null) { if (S.naRua.length) manterTelaAcesa(); enviar(true); }
   });
-
-  /* ---------- mapa ---------- */
-  function iniciar() {
-    if (m || !window.L) return;
-    m = L.map("mapa", { zoomControl: false, attributionControl: true }).setView([-22.6, -48.8], 13);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
-    $("btn-centralizar").onclick = () => { ajustouVista = false; enquadrar(); };
-    $("gps").onclick = () => { if (watch === null) estadoPermissao().then((st) => st === "denied" ? ajudaBloqueada() : ligar()); };
-  }
 
   function desenharEu() {
     if (!m || !pos) return;
     const ll = [pos.lat, pos.lng];
-    if (!marcadorEu) marcadorEu = L.marker(ll, { icon: L.divIcon({ className: "", html: '<div class="eu"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 1000 }).addTo(m);
+    if (!marcadorEu) { marcadorEu = L.marker(ll, { icon: L.divIcon({ className: "", html: '<div class="eu"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 1000 }).addTo(m); enquadrar(); }
     else marcadorEu.setLatLng(ll);
-    if (!ajustouVista) enquadrar();
+    if (seguindo && !S.naRua.length) m.panTo(ll, { animate: true });
   }
 
-  // endereço → coordenadas (Nominatim/OpenStreetMap, gratuito). Guarda no celular pra não perguntar de novo.
+  /* ---------- endereço → coordenadas (Nominatim/OpenStreetMap) ---------- */
   const fila = [];
   let buscando = false;
   function cacheGeo() { try { return JSON.parse(localStorage.getItem("fx_geo") || "{}"); } catch { return {}; } }
   function geocodificar(endereco) {
-    const chave = endereco.completo;
     const c = cacheGeo();
-    if (c[chave] !== undefined) return Promise.resolve(c[chave]);
+    if (c[endereco.completo] !== undefined) return Promise.resolve(c[endereco.completo]);
     return new Promise((ok) => { fila.push({ endereco, ok }); andar(); });
   }
   async function andar() {
@@ -121,7 +160,8 @@ const mapa = (() => {
     const { endereco, ok } = fila.shift();
     const limpo = endereco.completo.replace(/\b\d{5}-?\d{3}\b/g, "").replace(/\s+-\s+/g, ", ").replace(/\//g, ", ").replace(/(,\s*)+$/, "");
     let res = null;
-    for (const q of [limpo, [endereco.rua, endereco.resto.split("·")[0]].filter(Boolean).join(", ")]) {
+    for (const q of [limpo, [endereco.rua, String(endereco.resto || "").split("·")[0]].filter(Boolean).join(", ")]) {
+      if (!q) continue;
       try {
         const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(q)}`, { headers: { "Accept-Language": "pt-BR" } });
         const j = await r.json();
@@ -134,35 +174,51 @@ const mapa = (() => {
     setTimeout(() => { buscando = false; andar(); }, 1100); // regra do Nominatim: 1 por segundo
   }
 
+  /* ---------- rota com todas as entregas ---------- */
+  // Pede a melhor ordem e o caminho pelas ruas pro OSRM (gratuito, usa os dados do OpenStreetMap).
+  // Se ele não responder, liga os pontos em linha reta na ordem em que pegou.
   async function desenharEntregas(lista) {
     iniciar();
     if (!m) return;
-    setTimeout(() => m.invalidateSize(), 60);
-    pinos.forEach((p) => p.remove());
-    pinos = [];
-    ajustouVista = false;
-    const minha = lista.map((p) => p.id).join();
-    for (const [i, p] of lista.entries()) {
-      const c = await geocodificar(p.endereco);
-      if (!c || S.naRua.map((x) => x.id).join() !== minha) continue; // a lista mudou no meio
-      const pino = L.marker([c.lat, c.lng], { icon: L.divIcon({ className: "", html: `<div class="pino"><span>${i + 1}</span></div>`, iconSize: [34, 34], iconAnchor: [17, 34] }) })
-        .addTo(m).bindPopup(`<b>#${esc(p.numero)} · ${esc(p.endereco.bairro || "")}</b><br>${esc(p.endereco.rua)}`);
-      pinos.push(pino);
+    const chave = lista.map((p) => p.id).join();
+    if (chave === rotaChave || girando) return;
+    girando = true;
+    rotaChave = chave;
+    try {
+      const pontos = [];
+      for (const p of lista) { const c = await geocodificar(p.endereco); if (c) pontos.push({ id: p.id, ...c }); }
+      if (S.naRua.map((x) => x.id).join() !== chave) return; // a lista mudou no meio
+      const origem = pos || lojaPos;
+      let ordem = pontos, caminho = null;
+      if (origem && pontos.length) {
+        try {
+          const coords = [origem, ...pontos].map((c) => `${c.lng.toFixed(6)},${c.lat.toFixed(6)}`).join(";");
+          const r = await fetch(`https://router.project-osrm.org/trip/v1/driving/${coords}?source=first&roundtrip=false&overview=full&geometries=geojson`, { signal: AbortSignal.timeout(8000) });
+          const j = await r.json();
+          if (j.code === "Ok" && j.trips?.[0]) {
+            ordem = pontos.map((p, i) => ({ ...p, pos: j.waypoints[i + 1].waypoint_index })).sort((a, b) => a.pos - b.pos);
+            caminho = j.trips[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+          }
+        } catch {}
+      }
+      // a ordem da rota vale pra lista também (quem não achou no mapa vai pro fim)
+      S.rotaOrdem = [...ordem.map((p) => p.id), ...lista.map((p) => p.id).filter((id) => !ordem.some((o) => o.id === id))];
+      pinos.forEach((p) => p.remove()); pinos = [];
+      linha?.remove(); linha = null;
+      ordem.forEach((p, i) => {
+        const ped = lista.find((x) => x.id === p.id);
+        pinos.push(L.marker([p.lat, p.lng], { icon: L.divIcon({ className: "", html: `<div class="pino"><span>${i + 1}</span></div>`, iconSize: [34, 34], iconAnchor: [17, 34] }) })
+          .addTo(m).bindPopup(`<b>#${esc(ped?.numero)} · ${esc(ped?.endereco.bairro || "")}</b><br>${esc(ped?.endereco.rua || "")}`));
+      });
+      const cor = getComputedStyle(document.documentElement).getPropertyValue("--acc").trim() || "#e5484d";
+      const tracado = caminho || (origem ? [[origem.lat, origem.lng], ...ordem.map((p) => [p.lat, p.lng])] : ordem.map((p) => [p.lat, p.lng]));
+      if (tracado.length > 1) linha = L.polyline(tracado, { color: cor, weight: caminho ? 6 : 4, opacity: .85, dashArray: caminho ? null : "8 10" }).addTo(m);
+      seguindo = true;
       enquadrar();
-    }
-    desenharEu();
-    enquadrar();
+      rua.desenhar();
+    } finally { girando = false; if (S.naRua.map((x) => x.id).join() !== rotaChave) desenharEntregas(S.naRua); }
   }
+  function limparRota() { pinos.forEach((p) => p.remove()); pinos = []; linha?.remove(); linha = null; rotaChave = ""; S.rotaOrdem = []; enquadrar(); }
 
-  function enquadrar() {
-    if (!m) return;
-    const pts = pinos.map((p) => p.getLatLng());
-    if (marcadorEu) pts.push(marcadorEu.getLatLng());
-    if (!pts.length) return;
-    if (pts.length === 1) m.setView(pts[0], 16);
-    else m.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 16 });
-    ajustouVista = pts.length > 1;
-  }
-
-  return { precisa, pararLocalizacao, desenharEntregas, ligar, enviar, iniciar, get posicao() { return pos; } };
+  return { mostrar, atualizar, pararLocalizacao: parar, desenharEntregas, limparRota, ligar, enviar, mostrarLoja, get posicao() { return pos; } };
 })();

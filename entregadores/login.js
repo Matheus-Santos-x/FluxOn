@@ -68,7 +68,7 @@ const login = (() => {
     msg("");
     $("lista-contas").innerHTML = contas.map((c, i) => `
       <button type="button" class="conta" data-i="${i}">
-        <span class="topo-logo" style="${c.restaurante.logo_url ? `background-image:url('${esc(c.restaurante.logo_url)}')` : ""}">${c.restaurante.logo_url ? "" : esc(c.restaurante.nome.charAt(0))}</span>
+        <span class="logo-rest" style="${c.restaurante.logo_url ? `background-image:url('${esc(c.restaurante.logo_url)}')` : ""}">${c.restaurante.logo_url ? "" : esc(c.restaurante.nome.charAt(0))}</span>
         <span><b>${esc(c.restaurante.nome)}</b><br><small class="muted">como ${esc(c.entregador.nome)}</small></span>
       </button>`).join("");
     $("lista-contas").onclick = (e) => {

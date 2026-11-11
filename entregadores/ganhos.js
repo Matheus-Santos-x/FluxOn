@@ -45,16 +45,5 @@ const ganhos = (() => {
       </div>`;
   }
 
-  /* instalar o app (Android mostra o botão; iPhone, a dica) */
-  let pedidoInstalar = null;
-  const instalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedidoInstalar = e; $("btn-instalar").hidden = instalado(); });
-  if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !instalado()) $("btn-instalar").hidden = false;
-  $("btn-instalar").addEventListener("click", async () => {
-    if (pedidoInstalar) { const p = pedidoInstalar; pedidoInstalar = null; p.prompt(); await p.userChoice.catch(() => null); $("btn-instalar").hidden = true; return; }
-    abrirFolha(`<h3>Instalar no iPhone</h3><p>Toque em <b>Compartilhar</b> (o quadrado com a setinha) e depois em <b>"Adicionar à Tela de Início"</b>. O app fica com ícone, igual aos outros.</p><div class="botoes"><button class="btn primario grande" type="button" id="btn-ok-ios">Entendi</button></div>`);
-    $("btn-ok-ios").onclick = fecharFolha;
-  });
-
   return { recarregar, desenhar };
 })();

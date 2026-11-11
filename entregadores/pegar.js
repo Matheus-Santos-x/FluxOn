@@ -1,4 +1,5 @@
-/* pegar.js — aba "Pedidos": o que está pronto pra sair. Toca pra escolher, "Pegar" leva todos de uma vez.
+/* pegar.js — aba "Pedidos": o que está pronto pra sair. Toca pra escolher e "Iniciar rota" leva todos de uma vez
+   (o app vai pra aba "Na rua" com a rota desenhada no mapa).
    Se outro entregador pegar antes, o pedido some na hora (tempo real) e o app avisa. */
 const pegar = (() => {
   let tRecarregar = null;
@@ -43,13 +44,14 @@ const pegar = (() => {
         <b>Nenhum pedido pronto agora</b>
         <p class="muted">${S.emPreparo ? `${plural(S.emPreparo, "pedido está", "pedidos estão")} sendo preparado${S.emPreparo === 1 ? "" : "s"}. Aparece aqui na hora que ficar pronto.` : "Quando um pedido ficar pronto, ele aparece aqui na hora."}</p></div>`;
     } else {
-      lista.innerHTML = (pausa ? `<div class="pag outro" style="margin-bottom:2px"><span class="pag-ic">⏸️</span><div>Você está em pausa<small>Toque em "Em pausa" lá em cima quando for rodar.</small></div></div>` : "")
+      lista.innerHTML = (pausa ? `<div class="pag outro" style="margin-bottom:2px"><span class="pag-ic">⏸️</span><div>Você está em pausa<small>Toque na bolinha lá em cima quando for rodar.</small></div></div>` : "")
         + S.fila.map(cardHtml).join("");
     }
     const n = S.fila.length;
     $("badge-pedidos").textContent = n;
     $("badge-pedidos").classList.toggle("hidden", !n);
     barra();
+    if (!S.naRua.length) rua.desenhar(); // o painel da aba "Na rua" mostra quantos estão prontos
   }
 
   // barra de baixo: quantos escolheu e o que levar
@@ -62,7 +64,7 @@ const pegar = (() => {
     const maquininha = escolhidos.some((p) => p.pagamento.tipo === "cartao");
     const extra = [troco ? `levar ${moeda(troco)} de troco` : "", maquininha ? "levar a maquininha" : ""].filter(Boolean).join(" · ");
     $("barra-info").innerHTML = `<b>${plural(escolhidos.length, "pedido", "pedidos")}</b>${extra || "nada pra levar de troco"}`;
-    $("btn-pegar").textContent = escolhidos.length === 1 ? "Pegar" : `Pegar ${escolhidos.length}`;
+    $("btn-pegar").textContent = escolhidos.length === 1 ? "Iniciar rota" : `Iniciar rota (${escolhidos.length})`;
   }
 
   $("fila-lista").addEventListener("click", (e) => {
@@ -80,7 +82,7 @@ const pegar = (() => {
     const ids = S.fila.filter((p) => S.sel.has(p.id)).map((p) => p.id);
     if (!ids.length) return;
     const btn = $("btn-pegar");
-    btn.disabled = true; btn.textContent = "Pegando…";
+    btn.disabled = true; btn.textContent = "Montando a rota…";
     try {
       const r = await api("/api/v1/entregador/pegar", { method: "POST", body: { ids } });
       S.sel.clear();
@@ -91,7 +93,7 @@ const pegar = (() => {
         vibrar(60);
         aviso(perdidos.length
           ? `Pegou ${plural(r.pegos.length, "pedido", "pedidos")}. ${perdidos.map((n) => "#" + n).join(", ")} já tinha${perdidos.length > 1 ? "m" : ""} sido pego por outro entregador.`
-          : `Boa entrega! ${plural(r.pegos.length, "pedido", "pedidos")} com você.`, perdidos.length ? "ruim" : "bom");
+          : `Rota com ${plural(r.pegos.length, "entrega", "entregas")}. Boa entrega!`, perdidos.length ? "ruim" : "bom");
         await rua.recarregar();
         app.irPara("rua");
       } else {

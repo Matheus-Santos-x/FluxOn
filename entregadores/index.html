@@ -12,6 +12,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Entregas">
+<script>
+  // tema escolhido no perfil (automático / claro / escuro) antes de pintar a tela
+  try { const t = localStorage.getItem("fx_ent_tema"); if (t === "claro" || t === "escuro") document.documentElement.dataset.tema = t; } catch {}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -54,21 +58,34 @@
 
 <!-- ============ APP ============ -->
 <div id="tela-app" class="app hidden">
-  <header class="topo">
-    <span class="topo-logo" id="topo-logo" aria-hidden="true"></span>
-    <div class="topo-nome">
-      <b id="topo-rest">Restaurante</b>
-      <small id="topo-eu">Entregador</small>
-    </div>
-    <button class="dispo" id="btn-dispo" type="button" role="switch" aria-checked="false">
-      <span class="dispo-bola" aria-hidden="true"></span><span id="dispo-txt">Em pausa</span>
-    </button>
-  </header>
+
+  <!-- bolinha do perfil: verde = disponível, vermelha = em pausa -->
+  <button class="avatar" id="btn-avatar" type="button" aria-haspopup="dialog" aria-label="Perfil e disponibilidade">
+    <span id="avatar-letra">?</span>
+  </button>
 
   <div id="faixa-conexao" class="faixa hidden" role="status">Sem internet. Tentando reconectar…</div>
 
+  <!-- NA RUA: o mapa ocupa a tela, as entregas ficam no painel de baixo -->
+  <section id="aba-rua" class="aba-rua" aria-labelledby="tab-rua">
+    <div id="mapa" class="mapa" aria-label="Mapa"></div>
+    <div class="gps" id="gps" role="button" tabindex="0"></div>
+    <button class="mapa-centro" id="btn-centralizar" type="button" aria-label="Centralizar o mapa">◎</button>
+
+    <div class="painel" id="painel">
+      <button class="painel-alca" id="painel-alca" type="button" aria-label="Abrir ou recolher a lista"></button>
+      <div id="acertos" class="acertos"></div>
+      <div id="rua-vazio" class="rua-vazio hidden"></div>
+      <div id="rua-conteudo" class="hidden">
+        <div class="resumo-rua" id="resumo-rua"></div>
+        <button class="btn primario largo" type="button" id="btn-rota-todas">🧭 Navegar no Google Maps</button>
+        <div id="rua-lista" class="lista"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- PEDIDOS (fila) -->
-  <section id="aba-pedidos" class="aba" aria-labelledby="tab-pedidos">
+  <section id="aba-pedidos" class="aba hidden" aria-labelledby="tab-pedidos">
     <div class="aba-cabeca">
       <h2>Prontos pra sair</h2>
       <span class="contagem" id="fila-preparo"></span>
@@ -76,52 +93,28 @@
     <div id="fila-lista" class="lista"></div>
   </section>
 
-  <!-- NA RUA -->
-  <section id="aba-rua" class="aba hidden" aria-labelledby="tab-rua">
-    <div id="acertos" class="acertos"></div>
-    <div id="rua-vazio" class="vazio hidden">
-      <span class="vazio-icone" aria-hidden="true">🛵</span>
-      <b>Nenhuma entrega com você</b>
-      <p class="muted">Pegue os pedidos na aba Pedidos.</p>
-    </div>
-    <div id="rua-conteudo" class="hidden">
-      <div class="resumo-rua" id="resumo-rua"></div>
-      <div class="mapa-caixa">
-        <div id="mapa" class="mapa" aria-label="Mapa com você e as entregas"></div>
-        <button class="mapa-centro" id="btn-centralizar" type="button" aria-label="Centralizar no mapa">◎</button>
-        <div class="gps" id="gps"></div>
-      </div>
-      <button class="btn largo" type="button" id="btn-rota-todas">🧭 Rota com todas no Google Maps</button>
-      <div id="rua-lista" class="lista"></div>
-    </div>
-  </section>
-
   <!-- MEU DIA -->
   <section id="aba-dia" class="aba hidden" aria-labelledby="tab-dia">
+    <div class="aba-cabeca"><h2>Meu dia</h2></div>
     <div id="dia-conteudo"></div>
-    <div class="dia-pe">
-      <button class="btn" type="button" id="btn-instalar" hidden>📲 Instalar o app no celular</button>
-      <button class="btn" type="button" id="btn-trocar-conta" hidden>Trocar de restaurante</button>
-      <button class="btn link" type="button" id="btn-sair">Sair</button>
-    </div>
   </section>
 
-  <!-- barra de pegar pedidos -->
+  <!-- barra de escolher pedidos -->
   <div class="barra-pegar" id="barra-pegar" aria-live="polite">
     <div class="barra-info" id="barra-info"></div>
-    <button class="btn primario grande" type="button" id="btn-pegar">Pegar</button>
+    <button class="btn primario grande" type="button" id="btn-pegar">Iniciar rota</button>
   </div>
 
   <nav class="abas" aria-label="Telas">
-    <button type="button" class="tab ativo" id="tab-pedidos" data-aba="pedidos"><span class="tab-ic" aria-hidden="true">📋</span>Pedidos<em class="badge hidden" id="badge-pedidos"></em></button>
-    <button type="button" class="tab" id="tab-rua" data-aba="rua"><span class="tab-ic" aria-hidden="true">🛵</span>Na rua<em class="badge hidden" id="badge-rua"></em></button>
+    <button type="button" class="tab" id="tab-pedidos" data-aba="pedidos"><span class="tab-ic" aria-hidden="true">📋</span>Pedidos<em class="badge hidden" id="badge-pedidos"></em></button>
+    <button type="button" class="tab ativo" id="tab-rua" data-aba="rua"><span class="tab-ic" aria-hidden="true">🛵</span>Na rua<em class="badge hidden" id="badge-rua"></em></button>
     <button type="button" class="tab" id="tab-dia" data-aba="dia"><span class="tab-ic" aria-hidden="true">💰</span>Meu dia</button>
   </nav>
 </div>
 
-<!-- janela de baixo (confirmar entrega, rota, localização…) -->
+<!-- janela de baixo (perfil, confirmar entrega, rota, localização…) -->
 <div class="folha-fundo hidden" id="folha-fundo"></div>
-<section class="folha" id="folha" role="dialog" aria-modal="true" aria-labelledby="folha-titulo" hidden>
+<section class="folha" id="folha" role="dialog" aria-modal="true" hidden>
   <div class="folha-alca" aria-hidden="true"></div>
   <div id="folha-corpo"></div>
 </section>
@@ -138,6 +131,7 @@
 <script src="troco.js"></script>
 <script src="rua.js"></script>
 <script src="ganhos.js"></script>
+<script src="perfil.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
