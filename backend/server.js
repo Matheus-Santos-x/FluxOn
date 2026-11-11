@@ -2941,7 +2941,16 @@ app.get("/admin/restaurants", requireAdmin, async (req, res) => {
     if (error) return sendError(res, 500, "Erro ao buscar restaurantes");
 
     const filtrados = (data || []).filter(r => !ADMIN_EMAILS.has(String(r.email || "").toLowerCase()));
-    return res.json(filtrados);
+    // junta logo, cor e nome de exibição pra montar os cartões do painel
+    const ids = filtrados.map(r => r.id);
+    const { data: cfgs } = ids.length
+      ? await supabase.from("restaurante_config").select("restaurant_id, nome_exibicao, logo_url, cor_primaria").in("restaurant_id", ids)
+      : { data: [] };
+    const cfgPorId = new Map((cfgs || []).map(c => [c.restaurant_id, c]));
+    return res.json(filtrados.map(r => {
+      const c = cfgPorId.get(r.id) || {};
+      return { ...r, nome_exibicao: c.nome_exibicao || null, logo_url: c.logo_url || null, cor_primaria: c.cor_primaria || null };
+    }));
   } catch (err) {
     return sendError(res, 500, "Erro interno");
   }
@@ -3076,6 +3085,254 @@ app.post("/admin/impersonate", requireAdmin, async (req, res) => {
     return res.json({ success: true, token, restaurant: data });
   } catch (err) {
     return sendError(res, 500, "Erro interno");
+  }
+});
+
+/* ========================================
+   🤖 IA NO PAINEL ADMIN
+   - ler o cardápio de fotos/PDF (só lê e devolve o rascunho, não salva nada)
+   - importar os itens que o admin revisou
+   - buscar dados do restaurante na internet (só sugere, quem salva é o admin)
+======================================== */
+const IA_MODELO_ADMIN = process.env.OPENAI_MODEL_ADMIN || "gpt-5.6-luna";
+const uploadCardapioIA = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 10 } });
+const iaTexto = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+const iaPreco = (v) => {
+  const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", "."));
+  return Number.isFinite(n) && n >= 0 && n < 100000 ? Math.round(n * 100) / 100 : null;
+};
+
+const IA_CARDAPIO_SCHEMA = {
+  type: "object", additionalProperties: false, required: ["categorias", "observacoes"],
+  properties: {
+    observacoes: { type: "string" },
+    categorias: { type: "array", items: {
+      type: "object", additionalProperties: false, required: ["nome", "itens"],
+      properties: {
+        nome: { type: "string" },
+        itens: { type: "array", items: {
+          type: "object", additionalProperties: false, required: ["nome", "descricao", "preco", "variacoes"],
+          properties: {
+            nome: { type: "string" },
+            descricao: { type: "string" },
+            preco: { type: ["number", "null"] },
+            variacoes: { type: "array", items: {
+              type: "object", additionalProperties: false, required: ["nome", "preco"],
+              properties: { nome: { type: "string" }, preco: { type: ["number", "null"] } }
+            } }
+          }
+        } }
+      }
+    } }
+  }
+};
+
+const IA_CARDAPIO_PROMPT = `Você transcreve cardápios de restaurantes brasileiros para cadastro num sistema de pedidos.
+Regras:
+- Copie nomes e descrições como estão no cardápio, corrigindo só erros óbvios de leitura. Não invente itens, descrições nem preços.
+- Preço em reais como número (ex.: 32.9). Se o preço não estiver legível, use null.
+- Item com tamanhos ou versões de preços diferentes (P/M/G, broto/grande, 300ml/600ml, meia/inteira, 1 sabor/2 sabores) vira UM item com "variacoes"; nesse caso "preco" é o menor valor. Item de preço único fica com "variacoes" vazio.
+- Mantenha as categorias do cardápio (Pizzas, Lanches, Bebidas...). Se não houver categoria clara, use uma coerente com o item.
+- Ingredientes listados viram a descrição. Sem descrição, use "".
+- Adicionais avulsos (ex.: "adicional de bacon R$ 5") entram numa categoria "Adicionais".
+- Ignore o que não é item à venda: endereço, telefone, horário, avisos, promoções sem preço.
+- Se a mesma categoria aparecer em mais de uma página, junte numa só.
+- Em "observacoes", diga em uma frase o que ficou duvidoso (página cortada, preço ilegível etc.). Se nada, "".`;
+
+// POST - lê fotos/PDF do cardápio e devolve o rascunho (nada é salvo aqui)
+app.post("/admin/restaurants/:id/cardapio/ler", requireAdmin, limiterIA, uploadCardapioIA.array("arquivos", 10), async (req, res) => {
+  try {
+    const arquivos = req.files || [];
+    if (!arquivos.length) return sendError(res, 400, "Envie pelo menos uma foto ou PDF do cardápio");
+
+    const partes = [];
+    for (const f of arquivos) {
+      const tipo = await fileTypeFromBuffer(f.buffer);
+      const mime = tipo?.mime;
+      if (["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mime)) {
+        partes.push({ type: "input_image", image_url: `data:${mime};base64,${f.buffer.toString("base64")}`, detail: "high" });
+      } else if (mime === "application/pdf") {
+        partes.push({ type: "input_file", filename: f.originalname || "cardapio.pdf", file_data: `data:application/pdf;base64,${f.buffer.toString("base64")}` });
+      } else {
+        return sendError(res, 400, `Arquivo não suportado: ${f.originalname}. Use foto (JPG, PNG, WEBP) ou PDF.`);
+      }
+    }
+    partes.push({ type: "input_text", text: `São ${arquivos.length} arquivo(s) do mesmo cardápio. Leia tudo.` });
+
+    const inicio = Date.now();
+    const r = await openai.responses.create({
+      model: IA_MODELO_ADMIN,
+      input: [{ role: "system", content: IA_CARDAPIO_PROMPT }, { role: "user", content: partes }],
+      text: { format: { type: "json_schema", name: "cardapio", strict: true, schema: IA_CARDAPIO_SCHEMA } },
+      max_output_tokens: 32000
+    });
+
+    let bruto = {};
+    try { bruto = JSON.parse(r.output_text || "{}"); } catch {}
+
+    // limpa e junta categorias repetidas
+    const porNome = new Map();
+    for (const c of bruto.categorias || []) {
+      const nomeCat = iaTexto(c.nome, 60) || "Geral";
+      const chave = nomeCat.toLowerCase();
+      if (!porNome.has(chave)) porNome.set(chave, { nome: nomeCat, itens: [] });
+      for (const i of c.itens || []) {
+        const nome = iaTexto(i.nome, 120);
+        if (!nome) continue;
+        const variacoes = (i.variacoes || [])
+          .map(v => ({ nome: iaTexto(v.nome, 60), preco: iaPreco(v.preco) }))
+          .filter(v => v.nome);
+        const precos = variacoes.map(v => v.preco).filter(p => p != null);
+        porNome.get(chave).itens.push({
+          nome,
+          descricao: iaTexto(i.descricao, 600),
+          preco: iaPreco(i.preco) ?? (precos.length ? Math.min(...precos) : null),
+          variacoes
+        });
+      }
+    }
+    const categorias = [...porNome.values()].filter(c => c.itens.length);
+    const total = categorias.reduce((s, c) => s + c.itens.length, 0);
+    console.log(`🤖 IA cardápio: ${total} itens em ${categorias.length} categorias (${arquivos.length} arquivos, ${Date.now() - inicio}ms)`);
+
+    await logAdminAction(req.auth.email, "ia_ler_cardapio", { restaurant_id: req.params.id, arquivos: arquivos.length, itens: total });
+    if (!total) return sendError(res, 422, "A IA não encontrou itens. Tente fotos mais nítidas, com o cardápio inteiro aparecendo.");
+    return res.json({ categorias, observacoes: iaTexto(bruto.observacoes, 300), total });
+  } catch (err) {
+    console.error("❌ IA ler cardápio:", err.message);
+    return sendError(res, 500, "A IA não conseguiu ler o cardápio agora. Tente de novo em instantes.");
+  }
+});
+
+// POST - grava os itens revisados no cardápio (cria as categorias que faltarem)
+app.post("/admin/restaurants/:id/cardapio/importar", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const brutos = Array.isArray(req.body?.itens) ? req.body.itens : [];
+    if (!brutos.length) return sendError(res, 400, "Nenhum item para importar");
+    if (brutos.length > 500) return sendError(res, 400, "Máximo de 500 itens por vez");
+
+    const { data: rest } = await supabase.from("restaurants").select("id").eq("id", id).maybeSingle();
+    if (!rest) return sendError(res, 404, "Restaurante não encontrado");
+
+    const itens = brutos.map(i => {
+      const opcoes = (Array.isArray(i.variacoes) ? i.variacoes : [])
+        .map(v => ({ nome: iaTexto(v.nome, 60), preco: iaPreco(v.preco) ?? 0, texto_livre: false, filtro: "" }))
+        .filter(v => v.nome);
+      return {
+        nome: iaTexto(i.nome, 120),
+        descricao: iaTexto(i.descricao, 600) || null,
+        preco: iaPreco(i.preco) ?? (opcoes.length ? Math.min(...opcoes.map(o => o.preco)) : 0),
+        categoria: iaTexto(i.categoria, 60) || "Geral",
+        opcoes: opcoes.length ? opcoes : null
+      };
+    }).filter(i => i.nome);
+    if (!itens.length) return sendError(res, 400, "Nenhum item válido para importar");
+
+    // categorias que ainda não existem
+    const { data: cats } = await supabase.from("categorias").select("nome").eq("restaurant_id", id);
+    const existentes = new Set((cats || []).map(c => String(c.nome).trim().toLowerCase()));
+    const novas = [...new Map(itens.map(i => [i.categoria.toLowerCase(), i.categoria])).values()]
+      .filter(n => !existentes.has(n.toLowerCase()));
+    if (novas.length) {
+      const { error } = await supabase.from("categorias").insert(novas.map(nome => ({ restaurant_id: id, nome })));
+      if (error) return sendError(res, 500, "Erro ao criar categorias");
+    }
+
+    // itens entram depois dos que já existem
+    const { data: ult } = await supabase.from("cardapio").select("ordem").eq("restaurant_id", id).order("ordem", { ascending: false }).limit(1);
+    const base = (ult?.[0]?.ordem ?? 0) + 1;
+    const linhas = itens.map((i, k) => ({ restaurant_id: id, ...i, ordem: base + k }));
+    for (let k = 0; k < linhas.length; k += 100) {
+      const { error } = await supabase.from("cardapio").insert(linhas.slice(k, k + 100));
+      if (error) {
+        console.error("❌ importar cardápio:", error.message);
+        return sendError(res, 500, `Erro ao salvar itens (${k} de ${linhas.length} já foram salvos)`);
+      }
+    }
+
+    // se o restaurante já tem uma ordem de categorias, as novas entram no fim
+    if (novas.length) {
+      const { data: cfg } = await supabase.from("restaurante_config").select("categorias_ordem").eq("restaurant_id", id).maybeSingle();
+      const ordem = Array.isArray(cfg?.categorias_ordem) ? cfg.categorias_ordem : [];
+      if (ordem.length) {
+        const usaObjeto = typeof ordem[0] === "object";
+        const atualizada = [...ordem, ...novas.map(nome => usaObjeto ? { nome } : nome)];
+        await supabase.from("restaurante_config").update({ categorias_ordem: atualizada }).eq("restaurant_id", id);
+      }
+    }
+
+    await logAdminAction(req.auth.email, "ia_importar_cardapio", { restaurant_id: id, itens: linhas.length, categorias_novas: novas });
+    return res.json({ success: true, criados: linhas.length, categorias_novas: novas });
+  } catch (err) {
+    console.error("❌ importar cardápio:", err.message);
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+const IA_BUSCA_SCHEMA = {
+  type: "object", additionalProperties: false,
+  required: ["encontrado", "nome", "endereco", "telefone", "instagram", "horarios", "google_maps_url", "observacao"],
+  properties: {
+    encontrado: { type: "boolean" },
+    nome: { type: "string" },
+    endereco: { type: "string" },
+    telefone: { type: "string" },
+    instagram: { type: "string" },
+    google_maps_url: { type: "string" },
+    observacao: { type: "string" },
+    horarios: { type: "array", items: {
+      type: "object", additionalProperties: false, required: ["dia_semana", "abertura", "fechamento"],
+      properties: { dia_semana: { type: "integer" }, abertura: { type: "string" }, fechamento: { type: "string" } }
+    } }
+  }
+};
+
+// POST - procura o restaurante na internet e devolve sugestões (nada é salvo aqui)
+app.post("/admin/ia/buscar-restaurante", requireAdmin, limiterIA, async (req, res) => {
+  try {
+    const nome = iaTexto(req.body?.nome, 100), cidade = iaTexto(req.body?.cidade, 80);
+    if (!nome || !cidade) return sendError(res, 400, "Informe o nome e a cidade");
+
+    const r = await openai.responses.create({
+      model: IA_MODELO_ADMIN,
+      tools: [{ type: "web_search" }],
+      input: [
+        { role: "system", content: `Você pesquisa na internet dados públicos de um restaurante brasileiro para preencher um cadastro.
+Use o Google Maps/Perfil da Empresa, o Instagram e o site oficial. Só preencha o que encontrar com segurança; o que não achar fica "" (ou [] nos horários).
+- telefone: só números com DDD (ex.: 14998887777).
+- instagram: só o @usuario, sem link.
+- horarios: dia_semana 0=domingo ... 6=sábado; abertura e fechamento em HH:MM (24h). Dia fechado não entra. Dois turnos no mesmo dia = duas linhas.
+- google_maps_url: link do restaurante no Google Maps, se achar.
+- encontrado = false se não tiver certeza de que é o restaurante certo nessa cidade.
+- observacao: uma frase curta sobre a fonte ou o que ficou duvidoso.` },
+        { role: "user", content: `Restaurante: ${nome}\nCidade: ${cidade}` }
+      ],
+      text: { format: { type: "json_schema", name: "restaurante", strict: true, schema: IA_BUSCA_SCHEMA } },
+      max_output_tokens: 6000
+    });
+
+    let d = {};
+    try { d = JSON.parse(r.output_text || "{}"); } catch {}
+    const hora = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(v)) ? String(v) : null;
+    const horarios = (d.horarios || [])
+      .map(h => ({ dia_semana: Number(h.dia_semana), abertura: hora(h.abertura), fechamento: hora(h.fechamento) }))
+      .filter(h => h.dia_semana >= 0 && h.dia_semana <= 6 && h.abertura && h.fechamento);
+
+    await logAdminAction(req.auth.email, "ia_buscar_restaurante", { nome, cidade, encontrado: !!d.encontrado });
+    return res.json({
+      encontrado: !!d.encontrado,
+      nome: iaTexto(d.nome, 100),
+      endereco: iaTexto(d.endereco, 200),
+      telefone: String(d.telefone || "").replace(/\D/g, "").slice(0, 13),
+      instagram: iaTexto(d.instagram, 60).replace(/^.*instagram\.com\//i, "").replace(/[/?].*$/, "").replace(/^@?/, d.instagram ? "@" : ""),
+      google_maps_url: /^https:\/\//.test(d.google_maps_url || "") ? iaTexto(d.google_maps_url, 300) : "",
+      horarios,
+      observacao: iaTexto(d.observacao, 200)
+    });
+  } catch (err) {
+    console.error("❌ IA buscar restaurante:", err.message);
+    return sendError(res, 500, "A busca na internet não funcionou agora. Tente de novo em instantes.");
   }
 });
 
