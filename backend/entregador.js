@@ -22,7 +22,7 @@ import rateLimit from "express-rate-limit";
 
 let C = null; // contexto que o server.js passa no registrar
 
-const SEL_PEDIDO = "id, restaurant_id, order_number, client_name, client_phone, status, itens, total_price, taxa_entrega, address, payment_method, notes, created_at, mounting_at, delivering_at, delivered_at, entregador_id, rodada_id, service_type, tracking_token";
+const SEL_PEDIDO = "id, restaurant_id, order_number, client_name, client_phone, status, itens, total_price, taxa_entrega, address, payment_method, notes, created_at, mounting_at, delivering_at, delivered_at, entregador_id, rodada_id, service_type, tracking_token, destino_lat, destino_lng, destino_fonte";
 const OTP_MINUTOS = 5, OTP_MINUTOS_CAIXA = 15, OTP_MAX_TENTATIVAS = 5;
 const TOKEN_TTL = "30d";
 const segredo = () => `${process.env.JWT_SECRET}:entregador`;
@@ -92,8 +92,42 @@ function enderecoPartes(addr) {
   return { rua: partes[0] || "", bairro: partes[1] || "", resto: partes.slice(2).join(" · "), completo: String(addr || "") };
 }
 
+/* ---------------- casa exata (de graça) ----------------
+   1) o cliente toca "Estou em casa" no rastreio → o GPS dele vai pro pedido
+   2) o entregador toca "Entregue" na porta → o GPS dele fica salvo pra esse endereço
+   Os dois valem pros próximos pedidos do mesmo endereço. Sem nenhum, o app procura pelo endereço escrito. */
+const chaveEndereco = (addr) => String(addr || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .replace(/\b\d{5}-?\d{3}\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+const distMetros = (a, b) => { const R = 6371000, rad = (x) => (x * Math.PI) / 180; const dl = rad(b.lat - a.lat), dg = rad(b.lng - a.lng); const h = Math.sin(dl / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dg / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+
+// ponto da casa de cada pedido: o do próprio pedido, ou o salvo pra esse endereço
+async function destinos(rid, pedidos) {
+  const mapa = new Map();
+  const faltam = [];
+  for (const o of pedidos || []) {
+    if (o.destino_lat != null) mapa.set(o.id, { lat: o.destino_lat, lng: o.destino_lng, fonte: o.destino_fonte || "cliente" });
+    else if (o.address) faltam.push(o);
+  }
+  const chaves = [...new Set(faltam.map((o) => chaveEndereco(o.address)).filter(Boolean))];
+  if (chaves.length) {
+    const { data } = await C.supabase.from("locais_entrega").select("endereco_chave, lat, lng, fonte").eq("restaurant_id", rid).in("endereco_chave", chaves);
+    const porChave = new Map((data || []).map((l) => [l.endereco_chave, l]));
+    for (const o of faltam) { const l = porChave.get(chaveEndereco(o.address)); if (l) mapa.set(o.id, { lat: l.lat, lng: l.lng, fonte: l.fonte }); }
+  }
+  return mapa;
+}
+
+// guarda o ponto da casa pra esse endereço (se já tinha um bem diferente, só troca se a fonte nova for o cliente)
+async function salvarLocal(rid, addr, telefone, p, fonte) {
+  const chave = chaveEndereco(addr);
+  if (!chave || !Number.isFinite(p?.lat) || !Number.isFinite(p?.lng)) return;
+  const { data: atual } = await C.supabase.from("locais_entrega").select("lat, lng, fonte").eq("restaurant_id", rid).eq("endereco_chave", chave).maybeSingle();
+  if (atual && fonte === "entregador" && distMetros(atual, p) > 300) return; // marcou "Entregue" longe da casa: não estraga o ponto
+  await C.supabase.from("locais_entrega").upsert({ restaurant_id: rid, endereco_chave: chave, telefone: digitos(telefone) || null, lat: p.lat, lng: p.lng, fonte, atualizado_em: new Date().toISOString() }, { onConflict: "restaurant_id,endereco_chave" });
+}
+
 // o que o app do entregador recebe de cada pedido
-function pedidoParaApp(o) {
+function pedidoParaApp(o, destino) {
   const itens = Array.isArray(o.itens) ? o.itens : [];
   const tel = digitos(o.client_phone).replace(/^55(?=\d{10,11}$)/, "");
   return {
@@ -111,7 +145,8 @@ function pedidoParaApp(o) {
     pronto_em: o.mounting_at || o.created_at,
     saiu_em: o.delivering_at || null,
     entregue_em: o.delivered_at || null,
-    rodada_id: o.rodada_id || null
+    rodada_id: o.rodada_id || null,
+    destino: destino || (o.destino_lat != null ? { lat: o.destino_lat, lng: o.destino_lng, fonte: o.destino_fonte } : null)
   };
 }
 
@@ -533,7 +568,8 @@ export function registrarEntregador(ctx) {
       supabase.from("orders").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).in("status", ["pending", "preparing"]).ilike("service_type", "delivery")
     ]);
     if (error) return erro(res, 500, "Não deu pra carregar os pedidos", error);
-    return res.json({ prontos: (prontos || []).map(pedidoParaApp), em_preparo: count || 0 });
+    const dest = await destinos(rid, prontos);
+    return res.json({ prontos: (prontos || []).map((o) => pedidoParaApp(o, dest.get(o.id))), em_preparo: count || 0 });
   });
 
   // o que está com ele agora + rodadas esperando acerto
@@ -551,7 +587,7 @@ export function registrarEntregador(ctx) {
       pedidosAcerto = data || [];
     }
     return res.json({
-      na_rua: (naRua || []).map(pedidoParaApp),
+      na_rua: await (async () => { const dest = await destinos(e.restaurant_id, naRua); return (naRua || []).map((o) => pedidoParaApp(o, dest.get(o.id))); })(),
       acertos: (rodadas || []).filter((r) => r.status === "a_acertar").map((r) => ({
         id: r.id, voltou_em: r.voltou_em, dinheiro: r2(r.dinheiro),
         pedidos: pedidosAcerto.filter((p) => p.rodada_id === r.id && pagamentoInfo(p).dinheiro > 0).map((p) => ({ numero: p.order_number, dinheiro: pagamentoInfo(p).dinheiro }))
@@ -572,8 +608,12 @@ export function registrarEntregador(ctx) {
   app.post("/api/v1/entregador/entregue", async (req, res) => {
     try {
       const id = String(req.body?.id || "");
-      const { data: o } = await supabase.from("orders").select("id, status, entregador_id, restaurant_id").eq("id", id).maybeSingle();
+      const { data: o } = await supabase.from("orders").select("id, status, entregador_id, restaurant_id, address, client_phone").eq("id", id).maybeSingle();
       if (!o || o.entregador_id !== req.ent.id) return res.status(404).json({ error: "Esse pedido não está com você" });
+      // tocou "Entregue" na porta: o GPS dele vira a casa desse endereço (só se o sinal estiver bom)
+      const gps = { lat: Number(req.body?.lat), lng: Number(req.body?.lng) };
+      if (Number.isFinite(gps.lat) && Number.isFinite(gps.lng) && Number(req.body?.precisao ?? 999) <= 60 && o.address)
+        salvarLocal(o.restaurant_id, o.address, o.client_phone, gps, "entregador").catch((e) => console.error("⚠️ salvar casa:", e.message));
       if (o.status === "finished") return res.json({ success: true });
       if (o.status !== "delivering") return res.status(409).json({ error: "Esse pedido não está mais em entrega" });
       // finaliza pela mesma rota do Kanban: caixa, nota fiscal e pesquisa de satisfação continuam iguais
@@ -642,7 +682,7 @@ export function registrarEntregador(ctx) {
     try {
       const codigo = String(req.params.codigo || "");
       if (!/^[a-f0-9]{20}$/.test(codigo)) return res.status(404).json({ error: "Pedido não encontrado" });
-      const { data: o } = await supabase.from("orders").select("id, restaurant_id, order_number, client_name, status, address, created_at, confirmed_at, preparing_at, mounting_at, delivering_at, delivered_at, cancelled_at, entregador_id, ordem_rota, service_type, total_price, itens")
+      const { data: o } = await supabase.from("orders").select("id, restaurant_id, order_number, client_name, status, address, created_at, confirmed_at, preparing_at, mounting_at, delivering_at, delivered_at, cancelled_at, entregador_id, ordem_rota, service_type, total_price, itens, destino_lat, destino_lng, destino_fonte")
         .eq("tracking_token", codigo).maybeSingle();
       if (!o) return res.status(404).json({ error: "Pedido não encontrado" });
       let entregador = null, posicao = null, antes = null;
@@ -668,9 +708,30 @@ export function registrarEntregador(ctx) {
           recebido_em: o.confirmed_at || o.created_at, preparo_em: o.preparing_at, pronto_em: o.mounting_at, cancelado_em: o.cancelled_at, total: r2(o.total_price),
           itens: (Array.isArray(o.itens) ? o.itens : []).map((i) => ({ nome: i.name || i.nome || "Item", qtd: Number(i.qty || i.quantity || i.quantidade || 1) })) },
         restaurante: { nome: rest.nome, logo_url: rest.logo_url, cor: rest.cor, endereco: rest.endereco, telefone: rest.telefone },
-        entregador, posicao, antes
+        entregador, posicao, antes,
+        destino: (await destinos(o.restaurant_id, [o])).get(o.id) || null
       });
     } catch (e) { return erro(res, 500, "Não deu pra carregar o pedido", e); }
+  });
+
+  // "Estou em casa": o cliente manda o GPS do celular pro pedido (e fica salvo pros próximos pedidos)
+  app.post("/api/v1/entrega/local/:codigo", async (req, res) => {
+    try {
+      const codigo = String(req.params.codigo || "");
+      const p = { lat: Number(req.body?.lat), lng: Number(req.body?.lng) };
+      const precisao = Number(req.body?.precisao ?? 999);
+      if (!/^[a-f0-9]{20}$/.test(codigo) || !Number.isFinite(p.lat) || !Number.isFinite(p.lng) || Math.abs(p.lat) > 90 || Math.abs(p.lng) > 180)
+        return res.status(400).json({ error: "Localização inválida" });
+      if (precisao > 100) return res.status(400).json({ error: "O sinal do GPS está fraco. Tente de novo perto de uma janela." });
+      const { data: o } = await supabase.from("orders").select("id, restaurant_id, status, address, client_phone, entregador_id, created_at").eq("tracking_token", codigo).maybeSingle();
+      if (!o || ["finished", "cancelled", "canceled"].includes(o.status) || Date.now() - Date.parse(o.created_at) > 6 * 3600 * 1000)
+        return res.status(404).json({ error: "Esse pedido não aceita mais localização" });
+      await supabase.from("orders").update({ destino_lat: p.lat, destino_lng: p.lng, destino_fonte: "cliente" }).eq("id", o.id);
+      if (o.address) await salvarLocal(o.restaurant_id, o.address, o.client_phone, p, "cliente");
+      io.to(`acomp:${o.id}`).emit("atualizar");
+      if (o.entregador_id) { _cacheAtivos.delete(o.entregador_id); io.to(`entd:${o.entregador_id}`).emit("minhas_mudou", { id: o.id }); }
+      return res.json({ success: true });
+    } catch (e) { return erro(res, 500, "Não deu pra salvar sua localização", e); }
   });
 
   // o cliente entrou na conta (login do WhatsApp no app de pedidos): os pedidos dele em andamento,
