@@ -1,0 +1,212 @@
+/* FluxON Entregas — app do entregador.
+   Feito pra ser lido na rua: letra grande, contraste alto, botões grandes (dá pra apertar de luva).
+   Tipografia Barlow: a família foi desenhada a partir das placas de rua, por isso o bairro aparece em Barlow Condensed.
+   --acc é a cor do restaurante (sem ela, o vermelho FluxON). Tema claro/escuro segue o celular. */
+:root{
+  --bg:#16171a; --bg-2:#1f2125; --bg-3:#292c31; --line:#34373d; --line-2:#474a52;
+  --text:#f4f5f7; --muted:#a3a7af; --muted-2:#7c8089;
+  --acc:#e5484d; --acc-txt:#fff;
+  --dinheiro:#34d27b; --troco:#ffb224; --info:#5aa7ff; --perigo:#ff6369;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
+  --abas-h:66px; --r:16px;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){
+  :root{
+    --bg:#f2f2ef; --bg-2:#ffffff; --bg-3:#ecebe7; --line:#dddcd6; --line-2:#c6c5bd;
+    --text:#141517; --muted:#5d6068; --muted-2:#82858c;
+    --dinheiro:#0e8a4a; --troco:#a35c00; --info:#1060c8; --perigo:#c9252c;
+    color-scheme:light;
+  }
+  .btn.ok{color:#fff}
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 var(--body);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+body{min-height:100dvh;overscroll-behavior-y:none}
+.hidden{display:none!important}
+.muted{color:var(--muted)}
+.pequeno{font-size:13.5px}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ---------- botões e campos ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:12px 18px;border-radius:14px;border:1px solid var(--line-2);background:var(--bg-3);font-weight:700;font-size:16px;text-decoration:none;color:var(--text);transition:transform .1s,background .15s}
+.btn:active{transform:scale(.97)}
+.btn.primario{background:var(--acc);color:var(--acc-txt);border-color:transparent}
+.btn.ok{background:var(--dinheiro);color:#04210f;border-color:transparent}
+.btn.grande{min-height:58px;font-size:18px;border-radius:16px}
+.btn.largo{width:100%}
+.btn.link{background:none;border:none;color:var(--muted);min-height:44px;font-weight:600}
+.btn[disabled]{opacity:.55;pointer-events:none}
+label{display:grid;gap:8px;font-size:14px;font-weight:600;color:var(--muted)}
+input{font:inherit;font-size:20px;color:var(--text);background:var(--bg-2);border:2px solid var(--line-2);border-radius:14px;padding:14px 16px;width:100%}
+input:focus{outline:none;border-color:var(--acc)}
+
+/* ---------- login ---------- */
+.login{min-height:100dvh;display:grid;place-items:center;padding:calc(24px + var(--safe-t)) max(18px,env(safe-area-inset-right)) calc(24px + var(--safe-b)) max(18px,env(safe-area-inset-left));
+  background:radial-gradient(90% 60% at 50% 0%,color-mix(in srgb,var(--acc) 26%,transparent),transparent 70%),var(--bg)}
+.login-in{width:100%;max-width:400px;display:grid;gap:18px}
+.login-marca{display:flex;align-items:center;gap:10px;font:700 20px var(--display);letter-spacing:.01em}
+.login-marca b{color:var(--acc)}
+.login-icone{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:26px;background:var(--bg-2);border:1px solid var(--line)}
+.login-passo{display:grid;gap:14px}
+.login h1{margin:8px 0 0;font:800 40px/1 var(--display);letter-spacing:-.01em}
+.login p{margin:0}
+.codigo{text-align:center;font:700 34px var(--display);letter-spacing:.4em;padding-left:.4em}
+.msg{margin:0;min-height:22px;font-weight:600;color:var(--perigo);text-align:center}
+.msg.ok{color:var(--dinheiro)}
+.lista-contas{display:grid;gap:10px}
+.conta{display:flex;align-items:center;gap:14px;width:100%;padding:14px;border-radius:16px;border:1px solid var(--line-2);background:var(--bg-2);text-align:left}
+.conta b{font:700 22px var(--display)}
+
+/* ---------- topo ---------- */
+.app{min-height:100dvh;padding-bottom:calc(var(--abas-h) + var(--safe-b) + 12px)}
+.topo{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
+  padding:calc(10px + var(--safe-t)) max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));
+  background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.topo-logo{width:40px;height:40px;border-radius:12px;flex-shrink:0;background:var(--acc) center/cover no-repeat;display:grid;place-items:center;font:800 17px var(--display);color:var(--acc-txt)}
+.topo-nome{flex:1;min-width:0;display:grid;line-height:1.15}
+.topo-nome b{font:700 19px var(--display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topo-nome small{color:var(--muted);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dispo{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 14px;border-radius:999px;border:1px solid var(--line-2);background:var(--bg-2);font-weight:700;font-size:14.5px;white-space:nowrap}
+.dispo-bola{width:12px;height:12px;border-radius:50%;background:var(--muted-2)}
+.dispo[aria-checked="true"]{border-color:color-mix(in srgb,var(--dinheiro) 60%,transparent);background:color-mix(in srgb,var(--dinheiro) 14%,var(--bg-2))}
+.dispo[aria-checked="true"] .dispo-bola{background:var(--dinheiro);box-shadow:0 0 0 4px color-mix(in srgb,var(--dinheiro) 25%,transparent)}
+.faixa{margin:0;padding:10px 16px;background:var(--troco);color:#231500;font-weight:700;font-size:14px;text-align:center}
+
+/* ---------- abas ---------- */
+.aba{padding:16px max(16px,env(safe-area-inset-right)) 8px max(16px,env(safe-area-inset-left));max-width:640px;margin:0 auto}
+.aba-cabeca{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:2px 0 12px}
+.aba-cabeca h2{margin:0;white-space:nowrap;font:800 26px/1.1 var(--display)}
+.contagem{color:var(--muted);font-weight:600;font-size:14.5px;text-align:right}
+.abas{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(3,1fr);
+  padding:6px max(8px,env(safe-area-inset-right)) calc(6px + var(--safe-b)) max(8px,env(safe-area-inset-left));
+  background:color-mix(in srgb,var(--bg-2) 96%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line)}
+.tab{position:relative;display:grid;justify-items:center;gap:2px;min-height:54px;padding:6px 4px;border:0;border-radius:12px;background:none;color:var(--muted);font-weight:700;font-size:13.5px}
+.tab-ic{font-size:21px;line-height:1;filter:grayscale(1);opacity:.75}
+.tab.ativo{color:var(--text);background:var(--bg-3)}
+.tab.ativo .tab-ic{filter:none;opacity:1}
+.badge{position:absolute;top:2px;left:calc(50% + 8px);min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--acc);color:var(--acc-txt);font:700 13px/22px var(--body);font-style:normal}
+
+.lista{display:grid;gap:12px}
+
+/* ---------- card do pedido ---------- */
+.pedido{position:relative;display:grid;gap:10px;padding:14px 14px 14px 16px;border-radius:var(--r);background:var(--bg-2);border:2px solid var(--line);text-align:left;width:100%;transition:border-color .15s,transform .15s,opacity .25s}
+.pedido.sel{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 9%,var(--bg-2))}
+.pedido.saindo{opacity:0;transform:translateX(30px)}
+.ped-topo{display:flex;align-items:center;gap:10px}
+.ped-num{font:800 20px var(--display)}
+.ped-tempo{color:var(--muted);font-size:14px;font-weight:600}
+.ped-tempo.demora{color:var(--troco)}
+.ped-check{margin-left:auto;width:34px;height:34px;border-radius:50%;border:2px solid var(--line-2);display:grid;place-items:center;font-weight:800;color:transparent;flex-shrink:0;transition:all .15s}
+.pedido.sel .ped-check{background:var(--acc);border-color:var(--acc);color:var(--acc-txt)}
+.ped-bairro{margin:0;font:800 27px/1.05 var(--display);letter-spacing:-.005em;overflow-wrap:anywhere}
+.ped-rua{margin:-4px 0 0;color:var(--muted);font-size:15px;overflow-wrap:anywhere}
+.ped-itens{margin:0;color:var(--muted-2);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ped-obs{margin:0;padding:8px 10px;border-radius:10px;background:var(--bg-3);font-size:14.5px}
+
+/* o que fazer com o pagamento: a parte mais importante do card */
+.pag{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font-weight:700;font-size:16px;line-height:1.25}
+.pag-ic{font-size:20px;flex-shrink:0}
+.pag small{display:block;font-weight:600;font-size:14px;opacity:.9}
+.pag.dinheiro{background:color-mix(in srgb,var(--troco) 16%,transparent);color:var(--troco);border:1px solid color-mix(in srgb,var(--troco) 45%,transparent)}
+.pag.pago{background:color-mix(in srgb,var(--dinheiro) 13%,transparent);color:var(--dinheiro);border:1px solid color-mix(in srgb,var(--dinheiro) 40%,transparent)}
+.pag.cartao,.pag.pix,.pag.outro,.pag.vale,.pag.misto{background:color-mix(in srgb,var(--info) 13%,transparent);color:var(--info);border:1px solid color-mix(in srgb,var(--info) 40%,transparent)}
+.pag b{font-family:var(--display);font-size:20px;font-weight:800}
+
+/* ---------- barra de pegar ---------- */
+.barra-pegar{position:fixed;left:0;right:0;z-index:25;bottom:calc(var(--abas-h) + var(--safe-b));display:flex;align-items:center;gap:12px;
+  padding:12px max(16px,env(safe-area-inset-right)) 12px max(16px,env(safe-area-inset-left));background:var(--bg-2);border-top:1px solid var(--line);
+  box-shadow:0 -18px 30px -18px rgba(0,0,0,.45);transform:translateY(130%);transition:transform .25s cubic-bezier(.2,.9,.3,1.1)}
+.barra-pegar.on{transform:none}
+.barra-info{flex:1;min-width:0;font-size:14px;color:var(--muted);line-height:1.3}
+.barra-info b{display:block;color:var(--text);font:800 20px var(--display)}
+.barra-pegar .btn{flex-shrink:0;padding:0 24px}
+
+/* ---------- vazio ---------- */
+.vazio{display:grid;justify-items:center;gap:6px;text-align:center;padding:48px 20px;border:2px dashed var(--line);border-radius:20px}
+.vazio-icone{font-size:44px}
+.vazio b{font:700 22px var(--display)}
+.vazio p{margin:0}
+
+/* ---------- na rua ---------- */
+.resumo-rua{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;background:var(--bg-2);border:1px solid var(--line);font-weight:700;font-size:14.5px}
+.chip.dinheiro{color:var(--troco);border-color:color-mix(in srgb,var(--troco) 45%,transparent)}
+.chip.verde{color:var(--dinheiro);border-color:color-mix(in srgb,var(--dinheiro) 45%,transparent)}
+.mapa-caixa{position:relative;margin-bottom:10px}
+.mapa{height:min(42vh,300px);border-radius:var(--r);overflow:hidden;border:1px solid var(--line);background:var(--bg-3);z-index:1}
+@media (prefers-color-scheme:dark){.mapa .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9) saturate(.6)}}
+.mapa-centro{position:absolute;right:10px;bottom:10px;z-index:5;width:46px;height:46px;border-radius:12px;border:1px solid var(--line-2);background:var(--bg-2);font-size:22px;font-weight:700}
+.gps{position:absolute;left:10px;top:10px;z-index:5;padding:6px 10px;border-radius:999px;background:var(--bg-2);border:1px solid var(--line);font-size:13px;font-weight:700}
+.gps.ok{color:var(--dinheiro)}
+.gps.erro{color:var(--perigo)}
+.leaflet-container{font-family:var(--body)}
+.pino{display:grid;place-items:center;width:34px;height:34px;border-radius:50% 50% 50% 4px;transform:rotate(-45deg);background:var(--acc);border:3px solid #fff;box-shadow:0 4px 10px rgba(0,0,0,.35)}
+.pino span{transform:rotate(45deg);font:800 16px var(--display);color:#fff}
+.eu{width:22px;height:22px;border-radius:50%;background:var(--info);border:4px solid #fff;box-shadow:0 0 0 6px color-mix(in srgb,var(--info) 30%,transparent)}
+#btn-rota-todas{margin-bottom:14px}
+
+.entrega .ped-topo .ord{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--acc);color:var(--acc-txt);font:800 18px var(--display);flex-shrink:0}
+.entrega .cliente{font-weight:700;font-size:16px}
+.acoes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.acoes .btn{min-height:52px;padding:8px;font-size:15px;flex-direction:column;gap:2px}
+.acoes .btn span{font-size:20px;line-height:1}
+.menu-mais{background:none;border:0;color:var(--muted);font-weight:700;min-height:44px;margin-left:auto;padding:0 6px;font-size:22px}
+
+/* ---------- acerto (devolver dinheiro) ---------- */
+.acertos{display:grid;gap:12px;margin-bottom:14px}
+.acerto{padding:16px;border-radius:var(--r);background:color-mix(in srgb,var(--troco) 12%,var(--bg-2));border:2px solid color-mix(in srgb,var(--troco) 55%,transparent)}
+.acerto small{color:var(--troco);font-weight:700;font-size:14px}
+.acerto b{display:block;font:800 36px/1.05 var(--display);margin:2px 0 6px}
+.acerto p{margin:0;color:var(--muted);font-size:14.5px}
+.acerto .linhas{display:flex;flex-wrap:wrap;gap:6px 14px;margin:8px 0 10px;font-weight:600;font-size:14.5px}
+.acerto .espera{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--text)}
+.acerto .espera::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--troco);animation:pulsar 1.4s infinite}
+@keyframes pulsar{50%{opacity:.25}}
+
+/* ---------- meu dia ---------- */
+.total-dia{padding:20px;border-radius:20px;background:var(--bg-2);border:1px solid var(--line);margin-bottom:12px}
+.total-dia small{color:var(--muted);font-weight:700;font-size:14.5px}
+.total-dia .valor{display:block;font:800 52px/1 var(--display);margin:6px 0 10px;color:var(--dinheiro);font-variant-numeric:tabular-nums}
+.total-dia .conta-linha{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-weight:600}
+.total-dia .conta-linha span:last-child{font-variant-numeric:tabular-nums}
+.bloco{padding:16px;border-radius:var(--r);background:var(--bg-2);border:1px solid var(--line);margin-bottom:12px}
+.bloco h3{margin:0 0 10px;font:700 21px var(--display)}
+.linha{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.linha:first-of-type{border-top:0}
+.linha .hora{color:var(--muted);font-variant-numeric:tabular-nums;font-weight:600;width:48px;flex-shrink:0}
+.linha .meio{flex:1;min-width:0}
+.linha .meio b{display:block}
+.linha .meio small{color:var(--muted)}
+.linha .direita{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dia-pe{display:grid;gap:10px;margin-top:6px}
+
+/* ---------- folha (janela de baixo) ---------- */
+.folha-fundo{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.5)}
+.folha{position:fixed;left:0;right:0;bottom:0;z-index:41;max-height:90dvh;overflow:auto;max-width:640px;margin:0 auto;
+  padding:8px max(18px,env(safe-area-inset-right)) calc(18px + var(--safe-b)) max(18px,env(safe-area-inset-left));
+  background:var(--bg-2);border-radius:24px 24px 0 0;border:1px solid var(--line);border-bottom:0;animation:subir .25s cubic-bezier(.2,.9,.3,1.05)}
+@keyframes subir{from{transform:translateY(100%)}}
+.folha-alca{width:44px;height:5px;border-radius:3px;background:var(--line-2);margin:4px auto 12px}
+.folha h3{margin:0 0 6px;font:800 28px/1.1 var(--display)}
+.folha p{margin:0 0 14px;color:var(--muted)}
+.folha .botoes{display:grid;gap:10px;margin-top:16px}
+.cobrar{padding:16px;border-radius:16px;margin:6px 0 4px}
+.cobrar small{display:block;font-weight:700;font-size:14.5px}
+.cobrar b{display:block;font:800 40px/1.05 var(--display)}
+.cobrar.dinheiro{background:color-mix(in srgb,var(--troco) 14%,transparent);color:var(--troco)}
+.cobrar.pago{background:color-mix(in srgb,var(--dinheiro) 13%,transparent);color:var(--dinheiro)}
+.cobrar.outro{background:color-mix(in srgb,var(--info) 13%,transparent);color:var(--info)}
+.opcoes-motivo{display:grid;gap:8px}
+.opcoes-motivo .btn{justify-content:flex-start}
+
+/* ---------- toast ---------- */
+.toast{position:fixed;left:50%;top:calc(12px + var(--safe-t));z-index:60;transform:translate(-50%,-160%);max-width:calc(100% - 32px);width:max-content;
+  padding:13px 18px;border-radius:14px;background:var(--text);color:var(--bg);font-weight:700;font-size:15.5px;box-shadow:0 14px 30px -10px rgba(0,0,0,.5);transition:transform .3s cubic-bezier(.2,.9,.3,1.15)}
+.toast.on{transform:translate(-50%,0)}
+.toast.ruim{background:var(--perigo);color:#fff}
+.toast.bom{background:var(--dinheiro);color:#04210f}

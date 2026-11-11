@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FluxON Entregas</title>
+<meta name="theme-color" content="#16171a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Entregas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<main id="tela-login" class="login hidden">
+  <div class="login-in">
+    <div class="login-marca"><span class="login-icone" aria-hidden="true">🛵</span><span>FluxON <b>Entregas</b></span></div>
+
+    <form id="form-tel" class="login-passo" novalidate>
+      <h1>Bora rodar?</h1>
+      <p class="muted">Entre com o WhatsApp que o restaurante cadastrou. O código chega por lá.</p>
+      <label>Seu WhatsApp
+        <input id="in-tel" inputmode="tel" autocomplete="tel" placeholder="(14) 99999-9999" maxlength="15">
+      </label>
+      <button class="btn primario grande" type="submit" id="btn-tel">Receber código</button>
+    </form>
+
+    <form id="form-cod" class="login-passo hidden" novalidate>
+      <h1>Digite o código</h1>
+      <p class="muted" id="cod-dica">Mandamos 6 números no seu WhatsApp.</p>
+      <input id="in-cod" class="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" aria-label="Código de 6 números">
+      <button class="btn primario grande" type="submit" id="btn-cod">Entrar</button>
+      <p class="muted pequeno">Não chegou? Peça o código pro caixa: ele gera na tela de Entregadores do FluxON.</p>
+      <button class="btn link" type="button" id="btn-voltar-tel">Trocar número</button>
+    </form>
+
+    <div id="passo-contas" class="login-passo hidden">
+      <h1>Onde você vai rodar hoje?</h1>
+      <p class="muted">Seu número está em mais de um restaurante.</p>
+      <div id="lista-contas" class="lista-contas"></div>
+    </div>
+
+    <p class="msg" id="login-msg" role="alert"></p>
+  </div>
+</main>
+
+<!-- ============ APP ============ -->
+<div id="tela-app" class="app hidden">
+  <header class="topo">
+    <span class="topo-logo" id="topo-logo" aria-hidden="true"></span>
+    <div class="topo-nome">
+      <b id="topo-rest">Restaurante</b>
+      <small id="topo-eu">Entregador</small>
+    </div>
+    <button class="dispo" id="btn-dispo" type="button" role="switch" aria-checked="false">
+      <span class="dispo-bola" aria-hidden="true"></span><span id="dispo-txt">Em pausa</span>
+    </button>
+  </header>
+
+  <div id="faixa-conexao" class="faixa hidden" role="status">Sem internet. Tentando reconectar…</div>
+
+  <!-- PEDIDOS (fila) -->
+  <section id="aba-pedidos" class="aba" aria-labelledby="tab-pedidos">
+    <div class="aba-cabeca">
+      <h2>Prontos pra sair</h2>
+      <span class="contagem" id="fila-preparo"></span>
+    </div>
+    <div id="fila-lista" class="lista"></div>
+  </section>
+
+  <!-- NA RUA -->
+  <section id="aba-rua" class="aba hidden" aria-labelledby="tab-rua">
+    <div id="acertos" class="acertos"></div>
+    <div id="rua-vazio" class="vazio hidden">
+      <span class="vazio-icone" aria-hidden="true">🛵</span>
+      <b>Nenhuma entrega com você</b>
+      <p class="muted">Pegue os pedidos na aba Pedidos.</p>
+    </div>
+    <div id="rua-conteudo" class="hidden">
+      <div class="resumo-rua" id="resumo-rua"></div>
+      <div class="mapa-caixa">
+        <div id="mapa" class="mapa" aria-label="Mapa com você e as entregas"></div>
+        <button class="mapa-centro" id="btn-centralizar" type="button" aria-label="Centralizar no mapa">◎</button>
+        <div class="gps" id="gps"></div>
+      </div>
+      <button class="btn largo" type="button" id="btn-rota-todas">🧭 Rota com todas no Google Maps</button>
+      <div id="rua-lista" class="lista"></div>
+    </div>
+  </section>
+
+  <!-- MEU DIA -->
+  <section id="aba-dia" class="aba hidden" aria-labelledby="tab-dia">
+    <div id="dia-conteudo"></div>
+    <div class="dia-pe">
+      <button class="btn" type="button" id="btn-instalar" hidden>📲 Instalar o app no celular</button>
+      <button class="btn" type="button" id="btn-trocar-conta" hidden>Trocar de restaurante</button>
+      <button class="btn link" type="button" id="btn-sair">Sair</button>
+    </div>
+  </section>
+
+  <!-- barra de pegar pedidos -->
+  <div class="barra-pegar" id="barra-pegar" aria-live="polite">
+    <div class="barra-info" id="barra-info"></div>
+    <button class="btn primario grande" type="button" id="btn-pegar">Pegar</button>
+  </div>
+
+  <nav class="abas" aria-label="Telas">
+    <button type="button" class="tab ativo" id="tab-pedidos" data-aba="pedidos"><span class="tab-ic" aria-hidden="true">📋</span>Pedidos<em class="badge hidden" id="badge-pedidos"></em></button>
+    <button type="button" class="tab" id="tab-rua" data-aba="rua"><span class="tab-ic" aria-hidden="true">🛵</span>Na rua<em class="badge hidden" id="badge-rua"></em></button>
+    <button type="button" class="tab" id="tab-dia" data-aba="dia"><span class="tab-ic" aria-hidden="true">💰</span>Meu dia</button>
+  </nav>
+</div>
+
+<!-- janela de baixo (confirmar entrega, rota, localização…) -->
+<div class="folha-fundo hidden" id="folha-fundo"></div>
+<section class="folha" id="folha" role="dialog" aria-modal="true" aria-labelledby="folha-titulo" hidden>
+  <div class="folha-alca" aria-hidden="true"></div>
+  <div id="folha-corpo"></div>
+</section>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="comum.js"></script>
+<script src="login.js"></script>
+<script src="mapa.js"></script>
+<script src="pegar.js"></script>
+<script src="troco.js"></script>
+<script src="rua.js"></script>
+<script src="ganhos.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
