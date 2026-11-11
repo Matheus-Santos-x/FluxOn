@@ -187,7 +187,8 @@ const mapa = (() => {
     rotaChave = chave;
     try {
       const pontos = [];
-      for (const p of lista) { const c = await geocodificar(p.endereco); if (c) pontos.push({ id: p.id, ...c }); }
+      // o ponto da casa marcado (pelo cliente ou numa entrega anterior) vale mais que procurar pelo endereço
+      for (const p of lista) { const c = p.destino || await geocodificar(p.endereco); if (c) pontos.push({ id: p.id, lat: c.lat, lng: c.lng }); }
       if (S.naRua.map((x) => x.id).join() !== chave) return; // a lista mudou no meio
       const origem = pos || lojaPos;
       let ordem = pontos, caminho = null;
