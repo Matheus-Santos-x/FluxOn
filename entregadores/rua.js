@@ -18,7 +18,6 @@ const rua = (() => {
   }
   function mudou() { clearTimeout(tRec); tRec = setTimeout(recarregar, 200); }
 
-  const linkMaps = (end) => `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(end.completo)}`;
   const linkZap = (tel, msg) => `https://wa.me/55${tel}?text=${encodeURIComponent(msg)}`;
 
   // entregas na ordem da rota (a mais perto primeiro); sem rota ainda, na ordem em que pegou
