@@ -28,8 +28,8 @@ const pegar = (() => {
           <span class="ped-tempo${min > 10 ? " demora" : ""}">pronto ${haQuanto(p.pronto_em)}</span>
           <span class="ped-check" aria-hidden="true">✓</span>
         </div>
-        <p class="ped-bairro">${esc(p.endereco.bairro || p.endereco.rua || "Endereço não informado")}</p>
-        ${p.endereco.bairro ? `<p class="ped-rua">${esc(p.endereco.rua)}</p>` : ""}
+        <p class="ped-end">${esc(p.endereco.rua || p.endereco.bairro || "Endereço não informado")}</p>
+        ${p.endereco.bairro || p.endereco.resto ? `<p class="ped-rua">${esc([p.endereco.bairro, p.endereco.resto].filter(Boolean).join(" · "))}</p>` : ""}
         ${pagamentoHtml(p.pagamento, p.total)}
         ${itens ? `<p class="ped-itens">${esc(itens)}</p>` : ""}
       </button>`;
