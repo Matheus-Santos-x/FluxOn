@@ -1,0 +1,79 @@
+/* ================= RASTREIO DO PEDIDO (dentro do cardápio) =================
+   Usa as cores do cardápio (--red, --bg, --surface, --text...), então segue o tema claro/escuro do restaurante. */
+
+/* faixa "Acompanhar" no cardápio (sobe quando o carrinho aparece) */
+.rt-faixa{
+  position:fixed; z-index:49; left:16px; right:16px; max-width:520px; margin:0 auto;
+  bottom:calc(18px + env(safe-area-inset-bottom));
+  display:flex; align-items:center; gap:12px; padding:11px 12px 11px 14px; border-radius:16px;
+  background:var(--surface); color:var(--text); border:1px solid var(--line); text-align:left;
+  box-shadow:0 14px 34px -12px rgba(0,0,0,.55); font-family:var(--font-body); cursor:pointer;
+  animation:rtSobe .4s cubic-bezier(.2,.9,.3,1.1);
+}
+body:has(.cart-fab.visible) .rt-faixa{ bottom:calc(92px + env(safe-area-inset-bottom)); }
+body.aba-fid .rt-faixa, body.rt-aberto .rt-faixa{ display:none; }
+@keyframes rtSobe{ from{ transform:translateY(30px); opacity:0; } }
+.rt-faixa-ic{ width:40px; height:40px; border-radius:12px; display:grid; place-items:center; font-size:21px; background:color-mix(in srgb, var(--red) 14%, transparent); flex-shrink:0; }
+.rt-faixa-txt{ flex:1; min-width:0; display:grid; line-height:1.2; }
+.rt-faixa-txt b{ font-size:14.5px; font-weight:800; }
+.rt-faixa-txt small{ font-size:13px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rt-faixa-acao{ padding:9px 13px; border-radius:11px; background:var(--red); color:#fff; font-weight:800; font-size:13px; flex-shrink:0; }
+
+/* tela cheia: mapa atrás, cartão embaixo */
+.rt-tela{ position:fixed; inset:0; z-index:200; display:none; background:var(--bg); font-family:var(--font-body); color:var(--text); }
+.rt-tela.on{ display:block; animation:rtAbre .3s ease; }
+@keyframes rtAbre{ from{ opacity:0; } }
+.rt-mapa{ position:absolute; inset:0; z-index:0; background:var(--surface-2); } /* z-index 0: as camadas do mapa ficam embaixo do cartão */
+.rt-mapa.escuro .leaflet-tile-pane{ filter:grayscale(1) invert(1) brightness(.85) contrast(.9); }
+.rt-mapa:not(.escuro) .leaflet-tile-pane{ filter:saturate(.75) brightness(1.02); }
+.rt-mapa .leaflet-control-attribution{ font-size:10px; }
+
+.rt-topo{ position:absolute; z-index:5; top:calc(12px + env(safe-area-inset-top)); left:12px; right:12px; display:flex; }
+.rt-voltar{
+  min-height:44px; padding:0 16px; border-radius:14px; border:1px solid var(--line);
+  background:color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  color:var(--text); font:800 14px var(--font-body); box-shadow:0 8px 20px -8px rgba(0,0,0,.45); cursor:pointer;
+}
+
+.rt-card{
+  position:absolute; z-index:5; left:0; right:0; bottom:0; max-width:560px; margin:0 auto;
+  max-height:62%; overflow:auto; overscroll-behavior:contain;
+  padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+  background:var(--surface); border:1px solid var(--line); border-bottom:0; border-radius:24px 24px 0 0;
+  box-shadow:0 -20px 40px -20px rgba(0,0,0,.5);
+}
+.rt-pedidos{ display:flex; gap:6px; margin-bottom:12px; overflow-x:auto; }
+.rt-pedidos button{ padding:7px 12px; border-radius:999px; border:1px solid var(--line); background:transparent; color:var(--muted); font:800 13px var(--font-body); cursor:pointer; }
+.rt-pedidos button.on{ background:var(--red); border-color:var(--red); color:#fff; }
+.rt-num{ font-size:12.5px; font-weight:700; color:var(--muted); }
+.rt-titulo{ margin:4px 0 4px; font-family:var(--font-display); font-weight:400; font-size:24px; line-height:1.1; }
+.rt-sub{ margin:0; color:var(--muted); font-size:14.5px; line-height:1.4; }
+
+/* etapas: Recebido → Preparando → Pronto → A caminho → Entregue */
+.rt-passos{ list-style:none; margin:16px 0 4px; padding:0; display:grid; grid-template-columns:repeat(var(--n), 1fr); gap:4px; }
+.rt-passos li{ display:grid; gap:4px; text-align:center; min-width:0; }
+.rt-passos i{ height:6px; border-radius:3px; background:var(--line); }
+.rt-passos li.feito i{ background:var(--red); }
+.rt-passos li.agora i{ background:linear-gradient(90deg, var(--red) 50%, var(--line) 50%); background-size:200% 100%; animation:rtAndar 1.6s linear infinite; }
+@keyframes rtAndar{ from{ background-position:100% 0; } to{ background-position:0 0; } }
+.rt-passos b{ font-size:11.5px; font-weight:700; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rt-passos li.feito b, .rt-passos li.agora b{ color:var(--text); }
+.rt-passos small{ font-size:11px; color:var(--muted-2); min-height:14px; font-family:var(--font-mono); }
+
+.rt-acoes{ display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+.rt-btn{ flex:1; min-width:140px; min-height:46px; display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:0 14px; border-radius:13px; border:1px solid var(--line); background:var(--surface-2); color:var(--text); font:800 13.5px var(--font-body); text-decoration:none; cursor:pointer; }
+.rt-itens{ margin:10px 0 0; font-size:13.5px; color:var(--muted); line-height:1.5; }
+.rt-itens b{ color:var(--text); }
+
+/* marcadores e o balãozinho da etapa */
+.rt-pin-loja{ width:44px; height:44px; border-radius:14px; display:grid; place-items:center; overflow:hidden; font-size:22px; background:#fff; border:3px solid var(--red); box-shadow:0 6px 14px rgba(0,0,0,.35); }
+.rt-pin-loja img{ width:100%; height:100%; object-fit:cover; }
+.rt-pin-casa{ width:40px; height:40px; border-radius:50%; display:grid; place-items:center; font-size:20px; background:#fff; border:3px solid #2f7cf6; box-shadow:0 6px 14px rgba(0,0,0,.35); }
+.rt-pin-moto{ width:48px; height:48px; border-radius:50%; display:grid; place-items:center; font-size:24px; background:var(--red); border:3px solid #fff; box-shadow:0 0 0 8px color-mix(in srgb, var(--red) 25%, transparent), 0 6px 14px rgba(0,0,0,.4); }
+.leaflet-tooltip.rt-balao{
+  padding:8px 12px; border-radius:12px; border:0; background:var(--text); color:var(--bg);
+  font:800 13px var(--font-body); box-shadow:0 8px 20px -6px rgba(0,0,0,.45); white-space:nowrap;
+}
+.leaflet-tooltip-top.rt-balao::before{ border-top-color:var(--text); }
+
+@media (prefers-reduced-motion: reduce){ .rt-faixa, .rt-tela.on{ animation:none; } .rt-passos li.agora i{ animation:none; } }
