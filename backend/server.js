@@ -6954,6 +6954,32 @@ async function salvarEnderecos(cli, lista) {
   return endOrdenar(l);
 }
 
+// 📞 Operacional: digitou o telefone no "Novo Pedido" → puxa nome e endereço de quem já pediu
+app.get("/api/v1/restaurante/:restaurant_id/cliente-por-telefone", requireAuth, async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    const tel = telefoneLocal(req.query.tel);
+    if (!tel) return sendError(res, 400, "Telefone inválido");
+    const [{ data: cli }, { data: ult }] = await Promise.all([
+      supabase.from("base_clientes").select("nome, enderecos")
+        .eq("restaurant_id", rid).in("numero", [tel, `55${tel}`]).limit(1).maybeSingle(),
+      supabase.from("orders").select("client_name, address")
+        .eq("restaurant_id", rid).in("client_phone", [tel, `55${tel}`]).not("address", "is", null)
+        .neq("status", "draft").order("created_at", { ascending: false }).limit(1).maybeSingle()
+    ]);
+    // endereço: o principal salvo na conta do cliente; sem ele, o do último pedido de delivery
+    const s = endOrdenar(Array.isArray(cli?.enderecos) ? cli.enderecos : [])[0];
+    const salvo = s ? [`${s.rua}, ${s.numero}`, s.complemento, s.bairro, [s.cidade, s.uf].filter(Boolean).join("/"), s.cep && `CEP ${s.cep}`].filter(Boolean).join(" - ") : "";
+    const nome = String(cli?.nome || ult?.client_name || "").trim();
+    const endereco = salvo || String(ult?.address || "").trim();
+    if (!nome && !endereco) return res.json({ encontrado: false });
+    return res.json({ encontrado: true, nome, endereco });
+  } catch (err) {
+    console.error("❌ cliente-por-telefone:", err.message);
+    return sendError(res, 500, "Erro ao buscar o cliente");
+  }
+});
+
 app.get("/api/v1/cliente/:restaurant_id/conta", async (req, res) => {
   try {
     const cli = await clienteDoToken(req);
