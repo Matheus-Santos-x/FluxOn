@@ -19,7 +19,6 @@ const rua = (() => {
   function mudou() { clearTimeout(tRec); tRec = setTimeout(recarregar, 200); }
 
   const linkMaps = (end) => `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(end.completo)}`;
-  const linkWaze = (end) => `https://waze.com/ul?q=${encodeURIComponent(end.completo)}&navigate=yes`;
   const linkZap = (tel, msg) => `https://wa.me/55${tel}?text=${encodeURIComponent(msg)}`;
 
   // entregas na ordem da rota (a mais perto primeiro); sem rota ainda, na ordem em que pegou
@@ -45,12 +44,10 @@ const rua = (() => {
         ${pagamentoHtml(p.pagamento, p.total)}
         ${p.obs ? `<p class="ped-obs">📝 ${esc(p.obs)}</p>` : ""}
         ${itens ? `<p class="ped-itens">${esc(itens)}</p>` : ""}
-        <div class="acoes">
-          <button type="button" class="btn" data-acao="rota"><span aria-hidden="true">🧭</span>Rota</button>
-          ${p.telefone ? `<a class="btn" href="tel:${esc(p.telefone)}"><span aria-hidden="true">📞</span>Ligar</a>
-          <a class="btn" href="${linkZap(p.telefone, `Oi${p.cliente ? ", " + p.cliente.split(" ")[0] : ""}! Sou o entregador do ${S.conta.restaurante.nome} com o seu pedido #${p.numero}.`)}" target="_blank" rel="noopener"><span aria-hidden="true">💬</span>WhatsApp</a>`
-          : `<span></span><span></span>`}
-        </div>
+                ${p.telefone ? `<div class="acoes duas">
+          <a class="btn" href="tel:${esc(p.telefone)}"><span aria-hidden="true">📞</span>Ligar</a>
+          <a class="btn" href="${linkZap(p.telefone, `Oi${p.cliente ? ", " + p.cliente.split(" ")[0] : ""}! Sou o entregador do ${S.conta.restaurante.nome} com o seu pedido #${p.numero}.`)}" target="_blank" rel="noopener"><span aria-hidden="true">💬</span>WhatsApp</a>
+        </div>` : ""}
         <button type="button" class="btn ok grande" data-acao="entregue">✓ Entregue</button>
       </article>`;
   }
@@ -69,6 +66,10 @@ const rua = (() => {
   function desenhar() {
     troco.desenhar();
     const tem = S.naRua.length > 0;
+    $("aba-rua").classList.toggle("com-entrega", tem);
+    if (!tem) $("aba-rua").classList.remove("lista-aberta");
+    $("btn-entregas").classList.toggle("hidden", !tem);
+    $("bolha-n").textContent = plural(S.naRua.length, "pedido", "pedidos");
     $("rua-vazio").classList.toggle("hidden", tem);
     $("rua-vazio").innerHTML = tem ? "" : vazioHtml();
     $("rua-conteudo").classList.toggle("hidden", !tem);
@@ -88,8 +89,13 @@ const rua = (() => {
     mapa.desenharEntregas(S.naRua);
   }
 
-  // abrir/recolher o painel pra ver mais do mapa
-  $("painel-alca").addEventListener("click", () => { $("painel").classList.toggle("recolhido"); });
+  // com entrega: a bolinha abre a lista; a alça ou um toque no mapa fecha. Sem entrega: a alça recolhe o painel
+  $("btn-entregas").addEventListener("click", () => { $("painel").classList.remove("recolhido"); $("aba-rua").classList.add("lista-aberta"); $("painel").scrollTop = 0; });
+  $("painel-alca").addEventListener("click", () => {
+    if ($("aba-rua").classList.contains("com-entrega")) $("aba-rua").classList.remove("lista-aberta");
+    else $("painel").classList.toggle("recolhido");
+  });
+  $("mapa").addEventListener("pointerdown", () => $("aba-rua").classList.remove("lista-aberta"));
   $("painel").addEventListener("click", (e) => { const b = e.target.closest("[data-ir]"); if (b) app.irPara(b.dataset.ir); });
 
   // navegação de verdade fica com o Google Maps (todas as entregas, na ordem da rota)
@@ -105,21 +111,9 @@ const rua = (() => {
     if (!b) return;
     const p = S.naRua.find((x) => x.id === b.closest("[data-id]").dataset.id);
     if (!p) return;
-    if (b.dataset.acao === "rota") escolherRota(p);
-    else if (b.dataset.acao === "entregue") confirmarEntrega(p);
+    if (b.dataset.acao === "entregue") confirmarEntrega(p);
     else if (b.dataset.acao === "mais") maisOpcoes(p);
   });
-
-  function escolherRota(p) {
-    abrirFolha(`
-      <h3>Rota pro #${esc(p.numero)}</h3>
-      <p>${esc(p.endereco.completo)}</p>
-      <div class="botoes">
-        <a class="btn primario grande" href="${linkMaps(p.endereco)}" target="_blank" rel="noopener">Google Maps</a>
-        <a class="btn grande" href="${linkWaze(p.endereco)}" target="_blank" rel="noopener">Waze</a>
-      </div>`);
-    $("folha-corpo").querySelectorAll("a").forEach((a) => a.addEventListener("click", () => setTimeout(fecharFolha, 300)));
-  }
 
   function confirmarEntrega(p) {
     const pg = p.pagamento;
