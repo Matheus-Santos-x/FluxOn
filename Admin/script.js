@@ -417,7 +417,6 @@ const SECOES = [
    ["reservas", "Reservas", "calendario"],
   ["mapa", "Mapa (TomTom)", "globo"]
 ];
-];
 
 async function telaRestaurante(id, secao) {
   if (!SECOES.some(s => s[0] === secao)) secao = "conta";
