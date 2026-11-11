@@ -1,0 +1,13 @@
+{
+  "name": "FluxON Admin",
+  "short_name": "FluxON Admin",
+  "description": "Painel administrativo do FluxON",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#050505",
+  "icons": [
+    { "src": "pwa-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "pwa-icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }
+  ]
+}
