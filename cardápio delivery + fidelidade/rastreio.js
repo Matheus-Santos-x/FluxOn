@@ -210,12 +210,31 @@ const rastreio = (() => {
         ${tel.length >= 10 ? `<a class="rt-btn" href="tel:${tel}">📞 Ligar pra loja</a>` : ""}
         ${itens ? `<button type="button" class="rt-btn" id="rtItensBtn">🧾 Ver o pedido</button>` : ""}
       </div>
-      <p class="rt-itens" id="rtItens" hidden>${itens} · <b>${money(d.pedido.total)}</b></p>`;
+      <p class="rt-itens" id="rtItens" hidden>${itens} · <b>${money(d.pedido.total)}</b></p>
+      ${d.pedido.delivery && emAndamento(d) && d.destino?.fonte !== "cliente" && "geolocation" in navigator ? `
+      <button type="button" class="rt-casa" id="rtCasa">📍 Estou em casa: marcar no mapa<small>O entregador chega direto na sua porta</small></button>` : ""}`;
+    document.getElementById("rtCasa")?.addEventListener("click", marcarCasa);
     document.querySelectorAll("#rtCard [data-rt]").forEach((b) => b.onclick = () => abrir(b.dataset.rt));
     const ib = document.getElementById("rtItensBtn");
     if (ib) ib.onclick = () => { const p = document.getElementById("rtItens"); p.hidden = !p.hidden; };
     desenharMapa();
     faixa();
+  }
+
+  // "Estou em casa": manda o GPS do celular pro pedido
+  function marcarCasa(ev) {
+    const b = ev.currentTarget, codigo = R.atual;
+    b.disabled = true; b.firstChild.textContent = "📍 Pegando sua localização…";
+    navigator.geolocation.getCurrentPosition(async (p) => {
+      try {
+        const r = await fetch(`${CONFIG.API_BASE}/api/v1/entrega/local/${codigo}`, { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lat: p.coords.latitude, lng: p.coords.longitude, precisao: p.coords.accuracy }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || "Não deu pra salvar");
+        const d = await buscar(codigo);
+        if (d && !d.naoExiste) { R.dados.set(codigo, d); desenhar(); }
+      } catch (e) { b.disabled = false; b.firstChild.textContent = "📍 " + e.message; }
+    }, () => { b.disabled = false; b.firstChild.textContent = "📍 Libere a localização e toque de novo"; }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   }
 
   /* ---------- mapa (OpenStreetMap) ---------- */
@@ -265,7 +284,8 @@ const rastreio = (() => {
     if (!d) return;
     setTimeout(() => R.mapa.invalidateSize(), 50);
     const e = etapa(d);
-    const [loja, casa] = await Promise.all([geo(d.restaurante.endereco || RESTAURANT_CONFIG.endereco), geo(d.pedido.delivery ? d.pedido.endereco : "")]);
+    const [loja, casaEndereco] = await Promise.all([geo(d.restaurante.endereco || RESTAURANT_CONFIG.endereco), d.destino ? null : geo(d.pedido.delivery ? d.pedido.endereco : "")]);
+    const casa = d.destino || casaEndereco; // ponto marcado (cliente/entregador) vale mais que o endereço escrito
     if (codigo !== R.atual) return;
     const logo = d.restaurante.logo_url ? `<img src="${esc(d.restaurante.logo_url)}" alt="">` : "🍽️";
     const mLoja = marcador("loja", loja, "rt-pin-loja", logo, 44);
