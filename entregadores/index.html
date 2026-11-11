@@ -72,13 +72,15 @@
     <div class="gps" id="gps" role="button" tabindex="0"></div>
     <button class="mapa-centro" id="btn-centralizar" type="button" aria-label="Centralizar o mapa">◎</button>
 
+    <!-- bolinha das entregas: "3 pedidos"; toca e abre a lista na ordem da rota -->
+    <button class="bolha-entregas hidden" id="btn-entregas" type="button" aria-controls="painel"><span aria-hidden="true">🛵</span><b id="bolha-n"></b></button>
+
     <div class="painel" id="painel">
       <button class="painel-alca" id="painel-alca" type="button" aria-label="Abrir ou recolher a lista"></button>
       <div id="acertos" class="acertos"></div>
       <div id="rua-vazio" class="rua-vazio hidden"></div>
       <div id="rua-conteudo" class="hidden">
         <div class="resumo-rua" id="resumo-rua"></div>
-        <button class="btn primario largo" type="button" id="btn-rota-todas">🧭 Navegar no Google Maps</button>
         <div id="rua-lista" class="lista"></div>
       </div>
     </div>
