@@ -901,6 +901,7 @@ async function iniciarPix(v){
     }));
     CURRENT_ORDER_ID = result.order?.id || CURRENT_ORDER_ID;
     PIX_ORDER_NUMBER = result.order?.order_number ?? null;
+    PIX_TRACKING = result.tracking_link || null;
     PIX_CODIGO = result.tracking_code || null;
 
     const res = await fetch(`${CONFIG.API_BASE}/api/v1/pix/${RESTAURANT_ID}/cobrancas`, {
