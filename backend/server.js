@@ -4040,7 +4040,8 @@ app.patch("/api/v1/categorias/:id", requireRowOwner("categorias"), async (req, r
   if (foto_url !== undefined) updateData.foto_url = foto_url;
 
   if (Object.keys(updateData).length === 0) return sendError(res, 400, "nada para atualizar");
-
+ const { data: antes } = await supabase.from("categorias").select("nome, restaurant_id").eq("id", id).maybeSingle();
+  
   const { data, error } = await supabase
     .from("categorias")
     .update(updateData)
@@ -4049,6 +4050,19 @@ app.patch("/api/v1/categorias/:id", requireRowOwner("categorias"), async (req, r
     .single();
 
   if (error) return sendError(res, 500, "Erro ao atualizar categoria");
+  
+  // renomeou: troca o nome também na ordem salva, senão a categoria perde o lugar (e a foto) nos cardápios
+  if (antes && updateData.nome && updateData.nome !== antes.nome) {
+    const { data: cfg } = await supabase.from("restaurante_config").select("categorias_ordem").eq("restaurant_id", antes.restaurant_id).maybeSingle();
+    if (Array.isArray(cfg?.categorias_ordem) && cfg.categorias_ordem.length) {
+      const ordem = cfg.categorias_ordem.map(c => {
+        const n = typeof c === "string" ? c : c?.nome;
+        if (n !== antes.nome) return c;
+        return typeof c === "string" ? updateData.nome : { ...c, nome: updateData.nome };
+      });
+      await supabase.from("restaurante_config").update({ categorias_ordem: ordem }).eq("restaurant_id", antes.restaurant_id);
+    }
+  }
   return res.json(data);
 });
 
@@ -4735,6 +4749,30 @@ app.patch("/admin/restaurants/:id/central", requireAdmin, async (req, res) => {
   }
 });
 
+// Fotos das categorias: a foto fica na tabela "categorias" (é onde o Operacional salva),
+// a ordem fica em restaurante_config.categorias_ordem. Aqui as duas se juntam pros cardápios.
+const catChave = (n) => String(n || "").trim().toLowerCase();
+async function categoriasComFoto(restaurant_id, ordemSalva) {
+  let lista = (Array.isArray(ordemSalva) ? ordemSalva : [])
+    .map(c => (typeof c === "string" ? { nome: c, foto_url: null } : { nome: c?.nome, foto_url: c?.foto_url || null }))
+    .filter(c => c.nome);
+  const [{ data: cats }, itensResp] = await Promise.all([
+    supabase.from("categorias").select("nome, foto_url").eq("restaurant_id", restaurant_id),
+    lista.length ? Promise.resolve({ data: null })
+      : supabase.from("cardapio").select("categoria").eq("restaurant_id", restaurant_id).order("ordem")
+  ]);
+  // sem ordem salva: segue a ordem em que as categorias aparecem no cardápio (igual os cardápios já faziam)
+  if (!lista.length) {
+    const vistos = new Set();
+    for (const i of itensResp.data || []) {
+      const nome = i.categoria || "Geral";
+      if (!vistos.has(catChave(nome))) { vistos.add(catChave(nome)); lista.push({ nome, foto_url: null }); }
+    }
+  }
+  const fotos = new Map((cats || []).filter(c => c.foto_url).map(c => [catChave(c.nome), c.foto_url]));
+  return lista.map(c => ({ nome: c.nome, foto_url: fotos.get(catChave(c.nome)) || c.foto_url || null }));
+}
+
 // GET - Busca config do restaurante (logo, cores, nome)
 app.get("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
   try {
@@ -4771,7 +4809,7 @@ app.get("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
       tempo_recebido: config?.tempo_recebido ?? 1.5,
       tempo_preparo: config?.tempo_preparo ?? 20,
       tempo_pronto: config?.tempo_pronto ?? 10,
-      categorias_ordem: config?.categorias_ordem || [],
+      categorias_ordem: await categoriasComFoto(restaurant_id, config?.categorias_ordem),
       tempo_entrega_min: config?.tempo_entrega_min ?? null,
       tempo_entrega_max: config?.tempo_entrega_max ?? null,
       pedido_minimo: config?.pedido_minimo ?? 0,
