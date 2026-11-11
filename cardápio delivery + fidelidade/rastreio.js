@@ -55,6 +55,7 @@ const rastreio = (() => {
       url.searchParams.delete("acompanhar");
       history.replaceState(history.state, "", url.pathname + url.search + url.hash);
     }
+    await doCliente();
     if (!R.lista.length) return;
     await atualizarTodos();
     const ativos = ativosEmOrdem();
@@ -65,6 +66,18 @@ const rastreio = (() => {
     const fechouNestaVisita = sessionStorage.getItem(`${chave()}_fechou`) === "1";
     if (valido(doLink) && R.dados.has(doLink)) abrir(doLink);
     else if (!fechouNestaVisita && ativos.some((c) => emAndamento(R.dados.get(c)))) abrir(ativos[0]);
+  }
+
+  // cliente que entrou na conta (login do WhatsApp): traz os pedidos dele feitos em outro aparelho
+  async function doCliente() {
+    let token = null;
+    try { token = (typeof FID !== "undefined" && FID.token) || (typeof fidTokenKey === "function" ? localStorage.getItem(fidTokenKey()) : null); } catch {}
+    if (!token) return;
+    try {
+      const r = await fetch(`${CONFIG.API_BASE}/api/v1/cliente/${RESTAURANT_ID}/pedidos-ativos`, { headers: { "x-cliente-token": token } });
+      if (!r.ok) return;
+      for (const p of await r.json()) adicionar(p.codigo, p.numero);
+    } catch {}
   }
 
   async function atualizarTodos() {
@@ -87,20 +100,20 @@ const rastreio = (() => {
   function etapa(d) {
     const st = d.pedido.status, nome = d.entregador?.nome;
     switch (st) {
-      case "scheduled": return { n: 0, titulo: "Pedido agendado", sub: "Ele entra na cozinha no horário que você escolheu.", balao: "Agendado" };
-      case "pending": return { n: 1, titulo: "Pedido recebido", sub: "O restaurante já recebeu e logo começa o preparo.", balao: "Pedido recebido" };
-      case "preparing": return { n: 2, titulo: "Seu pedido está sendo preparado", sub: "Assim que ficar pronto, você vê aqui.", balao: "Preparando seu pedido" };
+      case "scheduled": return { n: 0, titulo: "Pedido agendado", sub: "Ele entra na cozinha no horário que você escolheu.", balao: "Agendado", curto: "Agendado" };
+      case "pending": return { n: 1, titulo: "Pedido recebido", sub: "O restaurante já recebeu e logo começa o preparo.", balao: "Pedido recebido", curto: "Recebido" };
+      case "preparing": return { n: 2, titulo: "Seu pedido está sendo preparado", sub: "Assim que ficar pronto, você vê aqui.", balao: "Preparando seu pedido", curto: "Em preparo" };
       case "mounting": return d.pedido.delivery
-        ? { n: 3, titulo: "Pedido pronto", sub: "Aguardando o entregador sair com ele.", balao: "Pronto · aguardando o entregador" }
-        : { n: 3, titulo: "Pedido pronto", sub: "Já pode retirar no restaurante.", balao: "Pronto pra retirar" };
+        ? { n: 3, titulo: "Pedido pronto", sub: "Aguardando o entregador sair com ele.", balao: "Pronto · aguardando o entregador", curto: "Pronto" }
+        : { n: 3, titulo: "Pedido pronto", sub: "Já pode retirar no restaurante.", balao: "Pronto pra retirar", curto: "Pronto pra retirar" };
       case "delivering": {
+        if (d.antes === 0) return { n: 4, titulo: "Você é o próximo! 🛵", sub: `${nome || "O entregador"} está indo direto pra sua casa.`, balao: `${nome || "Entregador"} · indo até você`, curto: "Você é o próximo" };
         let sub = nome ? `${nome} está a caminho.` : "O entregador está a caminho.";
         if (d.antes > 0) sub = `${nome || "O entregador"} vai entregar ${d.antes === 1 ? "1 pedido" : `${d.antes} pedidos`} antes do seu.`;
-        else if (d.antes === 0) sub = `${nome || "O entregador"} está indo direto pra sua casa.`;
-        return { n: 4, titulo: "Seu pedido saiu para entrega", sub, balao: d.antes > 0 ? `${nome || "Entregador"} · ${d.antes} antes de você` : `${nome || "Entregador"} · indo até você` };
+        return { n: 4, titulo: "Seu pedido saiu para entrega", sub, balao: d.antes > 0 ? `${nome || "Entregador"} · ${d.antes} antes de você` : `${nome || "Entregador"} · a caminho`, curto: "Em rota" };
       }
-      case "finished": return { n: 5, titulo: "Pedido entregue ✓", sub: "Bom apetite! Obrigado por pedir com a gente.", balao: "Entregue ✓" };
-      default: return { n: -1, titulo: "Pedido cancelado", sub: "Se tiver dúvida, fale com o restaurante.", balao: "Cancelado" };
+      case "finished": return { n: 5, titulo: "Pedido entregue ✓", sub: "Bom apetite! Obrigado por pedir com a gente.", balao: "Entregue ✓", curto: "Entregue" };
+      default: return { n: -1, titulo: "Pedido cancelado", sub: "Se tiver dúvida, fale com o restaurante.", balao: "Cancelado", curto: "Cancelado" };
     }
   }
 
@@ -118,8 +131,8 @@ const rastreio = (() => {
     const d = R.dados.get(ativos[0]);
     const e = etapa(d);
     f.innerHTML = `<span class="rt-faixa-ic" aria-hidden="true">${e.n === 4 ? "🛵" : e.n === 5 ? "✅" : e.n < 0 ? "✖" : "🍳"}</span>
-      <span class="rt-faixa-txt"><b>Pedido #${esc(d.pedido.numero)}</b><small>${esc(e.titulo)}</small></span>
-      <span class="rt-faixa-acao">Acompanhar</span>`;
+      <span class="rt-faixa-txt"><b>Pedido #${esc(d.pedido.numero)} · ${esc(e.curto)}</b><small>Toque pra ver no mapa</small></span>
+      <span class="rt-faixa-seta" aria-hidden="true">›</span>`;
     f.onclick = () => abrir(ativos[0]);
   }
   function menuLateral() {
