@@ -10292,7 +10292,7 @@ manterTelaAcesa();
   // forma de pagamento em botões (o select continua escondido por baixo, o resto do código não muda)
   const sel = $("new-payment"), chips = $("new-payment-chips");
   if (sel && chips) {
-    const opcoes = [["pix", "Pix"], ["credito", "Crédito"], ["debito", "Débito"], ["dinheiro", "Dinheiro"], ["vale-refeição", "Vale-refeição"], ["vale-alimentação", "Vale-alimentação"]];
+    const opcoes = [["pix", "Pix"], ["credito", "Crédito"], ["debito", "Débito"], ["dinheiro", "Dinheiro"], ["vale-refeição", "Vale-refeição"]];   // vale-alimentação: é só voltar com ["vale-alimentação", "Vale-alimentação"]
     const pintar = () => {
       chips.innerHTML = opcoes.map(([v, n]) => `<button type="button" class="np-chip ${sel.value === v ? "on" : ""}" data-v="${v}">${n}</button>`).join("");
     };
@@ -10312,3 +10312,35 @@ manterTelaAcesa();
   }
 })();
 
+
+// ===== NOVO PEDIDO: digitou o telefone → puxa nome e endereço de quem já é cliente =====
+(function () {
+  const tel = document.getElementById("new-phone"), status = document.getElementById("np-tel-status");
+  const nome = document.getElementById("new-customer"), end = document.getElementById("new-address");
+  if (!tel || !status) return;
+  let timer = null, ultimo = "";
+  async function buscar() {
+    const d = tel.value.replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+    if (d.length < 10 || d === ultimo) return;
+    ultimo = d;
+    status.className = "np-status"; status.textContent = "🔍 Procurando cliente...";
+    try {
+      const r = await fetch(`${API_BASE}/api/v1/restaurante/${getRestaurantId()}/cliente-por-telefone?tel=${d}`, { headers: buildHeaders() });
+      const c = await r.json();
+      if (d !== ultimo) return;                                   // mudou o número enquanto buscava
+      if (!r.ok || !c.encontrado) { status.textContent = "Cliente novo: preencha os dados abaixo."; return; }
+      if (nome && !nome.value.trim() && c.nome) nome.value = c.nome;           // não apaga o que já foi digitado
+      if (end && !end.value.trim() && c.endereco) end.value = c.endereco;
+      status.className = "np-status ok";
+      status.textContent = `✓ ${c.nome || "Cliente"} já pediu aqui: dados preenchidos.`;
+    } catch (e) {
+      if (d === ultimo) status.textContent = "";
+    }
+  }
+  tel.addEventListener("input", () => { clearTimeout(timer); status.textContent = ""; ultimo = ""; timer = setTimeout(buscar, 500); });
+  tel.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(timer); buscar(); } });
+  // abriu um pedido novo: começa sem aviso
+  const tela = document.getElementById("create-modal");
+  if (tela) new MutationObserver(() => { if (tela.classList.contains("open")) { status.textContent = ""; ultimo = ""; } })
+    .observe(tela, { attributes: true, attributeFilter: ["class"] });
+})();
