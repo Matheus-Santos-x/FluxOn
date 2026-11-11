@@ -385,3 +385,11 @@ body { min-height: 100vh; min-height: 100dvh; }
   .confirm-modal .modal-body { padding: 16px 4px; }
   .crop-modal-backdrop { padding: 10px; }
 }
+
+/* Login por senha (provisório) */
+.adm-ou { width: 100%; display: flex; align-items: center; gap: 10px; color: rgba(252,228,228,.35); font-size: 12px; margin: 4px 0; }
+.adm-ou::before, .adm-ou::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,.1); }
+.adm-senha { width: 100%; display: flex; gap: 8px; }
+.adm-senha input { flex: 1; min-width: 0; padding: 11px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.16); background: #0a0a0a; color: var(--text); font-size: 16px; font-family: inherit; }
+.adm-senha input:focus { border-color: rgba(249,115,115,.6); }
+.adm-senha button { flex-shrink: 0; }
