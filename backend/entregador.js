@@ -225,6 +225,8 @@ async function aoAtualizar(order) {
       await conferirRodada(order.rodada_id);
     } else if (["finished", "cancelled", "canceled"].includes(order.status)) {
       await conferirRodada(order.rodada_id);
+      const { data: resto } = await C.supabase.from("orders").select("id").eq("entregador_id", order.entregador_id).eq("status", "delivering");
+      for (const o of resto || []) C.io.to(`acomp:${o.id}`).emit("atualizar");
     }
   }
 }
@@ -351,16 +353,20 @@ async function avisarClientes(rid, ent, pedidos) {
   const cfg = await configDo(rid);
   if (!cfg.avisar_cliente) return;
   const rest = await nomeRestaurante(rid);
+  // o link abre o cardápio delivery do restaurante, que vira a tela de rastreio
+  // (sem domínio próprio, abre a página do mapa do app dos entregadores)
+  const { data: r } = await C.supabase.from("restaurants").select("cardapio_delivery_url").eq("id", rid).maybeSingle();
+  const dominio = String(r?.cardapio_delivery_url || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
   const base = String(process.env.ENTREGADOR_APP_URL || "").replace(/\/+$/, "");
   for (const o of pedidos) {
     if (_jaAvisados.has(o.id) || !o.client_phone) continue;
     _jaAvisados.add(o.id);
     if (_jaAvisados.size > 5000) _jaAvisados.clear();
     let link = "";
-    if (base) {
+    if (dominio || base) {
       let tk = o.tracking_token;
       if (!tk) { tk = crypto.randomBytes(10).toString("hex"); await C.supabase.from("orders").update({ tracking_token: tk }).eq("id", o.id); }
-      link = `\n\nAcompanhe a entrega no mapa: ${base}/acompanhar.html?c=${tk}`;
+      link = `\n\nAcompanhe a entrega: ${dominio ? `https://${dominio}/?acompanhar=${tk}` : `${base}/acompanhar.html?c=${tk}`}`;
     }
     const nome = primeiroNome(o.client_name);
     const pg = pagamentoInfo(o);
@@ -417,6 +423,14 @@ export function registrarEntregador(ctx) {
       }).catch(() => socket.emit("entregador_sair"));
     }
     socket.on("posicao", (p) => { if (socket.data.ent) receberPosicao(socket.data.ent, p).catch(() => {}); });
+    // o app do entregador manda a ordem da rota: o cliente vê quantas entregas faltam antes da dele
+    socket.on("rota", async (d) => {
+      const ent = socket.data.ent;
+      const ids = Array.isArray(d?.ordem) ? d.ordem.map(String).slice(0, 30) : [];
+      if (!ent || !ids.length) return;
+      for (const [i, id] of ids.entries()) await supabase.from("orders").update({ ordem_rota: i + 1 }).eq("id", id).eq("entregador_id", ent.id).eq("status", "delivering");
+      for (const id of ids) io.to(`acomp:${id}`).emit("atualizar");
+    });
     socket.on("acompanhar", async (codigo) => {
       if (!/^[a-f0-9]{20}$/.test(String(codigo || ""))) return;
       const { data: o } = await supabase.from("orders").select("id").eq("tracking_token", codigo).maybeSingle();
@@ -606,10 +620,15 @@ export function registrarEntregador(ctx) {
     try {
       const codigo = String(req.params.codigo || "");
       if (!/^[a-f0-9]{20}$/.test(codigo)) return res.status(404).json({ error: "Pedido não encontrado" });
-      const { data: o } = await supabase.from("orders").select("id, restaurant_id, order_number, client_name, status, address, delivering_at, delivered_at, entregador_id, service_type")
+      const { data: o } = await supabase.from("orders").select("id, restaurant_id, order_number, client_name, status, address, created_at, confirmed_at, preparing_at, mounting_at, delivering_at, delivered_at, cancelled_at, entregador_id, ordem_rota, service_type, total_price, itens")
         .eq("tracking_token", codigo).maybeSingle();
       if (!o) return res.status(404).json({ error: "Pedido não encontrado" });
-      let entregador = null, posicao = null;
+      let entregador = null, posicao = null, antes = null;
+      if (o.entregador_id && o.status === "delivering" && o.ordem_rota) {
+        const { count } = await supabase.from("orders").select("id", { count: "exact", head: true })
+          .eq("entregador_id", o.entregador_id).eq("status", "delivering").lt("ordem_rota", o.ordem_rota);
+        antes = count || 0;
+      }
       if (o.entregador_id) {
         const { data: e } = await supabase.from("entregadores").select("id, nome, lat, lng, posicao_em").eq("id", o.entregador_id).maybeSingle();
         if (e) {
@@ -623,9 +642,11 @@ export function registrarEntregador(ctx) {
       }
       const rest = await nomeRestaurante(o.restaurant_id);
       return res.json({
-        pedido: { numero: o.order_number, cliente: primeiroNome(o.client_name), status: o.status, endereco: o.address || "", saiu_em: o.delivering_at, entregue_em: o.delivered_at, delivery: ehDelivery(o) },
+        pedido: { numero: o.order_number, cliente: primeiroNome(o.client_name), status: o.status, endereco: o.address || "", saiu_em: o.delivering_at, entregue_em: o.delivered_at, delivery: ehDelivery(o),
+          recebido_em: o.confirmed_at || o.created_at, preparo_em: o.preparing_at, pronto_em: o.mounting_at, cancelado_em: o.cancelled_at, total: r2(o.total_price),
+          itens: (Array.isArray(o.itens) ? o.itens : []).map((i) => ({ nome: i.name || i.nome || "Item", qtd: Number(i.qty || i.quantity || i.quantidade || 1) })) },
         restaurante: { nome: rest.nome, logo_url: rest.logo_url, cor: rest.cor, endereco: rest.endereco, telefone: rest.telefone },
-        entregador, posicao
+        entregador, posicao, antes
       });
     } catch (e) { return erro(res, 500, "Não deu pra carregar o pedido", e); }
   });
