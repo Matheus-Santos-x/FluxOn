@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>FluxON Admin</title>
-  <meta name="theme-color" content="#050505" />
+  <meta name="theme-color" content="#161012" />
   <meta name="robots" content="noindex, nofollow" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="pwa-icon.png" />
@@ -19,414 +19,56 @@
 <body>
 
 <!-- LOGIN -->
-<section id="login-screen" class="adm-login hidden">
-  <div class="adm-login-card">
-    <div class="adm-login-icone">🛡️</div>
-    <h1>FluxON <span>Admin</span></h1>
-    <p>Acesso restrito à equipe Evorise.</p>
+<section id="login" class="login hidden">
+  <div class="login-card">
+    <div class="marca"><span class="marca-sinal" data-ico="escudo"></span><b>FluxON</b><em>admin</em></div>
+    <h1>Entrar no painel</h1>
+    <p>Só a equipe Evorise tem acesso.</p>
     <div id="google-btn"></div>
-        <div class="adm-ou"><span>ou</span></div>
-    <form id="login-senha" class="adm-senha">
-      <input id="login-senha-input" type="password" placeholder="Senha de acesso" autocomplete="current-password" />
-      <button type="submit" class="primary-button">Entrar</button>
+    <div class="ou">ou com a senha</div>
+    <form id="login-senha" class="login-senha">
+      <input id="login-senha-input" class="inp" type="password" placeholder="Senha de acesso" autocomplete="current-password" />
+      <button type="submit" class="btn btn-pri">Entrar</button>
     </form>
-    <p id="login-status" class="adm-login-status"></p>
+    <p id="login-status" class="login-status"></p>
   </div>
 </section>
 
-<!-- BARRA DO TOPO -->
-<header id="admin-topo" class="adm-topo hidden">
-  <div class="adm-marca"><span>🛡️</span><b>FluxON</b><small>Admin</small></div>
-  <div class="adm-user">
-    <img id="admin-user-foto" class="hidden" alt="" referrerpolicy="no-referrer" />
-    <span id="admin-user-email"></span>
-    <button type="button" class="ghost-button" id="admin-btn-sair">Sair</button>
-  </div>
-</header>
-
-<main class="crm-view hidden" id="admin-view">
-  <div class="crm-content" style="display:flex; justify-content:center;">
-    <div style="width:100%; max-width:960px; display:flex; flex-direction:column; gap:20px; padding:0 8px;">
-
-      <!-- SELECT COM BUSCA + IMPERSONATE -->
-      <div style="position:relative;">
-        <div class="adm-busca" style="display:flex; gap:10px;">
-          <input id="admin-search-restaurant" autocomplete="off" placeholder="Buscar restaurante por nome..."
-            style="flex:1; padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.18);
-            background:rgba(28,28,30,0.45); color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
-          <button class="ghost-button" id="admin-btn-donos" style="white-space:nowrap;">👑 Donos</button>
-          <button class="primary-button" id="admin-btn-novo" style="white-space:nowrap;">+ Novo Restaurante</button>
-        </div>
-        <div id="admin-search-dropdown" style="display:none; position:absolute; left:0; right:0; top:50px; z-index:999;
-          background:rgba(20,20,22,0.98); border:1px solid rgba(255,255,255,0.18); border-radius:12px;
-          max-height:260px; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,0.6);"></div>
-      </div>
-
-      <!-- RESTAURANTE SELECIONADO -->
-      <div id="admin-selected-card" class="hidden" style="
-        background:rgba(28,28,30,0.45); border:1px solid rgba(255,255,255,0.18);
-        border-radius:14px; padding:18px 20px; display:flex; justify-content:space-between; align-items:center; gap:12px;">
-        <div>
-          <div id="admin-selected-name" style="font-size:16px; font-weight:800; color:rgba(252,228,228,0.95);"></div>
-          <div id="admin-selected-meta" style="font-size:12px; color:rgba(252,228,228,0.4); margin-top:4px;"></div>
-        </div>
-        <button class="ghost-button" id="admin-btn-impersonate" style="border-color:rgba(34,197,94,0.5); color:rgba(34,197,94,1); white-space:nowrap;">
-          ↗ Abrir no FluxON
-        </button>
-      </div>
-
-      <!-- FORMULÁRIOS DO RESTAURANTE SELECIONADO -->
-      <div id="admin-forms" class="hidden" style="display:flex; flex-direction:column; gap:0;">
-
-        <!-- 🏢 RESTAURANTE -->
-        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
-          <button onclick="toggleAccordion('admin-restaurante')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:18px;">🏢</span>
-              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Restaurante</span>
-            </div>
-            <span id="arrow-admin-restaurante" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
-          </button>
-          <div id="accordion-admin-restaurante" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
-            <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Nome</span>
-              <input id="admin-f-name" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-            </label>
-            <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Email (login Google)</span>
-              <input id="admin-f-email" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-            </label>
-            <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Plano</span>
-              <select id="admin-f-plan" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;">
-                <option value="essential">Essential</option>
-                <option value="advanced">Advanced</option>
-                <option value="executive">Executive</option>
-                <option value="custom">Custom</option>
-              </select>
-            </label>
-            <button class="primary-button" id="admin-btn-save-restaurante" style="margin-top:4px;">Salvar</button>
-            <p id="admin-status-restaurante" style="font-size:13px; min-height:18px; margin:0;"></p>
-          </div>
-        </div>
-
-        <!-- 🎨 APARÊNCIA -->
-        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
-          <button onclick="toggleAccordion('admin-aparencia')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:18px;">🎨</span>
-              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Aparência do Cardápio</span>
-            </div>
-            <span id="arrow-admin-aparencia" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
-          </button>
-          <div id="accordion-admin-aparencia" style="display:none; padding:4px 0 20px 0; flex-direction:column; gap:18px;">
-
-            <!-- ===== INFORMAÇÕES GERAIS ===== -->
-            <div style="background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:18px;">
-              <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
-                <span style="width:7px; height:7px; border-radius:50%; background:rgba(59,130,246,0.9); box-shadow:0 0 8px rgba(59,130,246,0.6); flex-shrink:0;"></span>
-                <span style="color:rgba(252,228,228,0.6); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1.4px;">Informações Gerais</span>
-                <span style="color:rgba(252,228,228,0.25); font-size:11px;">— vale para os dois cardápios</span>
-              </div>
-              <div style="display:flex; flex-direction:column; gap:10px;">
-                <label style="display:flex; flex-direction:column; gap:4px;">
-                  <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Nome de exibição</span>
-                  <input id="admin-f-nome-exibicao" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-                </label>
-                <label style="display:flex; flex-direction:column; gap:4px;">
-                  <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Subtítulo</span>
-                  <input id="admin-f-subtitulo" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-                </label>
-                <div style="display:flex; gap:10px;">
-                  <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                    <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Cor primária</span>
-                    <input id="admin-f-cor-primaria" type="color" style="height:40px; padding:4px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; cursor:pointer;" />
-                  </label>
-                  <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                    <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Cor secundária</span>
-                    <input id="admin-f-cor-secundaria" type="color" style="height:40px; padding:4px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; cursor:pointer;" />
-                  </label>
-                  <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                    <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Cor de fundo</span>
-                    <input id="admin-f-cor-fundo" type="color" style="height:40px; padding:4px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; cursor:pointer;" />
-                  </label>
-                </div>
-                <label style="display:flex; flex-direction:column; gap:4px;">
-                  <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Tema</span>
-                  <select id="admin-f-tema" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;">
-                    <option value="dark">Escuro</option>
-                    <option value="light">Claro</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <!-- ===== CARDÁPIO DIGITAL ===== -->
-            <div style="background:rgba(249,115,115,0.035); border:1px solid rgba(249,115,115,0.15); border-radius:14px; padding:18px;">
-              <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
-                <span style="font-size:14px;">📱</span>
-                <span style="color:rgba(252,228,228,0.75); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1.4px;">Cardápio Digital</span>
-                <span style="color:rgba(252,228,228,0.25); font-size:11px;">— delivery / link</span>
-              </div>
-              <div style="display:flex; gap:12px;">
-                <div style="flex:1;">
-                  <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase; display:block; margin-bottom:6px;">Logo (quadrada)</span>
-                  <div id="admin-logo-dropzone" style="
-                    border:2px dashed rgba(249,115,115,0.5); border-radius:12px; padding:12px;
-                    text-align:center; cursor:pointer; background:rgba(24,24,26,0.4); position:relative;
-                    min-height:90px; display:flex; flex-direction:column;
-                    align-items:center; justify-content:center; gap:6px;
-                  ">
-                    <div style="font-size:22px;">📷</div>
-                    <div style="color:rgba(252,228,228,0.4); font-size:10px;">Logo</div>
-                    <input type="file" id="admin-logo-file" accept="image/*" style="
-                      position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
-                    " />
-                  </div>
-                  <input type="hidden" id="admin-f-logo" value="" />
-                </div>
-                <div style="flex:1;">
-                  <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase; display:block; margin-bottom:6px;">Banner (fundo)</span>
-                  <div id="admin-banner-dropzone" style="
-                    border:2px dashed rgba(249,115,115,0.5); border-radius:12px; padding:12px;
-                    text-align:center; cursor:pointer; background:rgba(24,24,26,0.4); position:relative;
-                    min-height:90px; display:flex; flex-direction:column;
-                    align-items:center; justify-content:center; gap:6px;
-                  ">
-                    <div style="font-size:22px;">📷</div>
-                    <div style="color:rgba(252,228,228,0.4); font-size:10px;">Banner</div>
-                    <input type="file" id="admin-banner-file" accept="image/*" style="
-                      position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
-                    " />
-                  </div>
-                  <input type="hidden" id="admin-f-banner" value="" />
-                </div>
-              </div>
-              <p style="color:rgba(252,228,228,0.3); font-size:11px; margin:10px 0 0;">O horário de funcionamento (aba abaixo) também só é mostrado aqui.</p>
-            </div>
-
-            <!-- ===== CARDÁPIO FÍSICO ===== -->
-            <div style="background:rgba(59,130,246,0.035); border:1px solid rgba(59,130,246,0.15); border-radius:14px; padding:18px;">
-              <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
-                <span style="font-size:14px;">🖨️</span>
-                <span style="color:rgba(252,228,228,0.75); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1.4px;">Cardápio Físico</span>
-                <span style="color:rgba(252,228,228,0.25); font-size:11px;">— mesa / QR code</span>
-              </div>
-              <div style="max-width:280px;">
-                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase; display:block; margin-bottom:6px;">Logo (alongada)</span>
-                <div id="admin-logo-fisico-dropzone" style="
-                  border:2px dashed rgba(59,130,246,0.45); border-radius:12px; padding:12px;
-                  text-align:center; cursor:pointer; background:rgba(24,24,26,0.4); position:relative;
-                  min-height:70px; display:flex; flex-direction:column;
-                  align-items:center; justify-content:center; gap:6px;
-                ">
-                  <div style="font-size:22px;">📷</div>
-                  <div style="color:rgba(252,228,228,0.4); font-size:10px;">Logo física</div>
-                  <input type="file" id="admin-logo-fisico-file" accept="image/*" style="
-                    position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
-                  " />
-                </div>
-                <input type="hidden" id="admin-f-logo-fisico" value="" />
-              </div>
-            </div>
-
-            <button class="primary-button" id="admin-btn-save-aparencia" style="margin-top:4px;">Salvar</button>
-            <p id="admin-status-aparencia" style="font-size:13px; min-height:18px; margin:0;"></p>
-          </div>
-        </div>
-
-        <!-- 🕐 HORÁRIOS -->
-        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
-          <button onclick="toggleAccordion('admin-horarios')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:18px;">🕐</span>
-              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Horários de Funcionamento</span>
-            </div>
-            <span id="arrow-admin-horarios" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
-          </button>
-          <div id="accordion-admin-horarios" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
-            <div id="admin-horarios-lista" style="display:flex; flex-direction:column; gap:8px;"></div>
-            <button class="primary-button" id="admin-btn-save-horarios" style="margin-top:4px;">Salvar horários</button>
-            <p id="admin-status-horarios" style="font-size:13px; min-height:18px; margin:0;"></p>
-          </div>
-        </div>
-
-        <!-- 🌐 DOMÍNIOS -->
-        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
-          <button onclick="toggleAccordion('admin-dominios')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:18px;">🌐</span>
-              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Domínios</span>
-            </div>
-            <span id="arrow-admin-dominios" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
-          </button>
-          <div id="accordion-admin-dominios" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
-            <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Cardápio delivery + fidelidade</span>
-              <input id="admin-f-dom-delivery" placeholder="pedidos.restaurante.com.br" autocomplete="off" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-            </label>
-            <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Cardápio da mesa (QR Code)</span>
-         <input id="admin-f-dom-mesa" placeholder="mesa.restaurante.com.br" autocomplete="off" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-            </label>
-            <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Central do cliente</span>
-           <input id="admin-f-dom-central" placeholder="restaurante.com.br" autocomplete="off" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-            </label>
-            <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Vouchers (vale-presente)</span>
-                 <input id="admin-f-dom-vouchers" placeholder="vouchers.restaurante.com.br" autocomplete="off" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-            </label>
-            <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Reservas de mesa</span>
-          <input id="admin-f-dom-reservas" placeholder="reservas.restaurante.com.br" autocomplete="off" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-            </label>
-            <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Avaliação</span>
-              <input id="admin-f-dom-avaliacao" placeholder="avaliacao.restaurante.com.br" autocomplete="off" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-            </label>
-            </label>
-            <p style="color:rgba(252,228,228,0.45); font-size:12px; line-height:1.5; margin:0;">Só o domínio, sem https://. O link da fidelidade do cliente passa a ser: https://[domínio do delivery]/?token=...</p>
-            <button class="primary-button" id="admin-btn-save-dominios" style="margin-top:4px;">Salvar</button>
-            <p id="admin-status-dominios" style="font-size:13px; min-height:18px; margin:0;"></p>
-          </div>
-        </div>
-
-        <!-- 🏠 CENTRAL DO CLIENTE -->
-        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
-          <button onclick="toggleAccordion('admin-central')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:18px;">🏠</span>
-              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Central do cliente</span>
-            </div>
-            <span id="arrow-admin-central" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
-          </button>
-          <div id="accordion-admin-central" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
-            <div id="admin-central-corpo" style="display:flex; flex-direction:column; gap:14px;"></div>
-          </div>
-        </div>
-
-        <!-- 🎁 VALE-PRESENTE -->
-        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
-          <button onclick="toggleAccordion('admin-vouchers')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:18px;">🎁</span>
-              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Vale-presente</span>
-            </div>
-            <span id="arrow-admin-vouchers" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
-          </button>
-          <div id="accordion-admin-vouchers" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
-            <div id="admin-vouchers-corpo" style="display:flex; flex-direction:column; gap:12px;"></div>
-          </div>
-        </div>
-
-        <!-- 📅 RESERVA DE MESA -->
-        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
-          <button onclick="toggleAccordion('admin-reservas')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:18px;">📅</span>
-              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Reserva de mesa</span>
-            </div>
-            <span id="arrow-admin-reservas" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
-          </button>
-          <div id="accordion-admin-reservas" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
-            <div id="admin-reservas-corpo" style="display:flex; flex-direction:column; gap:12px;"></div>
-          </div>
-        </div>
-
-        <!-- 📋 DADOS E OPERAÇÃO -->
-        <div style="background:transparent; border-bottom:1px solid rgba(255,255,255,0.07);">
-          <button onclick="toggleAccordion('admin-operacao')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; cursor:pointer;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:18px;">📋</span>
-              <span style="color:rgba(252,228,228,1); font-size:15px; font-weight:800;">Dados e Operação</span>
-            </div>
-            <span id="arrow-admin-operacao" style="color:rgba(252,228,228,0.5); font-size:16px; transition:transform 0.2s;">▼</span>
-          </button>
-          <div id="accordion-admin-operacao" style="display:none; padding:0 0 20px 0; flex-direction:column; gap:10px;">
-            <div style="display:flex; gap:10px;">
-              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Telefone</span>
-                <input id="admin-f-telefone" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-              </label>
-              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Instagram</span>
-                <input id="admin-f-instagram" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-              </label>
-            </div>
-            <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Endereço</span>
-          <input id="admin-f-endereco" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-            </label>
-          <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Link de avaliação do Google</span>
-              <input id="admin-f-google-avaliacao" placeholder="https://g.page/r/..../review" autocomplete="off" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-            </label>
-            <div style="display:flex; gap:10px;">
-              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Número de mesas</span>
-                <input id="admin-f-mesas" type="number" min="0" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-              </label>
-              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Pedido mínimo (R$)</span>
-                <input id="admin-f-pedido-minimo" type="number" min="0" step="0.01" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-              </label>
-            </div>
-            <div style="display:flex; gap:10px;">
-              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Entrega mín. (min)</span>
-                <input id="admin-f-entrega-min" type="number" min="0" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-              </label>
-              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Entrega máx. (min)</span>
-                <input id="admin-f-entrega-max" type="number" min="0" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-              </label>
-            </div>
-                        <div style="display:flex; gap:10px;">
-              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Pedido agendado (loja fechada)</span>
-                <select id="admin-f-agendamento" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;">
-                  <option value="0">Desligado</option>
-                  <option value="1">Ligado (só Pix online)</option>
-                </select>
-              </label>
-              <label style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Entra na cozinha (min antes)</span>
-                <input id="admin-f-agendamento-min" type="number" min="0" max="180" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-              </label>
-            </div>
-            <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Pagamento online (separado por vírgula)</span>
-              <input id="admin-f-pagamento-online" placeholder="pix, credito" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-            </label>
-            <label style="display:flex; flex-direction:column; gap:4px;">
-              <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Pagamento na entrega (separado por vírgula)</span>
-              <input id="admin-f-pagamento-entrega" placeholder="dinheiro, maquininha" style="padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-            </label>
-            <button class="primary-button" id="admin-btn-save-operacao" style="margin-top:4px;">Salvar</button>
-            <p id="admin-status-operacao" style="font-size:13px; min-height:18px; margin:0;"></p>
-          </div>
-        </div>
-
-      </div>
+<!-- APP -->
+<div id="app" class="hidden">
+  <header class="topo">
+    <a href="#/" class="marca" style="text-decoration:none"><span class="marca-sinal" data-ico="escudo"></span><b>FluxON</b><em>admin</em></a>
+    <nav class="topo-nav">
+      <a href="#/" data-nav="restaurantes"><span data-ico="loja"></span>Restaurantes <span class="cont" id="cont-rest"></span></a>
+      <a href="#/donos" data-nav="donos"><span data-ico="pessoas"></span>Donos <span class="cont" id="cont-donos"></span></a>
+    </nav>
+    <div class="topo-eu">
+      <span id="eu-email"></span>
+      <img id="eu-foto" class="hidden" alt="" referrerpolicy="no-referrer" />
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-sair"><span data-ico="sair"></span>Sair</button>
     </div>
+  </header>
+  <main class="palco" id="palco"></main>
+  <div class="salvar-barra" id="salvar-barra" role="status">
+    <span>Alterações não salvas</span>
+    <button type="button" class="btn btn-ghost btn-sm" id="salvar-descartar">Descartar</button>
+    <button type="button" class="btn btn-pri btn-sm" id="salvar-ok">Salvar</button>
   </div>
-</main>
+</div>
 
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
-<!-- CROP MODAL -->
+<!-- RECORTE DE FOTO -->
 <div class="crop-modal-backdrop hidden" id="crop-modal-backdrop">
   <div class="crop-modal-box">
     <div class="crop-modal-header">
-      <span class="crop-modal-title">✂️ Recortar imagem</span>
-      <button class="crop-modal-close" onclick="cancelCrop()">×</button>
+      <span class="crop-modal-title">Recortar imagem</span>
+      <button class="crop-modal-close" onclick="cancelCrop()" aria-label="Fechar">×</button>
     </div>
-    <div class="crop-img-wrap">
-      <img id="crop-image" src="" alt="crop" />
-    </div>
+    <div class="crop-img-wrap"><img id="crop-image" src="" alt="" /></div>
     <div class="crop-modal-footer">
-      <button class="crop-btn-cancel" onclick="cancelCrop()">Cancelar</button>
-      <button class="crop-btn-confirm" onclick="confirmCrop()">Usar esta imagem</button>
+      <button class="btn" onclick="cancelCrop()">Cancelar</button>
+      <button class="btn btn-pri" onclick="confirmCrop()">Usar esta imagem</button>
     </div>
   </div>
 </div>

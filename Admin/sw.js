@@ -1,6 +1,6 @@
 // FluxON Admin — service worker. Sempre busca a versão nova na internet primeiro;
 // sem internet, abre o que ficou guardado. Assim as atualizações chegam no PC do cliente sozinhas.
-const CACHE = 'fluxon-admin-v1';
+const CACHE = 'fluxon-admin-v2';
 const ASSETS = ['/', '/index.html', '/script.js', '/style.css', '/manifest.json', '/pwa-icon.png'];
 
 self.addEventListener('install', e => {
