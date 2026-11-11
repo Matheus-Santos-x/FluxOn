@@ -243,11 +243,23 @@
         <p class="ent-muted ent-dica">Por entrega, ele recebe a taxa de entrega de cada pedido.</p>
         ${novo ? "" : `<label class="ent-check"><input type="checkbox" name="ativo" ${ent.ativo ? "checked" : ""}> Ativo (desmarcar tira o acesso dele na hora)</label>`}
         <p class="ent-erro" id="ent-form-erro" role="alert"></p>
-        <div class="ent-botoes"><button type="button" class="ghost-button" data-fechar>Cancelar</button><button type="submit" class="primary-button">${novo ? "Cadastrar" : "Salvar"}</button></div>
+        <div class="ent-botoes">${novo ? "" : `<button type="button" class="ent-excluir" id="ent-excluir">Excluir entregador</button>`}<button type="button" class="ghost-button" data-fechar>Cancelar</button><button type="submit" class="primary-button">${novo ? "Cadastrar" : "Salvar"}</button></div>
       </form>`);
     const form = f.querySelector("#ent-form");
     const diaria = () => { const t = form.tipo_pagamento.value; f.querySelector("#ent-diaria-campo").hidden = t === "entrega"; f.querySelector(".ent-dica").hidden = t === "diaria"; };
     form.addEventListener("change", diaria); diaria();
+         // excluir: o primeiro toque pede confirmação, o segundo exclui
+    f.querySelector("#ent-excluir")?.addEventListener("click", async (e) => {
+      const b = e.currentTarget;
+      if (!b.dataset.certeza) { b.dataset.certeza = "1"; b.textContent = `Toque de novo pra excluir o ${primeiro(ent.nome)}`; return; }
+      b.disabled = true;
+      try {
+        await api(`/${ent.id}`, { method: "DELETE" });
+        fecharJanela();
+        aviso(`${primeiro(ent.nome)} excluído`);
+        carregarLista(); carregarHoje();
+      } catch (err) { f.querySelector("#ent-form-erro").textContent = err.message; b.disabled = false; }
+    });
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const body = { nome: form.nome.value, telefone: form.telefone.value, tipo_pagamento: form.tipo_pagamento.value, valor_diaria: (form.valor_diaria.value || "0").replace(/\./g, "").replace(",", ".") };
