@@ -8043,12 +8043,17 @@ async function ownerListarRestaurantes(ownerId) {
     .from("owner_restaurants").select("restaurant_id").eq("owner_id", ownerId);
   const ids = (links || []).map(l => l.restaurant_id);
   if (ids.length === 0) return [];
-  const { data } = await supabase
-    .from("restaurants").select("id, name, plan").in("id", ids).order("name");
+  const [{ data }, { data: cfgs }] = await Promise.all([
+    supabase.from("restaurants").select("id, name, plan").in("id", ids).order("name"),
+    supabase.from("restaurante_config").select("restaurant_id, nome_exibicao, logo_url, cor_primaria").in("restaurant_id", ids)
+  ]);
+  const cfg = new Map((cfgs || []).map(c => [c.restaurant_id, c]));
   return (data || []).map(r => ({
     id: r.id,
-    name: r.name || "Restaurante",
-    plan: String(r.plan || "essential").toLowerCase()
+    name: cfg.get(r.id)?.nome_exibicao || r.name || "Restaurante", // o nome que o cliente vê
+    plan: String(r.plan || "essential").toLowerCase(),
+    logo_url: cfg.get(r.id)?.logo_url || null,
+    cor_primaria: cfg.get(r.id)?.cor_primaria || null
   }));
 }
 
