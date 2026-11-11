@@ -174,30 +174,6 @@ const resultsState = {
   uiReady: false,
 };
 
-// ===== ADMIN STATE =====
-const ADMIN_URL = `${API_BASE}/admin`;
-let adminRestaurantsCache = [];
-let adminSelectedRestaurant = null;
-
-function getAdminToken() {
-  return localStorage.getItem("fluxon_admin_token") || localStorage.getItem("fluxon_token");
-}
-
-function buildAdminHeaders() {
-  const token = getAdminToken();
-  return {
-    "Content-Type": "application/json",
-    ...(token ? { "Authorization": `Bearer ${token}` } : {})
-  };
-}
-
-function checkAdminAccess() {
-  const token = getAdminToken();
-  if (!token) return false;
-  const payload = decodeJwt(token);
-  return !!payload?.is_admin;
-}
-
 function isImpersonating() {
   return !!localStorage.getItem("fluxon_admin_token");
 }
