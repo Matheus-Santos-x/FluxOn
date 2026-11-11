@@ -12,6 +12,7 @@ const mapa = (() => {
   function iniciar() {
     if (m || !window.L) return;
     m = L.map("mapa", { zoomControl: false, attributionControl: true }).setView([-22.6, -48.8], 14);
+    m.attributionControl.setPrefix(false); // tira o "Leaflet" com a bandeirinha; fica só o "© OpenStreetMap" (obrigatório)
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
     m.on("dragstart", () => { seguindo = false; });
     $("btn-centralizar").onclick = () => { seguindo = true; enquadrar(); };
@@ -203,6 +204,7 @@ const mapa = (() => {
       }
       // a ordem da rota vale pra lista também (quem não achou no mapa vai pro fim)
       S.rotaOrdem = [...ordem.map((p) => p.id), ...lista.map((p) => p.id).filter((id) => !ordem.some((o) => o.id === id))];
+      tempoReal.enviar("rota", { ordem: S.rotaOrdem }); // o cliente vê quantas entregas faltam antes da dele
       pinos.forEach((p) => p.remove()); pinos = [];
       linha?.remove(); linha = null;
       ordem.forEach((p, i) => {
