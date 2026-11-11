@@ -1,18 +1,25 @@
-/* troco.js — dinheiro da rodada. Entregou tudo e recebeu em dinheiro: o app mostra quanto devolver no caixa
-   e fica esperando o caixa conferir. Conferiu, some e avisa. */
+/* troco.js — dinheiro das rodadas. Entregou tudo e recebeu em dinheiro: aparece UMA linha
+   "Devolver R$ X no caixa" em cima das entregas. Não trava nada: dá pra pegar pedido novo normalmente.
+   Quando o caixa confere, a linha some e o app avisa. */
 const troco = (() => {
   let anteriores = new Set();
 
   function desenhar() {
     const box = $("acertos");
-    box.innerHTML = S.acertos.map((a) => `
-      <div class="acerto" data-id="${esc(a.id)}">
-        <small>Devolver no caixa</small>
-        <b>${moeda(a.dinheiro)}</b>
-        <div class="linhas">${a.pedidos.map((p) => `<span>#${esc(p.numero)} · ${moeda(p.dinheiro)}</span>`).join("")}</div>
-        <p class="espera">Esperando o caixa conferir</p>
-      </div>`).join("");
-    // acerto que sumiu = o caixa conferiu
+    if (!S.acertos.length) box.innerHTML = "";
+    else {
+      const total = S.acertos.reduce((a, x) => a + (x.dinheiro || 0), 0);
+      const nums = S.acertos.flatMap((x) => x.pedidos.map((p) => "#" + p.numero));
+      box.innerHTML = `
+        <div class="acerto" role="status">
+          <span class="acerto-ic" aria-hidden="true">💵</span>
+          <div class="acerto-txt">
+            <b>Devolver ${moeda(total)} no caixa</b>
+            <small>${esc(nums.join(", "))} · esperando o caixa conferir</small>
+          </div>
+        </div>`;
+    }
+    // rodada que sumiu = o caixa conferiu
     const agora = new Set(S.acertos.map((a) => a.id));
     const conferidos = [...anteriores].filter((id) => !agora.has(id));
     if (conferidos.length && anteriores.size) { vibrar(60); aviso("O caixa conferiu o dinheiro ✓", "bom"); }
