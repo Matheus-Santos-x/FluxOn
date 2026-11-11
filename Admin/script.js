@@ -414,7 +414,9 @@ const SECOES = [
   ["enderecos", "Endereços", "globo"],
   ["central", "Central do cliente", "casa"],
   ["vale", "Vale-presente", "presente"],
-  ["reservas", "Reservas", "calendario"]
+   ["reservas", "Reservas", "calendario"],
+  ["mapa", "Mapa (TomTom)", "globo"]
+];
 ];
 
 async function telaRestaurante(id, secao) {
@@ -485,7 +487,7 @@ function desenharSecao() {
   velho.replaceWith(el);
   S.salvar = null; S.descartar = null;
   limparSujo();
-  const fn = { conta: secConta, donos: secDonos, aparencia: secAparencia, cardapio: secCardapio, horarios: secHorarios, operacao: secOperacao, enderecos: secEnderecos, central: secCentral, vale: secVale, reservas: secReservas }[S.secao];
+  const fn = { conta: secConta, donos: secDonos, aparencia: secAparencia, cardapio: secCardapio, horarios: secHorarios, operacao: secOperacao, enderecos: secEnderecos, central: secCentral, vale: secVale, reservas: secReservas, mapa: secMapa }[S.secao];
   fn(el);
   pintarIcones(el);
   // qualquer mudança nos campos de uma seção com "salvar" mostra a barra
@@ -1598,6 +1600,38 @@ async function secVale(el) {
       } catch (e) { toast(e.message, "erro"); }
     });
   } catch (e) { $("vale-corpo").innerHTML = `<div class="aviso">${esc(e.message)}</div>`; }
+}
+
+// ===== MAPA (TomTom) =====
+async function secMapa(el) {
+  el.innerHTML = `${cabecaSecao("Mapa (TomTom)", "Com a chave do TomTom do restaurante, o app do entregador e o rastreio do cardápio usam o mapa e a busca de endereço do TomTom. Sem chave, usam o OpenStreetMap.")}<div id="mapa-corpo"><div class="carregando">Carregando...</div></div>`;
+  const rid = S.atual.id;
+  try {
+    const d = await api(`/restaurants/${rid}/mapa`);
+    if (S.atual?.id !== rid || S.secao !== "mapa") return;
+    $("mapa-corpo").innerHTML = `
+      <div class="secao"><div class="bloco">
+        <label class="campo"><span>Chave do TomTom (API key)</span>
+          <input id="tt-chave" value="${esc(d.tomtom)}" placeholder="cole a API key da conta do TomTom do restaurante" autocomplete="off" spellcheck="false"></label>
+        <p class="dica">Pegue em developer.tomtom.com → Dashboard → API keys. Deixe vazio pra voltar ao OpenStreetMap.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+          <button type="button" class="btn btn-pri" id="tt-salvar">Salvar chave</button>
+          <span class="dica" id="tt-status">${d.tomtom ? "Usando TomTom" : "Usando OpenStreetMap"}</span>
+        </div>
+      </div></div>`;
+    $("tt-salvar").onclick = () => ocupado($("tt-salvar"), async () => {
+      const chave = $("tt-chave").value.trim();
+      try {
+        if (chave) { // confere com o TomTom antes de salvar
+          const r = await fetch(`https://api.tomtom.com/search/2/geocode/${encodeURIComponent("Lençóis Paulista, SP")}.json?countrySet=BR&limit=1&key=${encodeURIComponent(chave)}`).catch(() => null);
+          if (r && (r.status === 401 || r.status === 403)) throw new Error("O TomTom não aceitou essa chave. Confira se copiou inteira.");
+        }
+        await api(`/restaurants/${rid}/mapa`, { metodo: "PATCH", corpo: { tomtom: chave } });
+        $("tt-status").textContent = chave ? "Usando TomTom" : "Usando OpenStreetMap";
+        toast(chave ? "Chave salva. O mapa do TomTom já vale." : "Chave removida. Voltou pro OpenStreetMap.");
+      } catch (e) { toast(e.message, "erro"); }
+    });
+  } catch (e) { $("mapa-corpo").innerHTML = `<div class="aviso">${esc(e.message)}</div>`; }
 }
 
 // ===== RESERVAS =====
