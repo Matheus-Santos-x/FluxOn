@@ -685,6 +685,25 @@ export function registrarEntregador(ctx) {
     return res.json(data);
   });
 
+  // excluir o entregador. Não deixa se ele estiver com pedido na rua ou com dinheiro pra devolver.
+  // Os pedidos que ele já entregou continuam no histórico (só perdem o nome dele).
+  app.delete(`${OP}/:id`, async (req, res) => {
+    const rid = req.params.restaurant_id, id = req.params.id;
+    const { data: e } = await supabase.from("entregadores").select("id, nome").eq("id", id).eq("restaurant_id", rid).maybeSingle();
+    if (!e) return res.status(404).json({ error: "Entregador não encontrado" });
+    const [{ count: naRua }, { count: acertar }] = await Promise.all([
+      supabase.from("orders").select("id", { count: "exact", head: true }).eq("entregador_id", id).eq("status", "delivering"),
+      supabase.from("entregador_rodadas").select("id", { count: "exact", head: true }).eq("entregador_id", id).eq("status", "a_acertar")
+    ]);
+    if (naRua) return res.status(409).json({ error: `${primeiroNome(e.nome)} está com ${naRua} pedido${naRua > 1 ? "s" : ""} na rua. Tire os pedidos dele antes de excluir.` });
+    if (acertar) return res.status(409).json({ error: `${primeiroNome(e.nome)} ainda tem dinheiro pra devolver. Confira o acerto antes de excluir.` });
+    const { error } = await supabase.from("entregadores").delete().eq("id", id).eq("restaurant_id", rid);
+    if (error) return erro(res, 500, "Não deu pra excluir", error);
+    io.to(`entd:${id}`).emit("entregador_sair");
+    io.to(rid).emit("entregadores_mudou");
+    return res.json({ success: true });
+  });
+   
   // código de acesso na tela (quando o WhatsApp não chega)
   app.post(`${OP}/:id/codigo`, async (req, res) => {
     const { data: e } = await supabase.from("entregadores").select("telefone, ativo").eq("id", req.params.id).eq("restaurant_id", req.params.restaurant_id).maybeSingle();
