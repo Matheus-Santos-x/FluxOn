@@ -8,6 +8,26 @@ const AUTH_URL = `${API_BASE}/auth/google`;
 const CRM_URL = `${API_BASE}/crm`;
 const METRICS_URL = `${API_BASE}/api/v1/metrics`;
 const FORECAST_URL = `${API_BASE}/api/v1/demand-forecast`;
+
+// ===== IMPERSONAÇÃO vinda do Painel Admin (o admin abre esta aba com #imp=token) =====
+(function receberImpersonacao() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  const token = h.get("imp");
+  if (!token) return;
+  history.replaceState(null, "", location.pathname + location.search); // tira o token da barra de endereço
+  const p = decodeJwt(token);
+  if (!p?.restaurant_id || !p.impersonated_by) return;
+  if (!localStorage.getItem("fluxon_admin_token")) { // guarda o login que já estava aqui (se tinha) pra voltar ao sair
+    localStorage.setItem("fluxon_admin_token", localStorage.getItem("fluxon_token") || "-");
+    localStorage.setItem("fluxon_admin_restaurant_id", localStorage.getItem("restaurant_id") || "");
+    localStorage.setItem("fluxon_admin_restaurant_name", localStorage.getItem("restaurant_name") || "");
+    localStorage.setItem("fluxon_admin_restaurant_plan", localStorage.getItem("restaurant_plan") || "");
+  }
+  localStorage.setItem("fluxon_token", token);
+  localStorage.setItem("restaurant_id", p.restaurant_id);
+  localStorage.setItem("restaurant_name", h.get("n") || "Restaurante");
+  localStorage.setItem("restaurant_plan", p.plan || "essential");
+})();
 let selectedOrderIds = new Set();
 
 const _fetch = window.fetch.bind(window);
@@ -1727,17 +1747,20 @@ function sairImpersonacao() {
   const adminToken = localStorage.getItem("fluxon_admin_token");
   if (!adminToken) return;
 
-  localStorage.setItem("fluxon_token", adminToken);
-  localStorage.setItem("restaurant_id", localStorage.getItem("fluxon_admin_restaurant_id"));
-  localStorage.setItem("restaurant_name", localStorage.getItem("fluxon_admin_restaurant_name"));
-  localStorage.setItem("restaurant_plan", localStorage.getItem("fluxon_admin_restaurant_plan"));
+  // volta o login que estava aqui antes (se não tinha nenhum, fica deslogado)
+  const volta = (k, v) => v && v !== "-" ? localStorage.setItem(k, v) : localStorage.removeItem(k);
+  volta("fluxon_token", adminToken);
+  volta("restaurant_id", localStorage.getItem("fluxon_admin_restaurant_id"));
+  volta("restaurant_name", localStorage.getItem("fluxon_admin_restaurant_name"));
+  volta("restaurant_plan", localStorage.getItem("fluxon_admin_restaurant_plan"));
 
   localStorage.removeItem("fluxon_admin_token");
   localStorage.removeItem("fluxon_admin_restaurant_id");
   localStorage.removeItem("fluxon_admin_restaurant_name");
   localStorage.removeItem("fluxon_admin_restaurant_plan");
 
-  location.reload();
+  window.close(); // aba aberta pelo Painel Admin: fecha sozinha
+  setTimeout(() => location.reload(), 300); // se o navegador não deixar fechar, recarrega
 }
 
 function showMesas() {
