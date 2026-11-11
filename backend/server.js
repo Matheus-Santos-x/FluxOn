@@ -162,6 +162,7 @@ const ALLOWED_ORIGINS_FIXED = [
     'https://kds-admin.dahead.easypanel.host',
     'https://n8n-front.dahead.easypanel.host',
   'https://kds-owner-service.dahead.easypanel.host',
+  'https://kds-entregadores.dahead.easypanel.host',
   
 ];
 
