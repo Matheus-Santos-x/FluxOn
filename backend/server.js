@@ -157,6 +157,7 @@ function emitOrderUpdate(restaurant_id, order) {
 const ALLOWED_ORIGINS_FIXED = [
   'https://fluxon.evoriseai.com.br',
     'https://admin.evoriseai.com.br',
+    'https://kds-admin.dahead.easypanel.host',
     'https://n8n-front.dahead.easypanel.host',
   'https://kds-owner-service.dahead.easypanel.host',
   
@@ -2820,6 +2821,21 @@ app.post("/auth/google", async (req, res) => {
     console.error("Erro auth:", err);
     return res.status(500).json({ error: "Erro inesperado" });
   }
+});
+
+// Login do Painel Admin por senha (provisório, enquanto o Google não libera). Senha fica só no .env: ADMIN_PASSWORD
+app.post("/admin/auth/senha", limiterStrict, async (req, res) => {
+  const senhaCerta = process.env.ADMIN_PASSWORD || "";
+  if (senhaCerta.length < 12) return res.status(503).json({ error: "Login por senha desativado" });
+  const { senha } = req.body || {};
+  if (!senha || !safeEqual(senha, senhaCerta)) {
+    console.warn(`🔒 ADMIN senha errada — IP ${req.ip}`);
+    return res.status(401).json({ error: "Senha incorreta" });
+  }
+  const email = [...ADMIN_EMAILS][0] || "admin@fluxon";
+  const token = jwt.sign({ email, is_admin: true }, process.env.JWT_SECRET, { expiresIn: "12h" });
+  await logAdminAction(email, "login_admin_senha", { ip: req.ip });
+  return res.json({ token, email, nome: "", foto: "" });
 });
 
 // Login do Painel Admin (app separado): só e-mails da ADMIN_EMAILS entram, não precisa ter restaurante
