@@ -9,11 +9,30 @@ const mapa = (() => {
   let seguindo = true, rotaChave = "", girando = false;
 
   /* ---------- mapa ---------- */
+  // fundo do mapa: TomTom se o restaurante tem chave; senão OpenStreetMap
+  let base = null, baseChave = null;
+  const chaveTT = () => S.conta?.restaurante?.tomtom || null;
+  function camadaBase() {
+    baseChave = chaveTT();
+    return baseChave
+      ? L.tileLayer(`https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key=${encodeURIComponent(baseChave)}&language=pt-BR`, { maxZoom: 20, attribution: "© TomTom" })
+      : L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" });
+  }
+  function trocarBase() { if (m && chaveTT() !== baseChave) { base?.remove(); base = camadaBase().addTo(m); base.bringToBack(); } }
+  // busca no TomTom (quando o restaurante tem chave); sem resultado, cai no OpenStreetMap
+  async function tomtomGeo(q, chave) {
+    try {
+      const r = await fetch(`https://api.tomtom.com/search/2/geocode/${encodeURIComponent(q)}.json?countrySet=BR&limit=1&language=pt-BR&key=${encodeURIComponent(chave)}`);
+      const it = r.ok ? (await r.json()).results?.[0] : null;
+      return it ? { lat: it.position.lat, lng: it.position.lon } : null;
+    } catch { return null; }
+  }
+   
   function iniciar() {
     if (m || !window.L) return;
     m = L.map("mapa", { zoomControl: false, attributionControl: true }).setView([-22.6, -48.8], 14);
     m.attributionControl.setPrefix(false); // tira o "Leaflet" com a bandeirinha; fica só o "© OpenStreetMap" (obrigatório)
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
+    base = camadaBase().addTo(m);
     m.on("dragstart", () => { seguindo = false; });
     $("btn-centralizar").onclick = () => { seguindo = true; enquadrar(); };
     const tocarGps = () => { if (watch === null) estadoPermissao().then((st) => st === "denied" ? ajudaBloqueada() : ligar()); };
@@ -25,6 +44,7 @@ const mapa = (() => {
 
   // o restaurante aparece no mapa (e é o ponto de partida da rota quando ainda não tem GPS)
   async function mostrarLoja() {
+    trocarBase(); // o restaurante pode ter ganhado (ou perdido) a chave do TomTom
     const end = S.conta?.restaurante?.endereco;
     if (!end || !m) return;
     const c = await geocodificar({ completo: end, rua: end, resto: "" });
@@ -150,9 +170,10 @@ const mapa = (() => {
   const fila = [];
   let buscando = false;
   function cacheGeo() { try { return JSON.parse(localStorage.getItem("fx_geo") || "{}"); } catch { return {}; } }
+  const chaveCache = (s) => (chaveTT() ? "tt:" : "") + s; // TomTom e OSM guardam separado
   function geocodificar(endereco) {
     const c = cacheGeo();
-    if (c[endereco.completo] !== undefined) return Promise.resolve(c[endereco.completo]);
+    if (c[chaveCache(endereco.completo)] !== undefined) return Promise.resolve(c[chaveCache(endereco.completo)]);
     return new Promise((ok) => { fila.push({ endereco, ok }); andar(); });
   }
   async function andar() {
@@ -160,8 +181,9 @@ const mapa = (() => {
     buscando = true;
     const { endereco, ok } = fila.shift();
     const limpo = endereco.completo.replace(/\b\d{5}-?\d{3}\b/g, "").replace(/\s+-\s+/g, ", ").replace(/\//g, ", ").replace(/(,\s*)+$/, "");
-    let res = null;
-    for (const q of [limpo, [endereco.rua, String(endereco.resto || "").split("·")[0]].filter(Boolean).join(", ")]) {
+    const tt = chaveTT();
+    let res = tt ? await tomtomGeo(limpo, tt) : null;
+    for (const q of res ? [] : [limpo, [endereco.rua, String(endereco.resto || "").split("·")[0]].filter(Boolean).join(", ")]) {
       if (!q) continue;
       try {
         const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(q)}`, { headers: { "Accept-Language": "pt-BR" } });
@@ -170,7 +192,7 @@ const mapa = (() => {
       } catch {}
       await new Promise((r) => setTimeout(r, 1100));
     }
-    try { const c = cacheGeo(); c[endereco.completo] = res; const k = Object.keys(c); if (k.length > 300) delete c[k[0]]; localStorage.setItem("fx_geo", JSON.stringify(c)); } catch {}
+    try { const c = cacheGeo(); c[chaveCache(endereco.completo)] = res; const k = Object.keys(c); if (k.length > 300) delete c[k[0]]; localStorage.setItem("fx_geo", JSON.stringify(c)); } catch {}
     ok(res);
     setTimeout(() => { buscando = false; andar(); }, 1100); // regra do Nominatim: 1 por segundo
   }
