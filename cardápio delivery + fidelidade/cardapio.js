@@ -85,7 +85,13 @@ function renderMenu(){
 
     const pill = document.createElement("button");
     pill.className = "cat-pill" + (idx === 0 ? " active" : "");
-    pill.textContent = cat;
+    if(comFotos){
+      const foto = fotosCat.get(String(cat).trim().toLowerCase());
+      pill.innerHTML = `<span class="cat-foto">${foto ? `<img src="${escHtml(foto)}" alt="" loading="lazy">` : `<b>${escHtml(String(cat).trim().charAt(0).toUpperCase())}</b>`}</span><span class="cat-nome">${escHtml(cat)}</span>`;
+      pill.title = cat;
+    }else{
+      pill.textContent = cat;
+    }
     pill.dataset.cat = slug(cat);
     pill.onclick = () => {
       document.querySelectorAll(".cat-pill").forEach(p => p.classList.remove("active"));
