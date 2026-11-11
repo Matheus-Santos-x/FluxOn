@@ -69,6 +69,11 @@ function renderMenu(){
   const main = document.getElementById("menuMain");
   catNav.innerHTML = "";
   main.innerHTML = "";
+   
+  // categorias com foto: se pelo menos uma tiver foto, a barra vira "bolinhas com foto + nome embaixo"
+  const fotosCat = new Map(RESTAURANT_CATEGORIAS.filter(c => c && c.foto_url).map(c => [String(c.nome).trim().toLowerCase(), c.foto_url]));
+  const comFotos = order.some(c => fotosCat.has(String(c).trim().toLowerCase()));
+  document.getElementById("catNav").classList.toggle("com-fotos", comFotos);
 
   if(order.length === 0){
     main.innerHTML = `<div class="empty-state">Nenhum item disponível no momento.</div>`;
@@ -148,6 +153,12 @@ function renderMenu(){
   });
 
   setupScrollSpy();
+   
+  // a altura da barra muda (com foto, presa no topo...): as seções param logo abaixo dela
+  const navEl = document.getElementById("catNav");
+  const medir = () => document.documentElement.style.setProperty("--nav-h", navEl.offsetHeight + "px");
+  medir();
+  if(window.ResizeObserver && !window._navObs){ window._navObs = new ResizeObserver(medir); window._navObs.observe(navEl); }
 }
 
 /* ============================================================
