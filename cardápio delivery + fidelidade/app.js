@@ -46,8 +46,11 @@ function showError(msg){
 
     maybeShowAiTooltip();
 
+    // rastreio: se tiver pedido em andamento, o cardápio abre direto na tela de acompanhar
+    rastreio.iniciar().catch(err => console.warn("Rastreio indisponível:", err));
+
     // fidelidade roda à parte: se falhar, o cardápio continua normal
-    iniciarAbas();
+    iniciarAbas().finally(() => rastreio.menuLateral());
   }catch(err){
     console.error("Erro ao carregar o cardápio:", err);
     document.body.classList.remove("aba-fid", "fid-carregando");
@@ -163,6 +166,7 @@ if("serviceWorker" in navigator){
   
    function abrir(){
     if(instalado() || !fundo) return;
+    if(document.body.classList.contains("rt-aberto")) return; // quem veio acompanhar o pedido não vê o convite por cima do mapa
     const cfg = (typeof RESTAURANT_CONFIG !== "undefined" && RESTAURANT_CONFIG) || {};
     if(cfg.nome_exibicao) $i("instNome").textContent = cfg.nome_exibicao;
     // mesma logo que aparece no topo do cardápio
