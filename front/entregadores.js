@@ -353,6 +353,7 @@
     try { await carregarLeaflet(); } catch { el.hidden = true; return; }
     if (!E.mapa) {
       E.mapa = L.map(el, { zoomControl: true }).setView([comPos[0].posicao.lat, comPos[0].posicao.lng], 14);
+             E.mapa.attributionControl.setPrefix(false);
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(E.mapa);
     }
     setTimeout(() => E.mapa.invalidateSize(), 50);
