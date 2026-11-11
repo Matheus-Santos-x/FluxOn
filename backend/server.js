@@ -156,6 +156,7 @@ function emitOrderUpdate(restaurant_id, order) {
 
 const ALLOWED_ORIGINS_FIXED = [
   'https://fluxon.evoriseai.com.br',
+    'https://admin.evoriseai.com.br',
     'https://n8n-front.dahead.easypanel.host',
   'https://kds-owner-service.dahead.easypanel.host',
   
@@ -2817,6 +2818,32 @@ app.post("/auth/google", async (req, res) => {
     return res.json({ authorized: true, restaurant: data[0], token, is_admin: isAdmin });
   } catch (err) {
     console.error("Erro auth:", err);
+    return res.status(500).json({ error: "Erro inesperado" });
+  }
+});
+
+// Login do Painel Admin (app separado): só e-mails da ADMIN_EMAILS entram, não precisa ter restaurante
+app.post("/admin/auth/google", limiterStrict, async (req, res) => {
+  try {
+    const { credential } = req.body || {};
+    if (!credential) return res.status(400).json({ error: "Token ausente" });
+    let payload;
+    try {
+      const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
+      payload = ticket.getPayload();
+    } catch {
+      return res.status(401).json({ error: "Login Google inválido" });
+    }
+    const email = String(payload.email || "").toLowerCase();
+    if (!payload.email_verified || !ADMIN_EMAILS.has(email)) {
+      console.warn(`🔒 ADMIN login negado: ${email}`);
+      return res.status(403).json({ error: "Este e-mail não tem acesso ao painel admin" });
+    }
+    const token = jwt.sign({ email, is_admin: true }, process.env.JWT_SECRET, { expiresIn: "12h" });
+    await logAdminAction(email, "login_admin", {});
+    return res.json({ token, email, nome: payload.name || "", foto: payload.picture || "" });
+  } catch (err) {
+    console.error("Erro login admin:", err);
     return res.status(500).json({ error: "Erro inesperado" });
   }
 });
