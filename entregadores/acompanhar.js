@@ -24,6 +24,7 @@
   function iniciarMapa() {
     if (m || !window.L) return;
     m = L.map("mapa", { zoomControl: false }).setView([-22.6, -48.8], 14);
+    m.attributionControl.setPrefix(false);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
     // deixa espaço pro cartão de baixo
     m.getContainer().style.bottom = "0";
