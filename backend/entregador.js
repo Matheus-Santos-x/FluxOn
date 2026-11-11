@@ -227,6 +227,7 @@ async function aoAtualizar(order) {
       await conferirRodada(order.rodada_id);
       const { data: resto } = await C.supabase.from("orders").select("id").eq("entregador_id", order.entregador_id).eq("status", "delivering");
       for (const o of resto || []) C.io.to(`acomp:${o.id}`).emit("atualizar");
+      if (order.status === "finished") avisarProximo(rid, order.entregador_id).catch((e) => console.error("⚠️ aviso 'você é o próximo':", e.message));
     }
   }
 }
@@ -348,26 +349,47 @@ async function levarPedidos(rid, ent, ids, { peloCaixa = false } = {}) {
 }
 
 const _jaAvisados = new Set();
+// link do rastreio: abre o app de pedidos (cardápio delivery) do restaurante, que vira a tela de rastreio.
+// Sem domínio próprio, abre a página do mapa do app dos entregadores.
+async function linkRastreio(rid, o) {
+  const { data: r } = await C.supabase.from("restaurants").select("cardapio_delivery_url").eq("id", rid).maybeSingle();
+  const dominio = String(r?.cardapio_delivery_url || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  const base = String(process.env.ENTREGADOR_APP_URL || "").replace(/\/+$/, "");
+  if (!dominio && !base) return "";
+  let tk = o.tracking_token;
+  if (!tk) { tk = crypto.randomBytes(10).toString("hex"); await C.supabase.from("orders").update({ tracking_token: tk }).eq("id", o.id); }
+  return dominio ? `https://${dominio}/?acompanhar=${tk}` : `${base}/acompanhar.html?c=${tk}`;
+}
+
+// entregou um pedido: o próximo da rota recebe "você é o próximo"
+const _jaProximo = new Set();
+async function avisarProximo(rid, entregadorId) {
+  const { data: prox } = await C.supabase.from("orders").select("id, order_number, client_name, client_phone, tracking_token, ordem_rota")
+    .eq("entregador_id", entregadorId).eq("status", "delivering").not("ordem_rota", "is", null)
+    .order("ordem_rota", { ascending: true }).limit(1).maybeSingle();
+  if (!prox || !prox.client_phone || _jaProximo.has(prox.id)) return;
+  _jaProximo.add(prox.id);
+  if (_jaProximo.size > 5000) _jaProximo.clear();
+  if (!(await configDo(rid)).avisar_cliente) return;
+  const [rest, { data: ent }] = await Promise.all([nomeRestaurante(rid), C.supabase.from("entregadores").select("nome").eq("id", entregadorId).maybeSingle()]);
+  const link = await linkRastreio(rid, prox);
+  const nome = primeiroNome(prox.client_name);
+  await whatsApp(rid, rest.nome, prox.client_name, prox.client_phone,
+    `🛵 ${nome ? nome + ", v" : "V"}ocê é o próximo! ${primeiroNome(ent?.nome) || "O entregador"} está indo agora até você com o pedido #${prox.order_number}.${link ? `\n\nAcompanhe no mapa: ${link}` : ""}`,
+    "proximo_da_entrega");
+}
+
 async function avisarClientes(rid, ent, pedidos) {
   if (!pedidos.length) return;
   const cfg = await configDo(rid);
   if (!cfg.avisar_cliente) return;
   const rest = await nomeRestaurante(rid);
-  // o link abre o cardápio delivery do restaurante, que vira a tela de rastreio
-  // (sem domínio próprio, abre a página do mapa do app dos entregadores)
-  const { data: r } = await C.supabase.from("restaurants").select("cardapio_delivery_url").eq("id", rid).maybeSingle();
-  const dominio = String(r?.cardapio_delivery_url || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
-  const base = String(process.env.ENTREGADOR_APP_URL || "").replace(/\/+$/, "");
   for (const o of pedidos) {
     if (_jaAvisados.has(o.id) || !o.client_phone) continue;
     _jaAvisados.add(o.id);
     if (_jaAvisados.size > 5000) _jaAvisados.clear();
-    let link = "";
-    if (dominio || base) {
-      let tk = o.tracking_token;
-      if (!tk) { tk = crypto.randomBytes(10).toString("hex"); await C.supabase.from("orders").update({ tracking_token: tk }).eq("id", o.id); }
-      link = `\n\nAcompanhe a entrega: ${dominio ? `https://${dominio}/?acompanhar=${tk}` : `${base}/acompanhar.html?c=${tk}`}`;
-    }
+    const url = await linkRastreio(rid, o);
+    const link = url ? `\n\nAcompanhe a entrega: ${url}` : "";
     const nome = primeiroNome(o.client_name);
     const pg = pagamentoInfo(o);
     const lembrete = pg.tipo === "dinheiro" && pg.troco ? `\nO ${primeiroNome(ent.nome)} já leva o seu troco.` : "";
@@ -649,6 +671,28 @@ export function registrarEntregador(ctx) {
         entregador, posicao, antes
       });
     } catch (e) { return erro(res, 500, "Não deu pra carregar o pedido", e); }
+  });
+
+  // o cliente entrou na conta (login do WhatsApp no app de pedidos): os pedidos dele em andamento,
+  // pra o rastreio aparecer em qualquer aparelho, não só no que fez o pedido
+  app.get("/api/v1/cliente/:restaurant_id/pedidos-ativos", async (req, res) => {
+    try {
+      const token = String(req.get("x-cliente-token") || "").trim();
+      if (!token || token.length > 64) return res.json([]);
+      const rid = req.params.restaurant_id;
+      const { data: cli } = await supabase.from("base_clientes").select("numero").eq("token_fidelidade", token).eq("restaurant_id", rid).maybeSingle();
+      const tel = digitos(cli?.numero).replace(/^55(?=\d{10,11}$)/, "");
+      if (tel.length < 10) return res.json([]);
+      const desde = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+      const umaHora = Date.now() - 3600 * 1000;
+      const { data } = await supabase.from("orders").select("order_number, status, tracking_token, delivered_at, cancelled_at, created_at")
+        .eq("restaurant_id", rid).in("client_phone", [tel, `55${tel}`]).gte("created_at", desde).not("tracking_token", "is", null)
+        .neq("status", "draft").order("created_at", { ascending: false }).limit(10);
+      return res.json((data || []).filter((o) =>
+        !(o.status === "finished" && Date.parse(o.delivered_at || 0) < umaHora) &&
+        !(["cancelled", "canceled"].includes(o.status) && Date.parse(o.cancelled_at || 0) < umaHora)
+      ).map((o) => ({ codigo: o.tracking_token, numero: o.order_number })));
+    } catch (e) { return erro(res, 500, "Não deu pra carregar seus pedidos", e); }
   });
 
   /* =================== OPERACIONAL =================== */
