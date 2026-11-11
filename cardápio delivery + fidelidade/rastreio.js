@@ -342,5 +342,8 @@ const rastreio = (() => {
     if (ativosEmOrdem().length !== antes) ligarTempoReal();
   }, 30000);
 
-  return { iniciar, adicionar, abrir, fechar, menuLateral, abrirUltimo: (c) => { adicionar(c); atualizarTodos().then(() => { faixa(); menuLateral(); ligarTempoReal(); if (R.dados.has(c)) abrir(c); }); } };
+  // pedido novo feito agora: guarda e já mostra a faixa "Acompanhar" (sem precisar recarregar)
+  function novoPedido(codigo, numero) { adicionar(codigo, numero); atualizarTodos().then(() => { faixa(); menuLateral(); ligarTempoReal(); }); }
+
+  return { iniciar, adicionar: novoPedido, abrir, fechar, menuLateral, abrirUltimo: (c) => { adicionar(c); atualizarTodos().then(() => { faixa(); menuLateral(); ligarTempoReal(); if (R.dados.has(c)) abrir(c); }); } };
 })();
