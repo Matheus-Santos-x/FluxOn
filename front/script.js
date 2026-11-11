@@ -2497,6 +2497,7 @@ function buildOrderCard(order) {
       <div class="order-tags-row">
         ${isDelivery ? `<div class="order-delivery-tag">Delivery</div>` : ""}
         ${paymentText ? `<div class="order-payment-tag">${escapeHtml(paymentText)}</div>` : ""}
+      ${window.entregadorTag ? entregadorTag(order) : ""}
         ${order.origin === "fidelidade" 
           ? `<div class="order-fidelidade-tag">🎁 Fidelidade</div>` 
           : order.origin ? `<div class="order-origin-tag">${getOriginLabel(order.origin)}</div>` : ""}
@@ -2861,6 +2862,7 @@ if (order.table_number) {
     if (nfeBody) nfeBody.appendChild(nfeRow);
   }
 
+  window.entregadorNoModal?.(order); // 🛵 mandar pro entregador / trocar / tirar
   openBackdrop(modalBackdrop);
 }
 
