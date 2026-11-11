@@ -242,7 +242,7 @@ const rastreio = (() => {
     if (R.mapa || !window.L) return;
     R.mapa = L.map("rtMapa", { zoomControl: false }).setView([-22.6, -48.8], 15);
     R.mapa.attributionControl.setPrefix(false);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(R.mapa);
+    R.base = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(R.mapa);
     document.getElementById("rtMapa").classList.toggle("escuro", !document.body.classList.contains("tema-gelo"));
   }
   const icone = (cls, html, tam) => L.divIcon({ className: "", html: `<div class="${cls}">${html}</div>`, iconSize: [tam, tam], iconAnchor: [tam / 2, tam / 2] });
@@ -253,13 +253,22 @@ const rastreio = (() => {
     return R.m[nome];
   }
 
+  // busca no TomTom (quando o restaurante tem chave); sem resultado, cai no OpenStreetMap
+  async function tomtomGeo(q, chave) {
+    try {
+      const r = await fetch(`https://api.tomtom.com/search/2/geocode/${encodeURIComponent(q)}.json?countrySet=BR&limit=1&language=pt-BR&key=${encodeURIComponent(chave)}`);
+      const it = r.ok ? (await r.json()).results?.[0] : null;
+      return it ? { lat: it.position.lat, lng: it.position.lon } : null;
+    } catch { return null; }
+  }
+
   // endereço → ponto no mapa (guardado no celular pra não perguntar de novo)
   const _geoFila = [];
   let _geoAndando = false;
   function geo(endereco) {
     const k = String(endereco || "").trim();
     if (!k) return Promise.resolve(null);
-    try { const c = JSON.parse(localStorage.getItem("fx_geo") || "{}"); if (c[k] !== undefined) return Promise.resolve(c[k]); } catch {}
+    try { const c = JSON.parse(localStorage.getItem("fx_geo") || "{}"); const ck = (R.tt ? "tt:" : "") + k; if (c[ck] !== undefined) return Promise.resolve(c[ck]); } catch {}
     return new Promise((ok) => { _geoFila.push({ k, ok }); andarGeo(); });
   }
   async function andarGeo() {
@@ -267,13 +276,13 @@ const rastreio = (() => {
     _geoAndando = true;
     const { k, ok } = _geoFila.shift();
     const limpo = k.replace(/\b\d{5}-?\d{3}\b/g, "").replace(/\s+-\s+/g, ", ").replace(/\//g, ", ").replace(/(,\s*)+$/, "");
-    let res = null;
-    try {
+    let res = R.tt ? await tomtomGeo(limpo, R.tt) : null;
+    if (!res) try {
       const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(limpo)}`, { headers: { "Accept-Language": "pt-BR" } });
       const j = await r.json();
       if (j[0]) res = { lat: +j[0].lat, lng: +j[0].lon };
     } catch {}
-    try { const c = JSON.parse(localStorage.getItem("fx_geo") || "{}"); c[k] = res; localStorage.setItem("fx_geo", JSON.stringify(c)); } catch {}
+    try { const c = JSON.parse(localStorage.getItem("fx_geo") || "{}"); c[(R.tt ? "tt:" : "") + k] = res; localStorage.setItem("fx_geo", JSON.stringify(c)); } catch {}
     ok(res);
     setTimeout(() => { _geoAndando = false; andarGeo(); }, 1100);
   }
@@ -284,6 +293,12 @@ const rastreio = (() => {
     if (!d) return;
     setTimeout(() => R.mapa.invalidateSize(), 50);
     const e = etapa(d);
+    if (d.restaurante?.tomtom && R.tt !== d.restaurante.tomtom) { // restaurante com TomTom: troca o fundo do mapa
+      R.tt = d.restaurante.tomtom;
+      R.base?.remove();
+      R.base = L.tileLayer(`https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key=${encodeURIComponent(R.tt)}&language=pt-BR`, { maxZoom: 20, attribution: "© TomTom" }).addTo(R.mapa);
+      R.base.bringToBack();
+    }
     const [loja, casaEndereco] = await Promise.all([geo(d.restaurante.endereco || RESTAURANT_CONFIG.endereco), d.destino ? null : geo(d.pedido.delivery ? d.pedido.endereco : "")]);
     const casa = d.destino || casaEndereco; // ponto marcado (cliente/entregador) vale mais que o endereço escrito
     if (codigo !== R.atual) return;
