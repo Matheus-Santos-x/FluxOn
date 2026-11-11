@@ -542,11 +542,23 @@ export function registrarEntregador(ctx) {
       if (o.status !== "delivering") return res.status(409).json({ error: "Esse pedido não está mais em entrega" });
       // finaliza pela mesma rota do Kanban: caixa, nota fiscal e pesquisa de satisfação continuam iguais
       const tk = jwt.sign({ restaurant_id: o.restaurant_id }, process.env.JWT_SECRET, { algorithm: "HS256", expiresIn: "2m" });
-      const r = await fetch(`http://127.0.0.1:${ctx.PORT}/orders/${encodeURIComponent(id)}/status`, {
-        method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tk}` },
-        body: JSON.stringify({ status: "finished" }), signal: AbortSignal.timeout(15000)
-      });
-      if (!r.ok) return erro(res, 502, "Não deu pra finalizar o pedido. Tente de novo.", new Error(`status ${r.status}`));
+      try {
+        const r = await fetch(`http://127.0.0.1:${ctx.PORT}/orders/${encodeURIComponent(id)}/status`, {
+          method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tk}` },
+          body: JSON.stringify({ status: "finished" }), signal: AbortSignal.timeout(15000)
+        });
+        if (!r.ok) console.error(`❌ entregador: rota do Kanban respondeu ${r.status} ao finalizar ${id}: ${(await r.text().catch(() => "")).slice(0, 200)}`);
+      } catch (e) { console.error(`❌ entregador: rota do Kanban falhou ao finalizar ${id} (porta ${ctx.PORT}):`, e.message); }
+      // confere no banco: se não ficou finalizado, finaliza direto (Kanban e cliente ficam sabendo na hora)
+      const { data: depois } = await supabase.from("orders").select("status").eq("id", id).maybeSingle();
+      if (depois?.status !== "finished") {
+        const agora = new Date().toISOString();
+        const { data: fim, error: eFim } = await supabase.from("orders").update({ status: "finished", delivered_at: agora, update_at: agora, pagamento_parcial: null })
+          .eq("id", id).eq("status", "delivering").select().maybeSingle();
+        if (eFim || !fim) return erro(res, 500, "Não deu pra finalizar o pedido. Tente de novo.", eFim || new Error("o pedido mudou"));
+        C.emitOrderUpdate(fim.restaurant_id, fim);
+        console.warn(`⚠️ entregador: pedido #${fim.order_number} finalizado direto (o caixa não somou por essa via)`);
+      }
       _cacheAtivos.delete(req.ent.id);
       return res.json({ success: true });
     } catch (e) { return erro(res, 500, "Não deu pra finalizar o pedido. Tente de novo.", e); }
