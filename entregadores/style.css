@@ -112,7 +112,7 @@ input:focus{outline:none;border-color:var(--acc)}
 .ped-tempo.demora{color:var(--troco)}
 .ped-check{margin-left:auto;width:34px;height:34px;border-radius:50%;border:2px solid var(--line-2);display:grid;place-items:center;font-weight:800;color:transparent;flex-shrink:0;transition:all .15s}
 .pedido.sel .ped-check{background:var(--acc);border-color:var(--acc);color:var(--acc-txt)}
-.ped-bairro{margin:0;font:800 27px/1.05 var(--display);letter-spacing:-.005em;overflow-wrap:anywhere}
+.ped-end{margin:0;font:800 25px/1.08 var(--display);letter-spacing:-.005em;overflow-wrap:anywhere}
 .ped-rua{margin:-4px 0 0;color:var(--muted);font-size:15px;overflow-wrap:anywhere}
 .ped-itens{margin:0;color:var(--muted-2);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ped-obs{margin:0;padding:8px 10px;border-radius:10px;background:var(--bg-3);font-size:14.5px}
@@ -176,16 +176,14 @@ input:focus{outline:none;border-color:var(--acc)}
 .acoes .btn span{font-size:20px;line-height:1}
 .menu-mais{background:none;border:0;color:var(--muted);font-weight:700;min-height:44px;margin-left:auto;padding:0 6px;font-size:22px}
 
-/* ---------- acerto (devolver dinheiro) ---------- */
-.acertos{display:grid;gap:12px}
+/* ---------- acerto (devolver dinheiro): uma linha só, não atrapalha pegar pedido novo ---------- */
 .acertos:not(:empty){margin-bottom:12px}
-.acerto{padding:16px;border-radius:var(--r);background:color-mix(in srgb,var(--troco) 12%,var(--bg-2));border:2px solid color-mix(in srgb,var(--troco) 55%,transparent)}
-.acerto small{color:var(--troco);font-weight:700;font-size:14px}
-.acerto b{display:block;font:800 36px/1.05 var(--display);margin:2px 0 6px}
-.acerto p{margin:0;color:var(--muted);font-size:14.5px}
-.acerto .linhas{display:flex;flex-wrap:wrap;gap:6px 14px;margin:8px 0 10px;font-weight:600;font-size:14.5px}
-.acerto .espera{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--text)}
-.acerto .espera::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--troco);animation:pulsar 1.4s infinite}
+.acerto{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;background:color-mix(in srgb,var(--troco) 12%,var(--bg-2));border:1px solid color-mix(in srgb,var(--troco) 50%,transparent)}
+.acerto-ic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:20px;background:color-mix(in srgb,var(--troco) 18%,transparent);flex-shrink:0}
+.acerto-txt{flex:1;min-width:0;display:grid;line-height:1.2}
+.acerto-txt b{font:800 19px var(--display);color:var(--text)}
+.acerto-txt small{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acerto-txt small::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--troco);margin-right:6px;vertical-align:1px;animation:pulsar 1.4s infinite}
 @keyframes pulsar{50%{opacity:.25}}
 
 /* ---------- meu dia ---------- */
