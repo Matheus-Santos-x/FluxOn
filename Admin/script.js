@@ -101,6 +101,31 @@ async function entrarComGoogle(resposta) {
   }
 }
 
+async function entrarComSenha(e) {
+  e.preventDefault();
+  const input = document.getElementById("login-senha-input");
+  const senha = input?.value || "";
+  if (!senha) return;
+  loginStatus("Entrando...");
+  try {
+    const resp = await fetch(`${ADMIN_URL}/auth/senha`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ senha })
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.token) throw new Error(data.error || "Não foi possível entrar");
+    gravarLocal("fx_admin_token", data.token);
+    gravarLocal("fx_admin_email", data.email || "");
+    gravarLocal("fx_admin_foto", "");
+    input.value = "";
+    loginStatus("");
+    mostrarPainel();
+  } catch (err) {
+    loginStatus("❌ " + err.message, true);
+  }
+}
+
 function iniciarBotaoGoogle() {
   const box = document.getElementById("google-btn");
   if (!box) return;
@@ -1316,6 +1341,7 @@ async function impersonarRestaurante(id) {
 
 // ===== EVENTOS =====
 document.getElementById("admin-btn-sair")?.addEventListener("click", sairDoAdmin);
+document.getElementById("login-senha")?.addEventListener("submit", entrarComSenha);
 document.getElementById("admin-btn-novo")?.addEventListener("click", openAdminCreateModal);
 document.getElementById("admin-btn-donos")?.addEventListener("click", openAdminDonosModal);
 document.getElementById("admin-btn-impersonate")?.addEventListener("click", () => {
