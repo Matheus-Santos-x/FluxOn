@@ -159,11 +159,13 @@ function inicioDoDia() {
 }
 
 async function nomeRestaurante(rid) {
-  const [{ data: cfg }, { data: r }] = await Promise.all([
+  const [{ data: cfg }, { data: r }, tt] = await Promise.all([
     C.supabase.from("restaurante_config").select("nome_exibicao, logo_url, cor_primaria, endereco, telefone").eq("restaurant_id", rid).maybeSingle(),
-    C.supabase.from("restaurants").select("name").eq("id", rid).maybeSingle()
+    C.supabase.from("restaurants").select("name").eq("id", rid).maybeSingle(),
+    C.getIntegracao(rid, "tomtom")
   ]);
-  return { id: rid, nome: cfg?.nome_exibicao || r?.name || "Restaurante", logo_url: cfg?.logo_url || null, cor: cfg?.cor_primaria || null, endereco: cfg?.endereco || null, telefone: cfg?.telefone || null };
+  return { id: rid, nome: cfg?.nome_exibicao || r?.name || "Restaurante", logo_url: cfg?.logo_url || null, cor: cfg?.cor_primaria || null, endereco: cfg?.endereco || null, telefone: cfg?.telefone || null,
+    tomtom: tt?.key || null }; // chave do TomTom do restaurante (mapa e endereços); sem ela, OpenStreetMap
 }
 
 async function configDo(rid) {
@@ -707,7 +709,7 @@ export function registrarEntregador(ctx) {
         pedido: { numero: o.order_number, cliente: primeiroNome(o.client_name), status: o.status, endereco: o.address || "", saiu_em: o.delivering_at, entregue_em: o.delivered_at, delivery: ehDelivery(o),
           recebido_em: o.confirmed_at || o.created_at, preparo_em: o.preparing_at, pronto_em: o.mounting_at, cancelado_em: o.cancelled_at, total: r2(o.total_price),
           itens: (Array.isArray(o.itens) ? o.itens : []).map((i) => ({ nome: i.name || i.nome || "Item", qtd: Number(i.qty || i.quantity || i.quantidade || 1) })) },
-        restaurante: { nome: rest.nome, logo_url: rest.logo_url, cor: rest.cor, endereco: rest.endereco, telefone: rest.telefone },
+        restaurante: { nome: rest.nome, logo_url: rest.logo_url, cor: rest.cor, endereco: rest.endereco, telefone: rest.telefone, tomtom: rest.tomtom },
         entregador, posicao, antes,
         destino: (await destinos(o.restaurant_id, [o])).get(o.id) || null
       });
