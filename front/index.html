@@ -1371,6 +1371,29 @@ input:focus, textarea:focus, select:focus {
   </div>
 </div>
 
+<!-- 🛵 WEBHOOK MENSAGENS DE ENTREGA -->
+<div style="background:transparent; border:none; border-bottom:1px solid rgba(255,255,255,0.07); overflow:hidden;">
+  <button onclick="toggleAccordion('webhook-entregas')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; border-bottom:1px solid rgba(255,255,255,0.06); cursor:pointer;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:20px;">🛵</span>
+      <span style="color:rgba(252,228,228,1); font-size:16px; font-weight:800;">Mensagens de entrega (Webhook)</span>
+    </div>
+    <span id="arrow-webhook-entregas" style="color:rgba(252,228,228,0.5); font-size:18px; transition:transform 0.2s;">▼</span>
+  </button>
+  <div id="accordion-webhook-entregas" style="display:none; padding:0 24px 24px 24px; flex-direction:column; gap:12px;">
+    <p style="color:rgba(252,228,228,0.45); font-size:13px; margin:0 0 8px 0;">
+      Mensagens do restaurante no WhatsApp: o código de acesso do entregador, o "seu pedido saiu" com o link do mapa e o "você é o próximo". O campo <b>evento</b> diz qual é. Vazio: usa o webhook do CRM.
+    </p>
+    <label style="display:flex; flex-direction:column; gap:6px;">
+      <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">URL do Webhook</span>
+      <input type="text" id="settings-webhook-entregas" placeholder="https://seu-n8n.com/webhook/entregas"
+        style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+    </label>
+    <button class="primary-button" id="btn-salvar-webhook-entregas" style="margin-top:4px; width:100%;">Salvar Webhook</button>
+    <p id="settings-webhook-entregas-status" style="margin-top:4px; font-size:13px; min-height:18px;"></p>
+  </div>
+</div>
+
 <!-- ⭐ WEBHOOK RECLAMAÇÕES -->
 <div style="background:transparent; border:none; border-bottom:1px solid rgba(255,255,255,0.07); overflow:hidden;">
   <button onclick="toggleAccordion('webhook-reclamacao')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; border-bottom:1px solid rgba(255,255,255,0.06); cursor:pointer;">
