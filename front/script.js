@@ -1998,6 +1998,10 @@ async function loadSettingsData() {
       impressorasConfig = data.impressoras;
       renderImpressoras();
     }
+    const gav = data.gaveta || {};
+    const gAtiva = document.getElementById("settings-gaveta-ativa"), gPino = document.getElementById("settings-gaveta-pino");
+    if (gAtiva) gAtiva.checked = !!gav.ativa;
+    if (gPino) gPino.value = String(gav.pino === 5 ? 5 : 2);
   } catch (e) {
     console.error("Erro ao carregar impressora:", e);
   }
@@ -3316,7 +3320,10 @@ function abrirCobranca(pedidos, juntos) {
           const idx = orders.findIndex(x => x.id === o.id);
           if (idx !== -1) orders[idx]._frontStatus = "finalizado";
           // mesa/juntos: sempre imprime o resumo; pedido único: só com a nota ligada
-if (juntos || document.getElementById("home-nf-toggle")?.checked) impressoes.push(imprimirResumo(o.id).catch(() => {}));
+          // pago em dinheiro: a gaveta abre junto com o cupom (ou sozinha, quando não imprime)
+          const emDinheiro = /dinheiro/i.test(textoDoPedido(o) || "");
+          if (juntos || document.getElementById("home-nf-toggle")?.checked) impressoes.push(imprimirResumo(o.id, emDinheiro).catch(() => {}));
+          else if (emDinheiro) impressoes.push(abrirGaveta(o.id).catch(() => {}));
         }));
         // mostra "finalizado" e espera a impressão sair: no mínimo 1 s (dá pra ver) e no máximo 5 s (não trava)
         const bf = modal.querySelector('[data-a="fin"]');
@@ -3410,7 +3417,19 @@ async function imprimirPedido(orderId) {
   closeOrderModal();
 }
 
-async function imprimirResumo(orderId) {
+// 💵 abre a gaveta de dinheiro sem imprimir (o servidor confere se está ligada e se foi pago em dinheiro)
+async function abrirGaveta(orderId, teste = false) {
+  const rid = getRestaurantId();
+  const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/abrir-gaveta`, {
+    method: "POST", headers: buildHeaders(),
+    body: JSON.stringify(teste ? { teste: true, pino: Number(document.getElementById("settings-gaveta-pino")?.value || 2) } : { order_id: orderId })
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || "Não deu pra abrir a gaveta");
+  return data;
+}
+
+async function imprimirResumo(orderId, abrirGavetaJunto = false) {
   const order = orders.find(o => o.id === orderId);
   if (!order) return;
 
@@ -3433,7 +3452,8 @@ async function imprimirResumo(orderId) {
       headers: buildHeaders(),
       body: JSON.stringify({ 
         order_id: orderId,
-        printer_id_override: impressoraTodos.printer_id
+        printer_id_override: impressoraTodos.printer_id,
+        abrir_gaveta: abrirGavetaJunto
       })
     });
 
@@ -5151,6 +5171,14 @@ if (settingsBackBtn) settingsBackBtn.addEventListener("click", showBoard);
 document.getElementById("btn-salvar-mesas")?.addEventListener("click", salvarConfigMesas);
 document.getElementById("btn-salvar-impressora")?.addEventListener("click", salvarImpressora);
 document.getElementById("btn-testar-impressora")?.addEventListener("click", testarImpressora);
+document.getElementById("btn-testar-gaveta")?.addEventListener("click", async () => {
+  const status = document.getElementById("settings-printer-status");
+  try {
+    await abrirGaveta(null, true);
+    status.textContent = "✅ Comando enviado. Se a gaveta não abriu, troque o pino e teste de novo.";
+    status.style.color = "rgba(34,197,94,0.9)";
+  } catch (e) { status.textContent = "❌ " + e.message; status.style.color = "rgba(239,68,68,0.9)"; }
+});
 document.getElementById("btn-salvar-rastreio")?.addEventListener("click", salvarRastreio);
 document.getElementById("btn-salvar-nfe")?.addEventListener("click", () => salvarFiscal());
 document.getElementById("btn-salvar-marketplace")?.addEventListener("click", salvarMarketplace);
@@ -7495,7 +7523,8 @@ async function salvarImpressora() {
     const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/impressora`, {
       method: "PATCH",
       headers: buildHeaders(),
-      body: JSON.stringify({ api_key: key, impressoras: impressorasValidas })
+      body: JSON.stringify({ api_key: key, impressoras: impressorasValidas,
+        gaveta: { ativa: !!document.getElementById("settings-gaveta-ativa")?.checked, pino: Number(document.getElementById("settings-gaveta-pino")?.value || 2) } })
     });
     if (!resp.ok) throw new Error();
     status.textContent = "✅ Impressoras salvas com sucesso!";
