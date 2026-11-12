@@ -185,10 +185,11 @@ async function getDominiosPermitidos() {
   try {
     const { data } = await supabase
       .from("restaurants")
-      .select(["tracking_url", ...DOMINIOS_COLUNAS].join(", "));
+      .select(["ativo", "tracking_url", ...DOMINIOS_COLUNAS].join(", "));
     
     const dominios = new Set(ALLOWED_ORIGINS_FIXED);
     (data || []).forEach(r => {
+      if (r.ativo === false) return; // restaurante desativado: os links dele (cardápio, delivery, central...) param de falar com o servidor
       for (const c of DOMINIOS_COLUNAS) if (r[c]) dominios.add(`https://${String(r[c]).replace(/^https?:\/\//, "")}`);
       if (r.cardapio_url) dominios.add(`https://${r.cardapio_url.replace(/^https?:\/\//, '')}`);
       if (r.fidelidade_url) dominios.add(`https://${r.fidelidade_url.replace(/^https?:\/\//, '')}`);
@@ -2837,6 +2838,8 @@ app.post("/auth/google", async (req, res) => {
 
     if (error || !data || data.length === 0)
       return res.status(403).json({ authorized: false });
+    if (data[0].ativo === false)
+      return res.status(403).json({ authorized: false, desativado: true, error: "Este restaurante está desativado. Fale com a Evorise." });
 
     const isAdmin = ADMIN_EMAILS.has(String(email).toLowerCase());
 
@@ -2915,12 +2918,13 @@ app.post("/auth/refresh", async (req, res) => {
 
     const { data, error } = await supabase
       .from("restaurants")
-      .select("id, plan")
+      .select("id, plan, ativo")
       .eq("id", payload.restaurant_id)
       .single();
 
     if (error || !data)
       return res.status(403).json({ error: "Restaurante não encontrado" });
+    if (data.ativo === false) return res.status(401).json({ error: "Restaurante desativado" }); // o FluxON volta pra tela de entrar
 
     const newToken = jwt.sign(
       { restaurant_id: data.id, email: payload.email, plan: data.plan, is_admin: !!payload.is_admin }, // ← is_admin preservado
@@ -2962,7 +2966,7 @@ app.get("/admin/restaurants", requireAdmin, async (req, res) => {
     const { q = "" } = req.query;
     let query = supabase
       .from("restaurants")
-      .select(["id, name, email, plan, created_at, tracking_url", ...DOMINIOS_COLUNAS].join(", "))
+      .select(["id, name, email, plan, ativo, desativado_em, created_at, tracking_url", ...DOMINIOS_COLUNAS].join(", "))
       .order("name");
 
     if (q.trim()) query = query.ilike("name", `%${q.trim()}%`);
@@ -3020,6 +3024,56 @@ app.patch("/admin/restaurants/:id", requireAdmin, async (req, res) => {
 
     await logAdminAction(req.auth.email, "editar_restaurante", { restaurant_id: id, fields });
     return res.json({ success: true, restaurant: data });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// ===== DESATIVAR / REATIVAR / EXCLUIR DE VEZ =====
+// Desativar: tudo para na hora (links do cliente, login do FluxON e do Owner), mas nada é apagado.
+app.patch("/admin/restaurants/:id/ativo", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ativo = !!req.body?.ativo;
+    const { data, error } = await supabase.from("restaurants")
+      .update({ ativo, desativado_em: ativo ? null : new Date().toISOString() }).eq("id", id).select("id, name").maybeSingle();
+    if (error) return sendError(res, 500, "Erro ao salvar: " + error.message);
+    if (!data) return sendError(res, 404, "Restaurante não encontrado");
+    _dominiosCacheTime = 0; // os links do restaurante param (ou voltam) na hora
+    if (!ativo) io.to(id).emit("restaurante_desativado"); // quem está com o FluxON aberto sai na hora
+    await logAdminAction(req.auth.email, ativo ? "reativar_restaurante" : "desativar_restaurante", { restaurant_id: id, nome: data.name });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// quanto vai ser apagado (mostra na confirmação)
+app.get("/admin/restaurants/:id/contagem", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const conta = (tabela) => supabase.from(tabela).select("*", { count: "exact", head: true }).eq("restaurant_id", id).then(r => r.count || 0);
+    const [pedidos, clientes] = await Promise.all([conta("orders"), conta("base_clientes")]);
+    return res.json({ pedidos, clientes });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// Excluir de vez: só restaurante já desativado, confirmando com o nome. Apaga tudo, sem volta.
+app.post("/admin/restaurants/:id/excluir", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: r } = await supabase.from("restaurants").select("id, name, ativo").eq("id", id).maybeSingle();
+    if (!r) return sendError(res, 404, "Restaurante não encontrado");
+    if (r.ativo !== false) return sendError(res, 400, "Desative o restaurante antes de excluir");
+    if (String(req.body?.confirmar || "").trim().toLowerCase() !== String(r.name || "").trim().toLowerCase())
+      return sendError(res, 400, "Digite o nome do restaurante igualzinho pra confirmar");
+    const { data, error } = await supabase.rpc("admin_excluir_restaurante", { p_id: id });
+    if (error) return sendError(res, 500, "Não deu pra excluir: " + error.message);
+    _dominiosCacheTime = 0;
+    await logAdminAction(req.auth.email, "excluir_restaurante", { restaurant_id: id, nome: r.name, apagado: data });
+    return res.json({ success: true, apagado: data });
   } catch (err) {
     return sendError(res, 500, "Erro interno");
   }
@@ -8153,7 +8207,7 @@ async function ownerListarRestaurantes(ownerId) {
   const ids = (links || []).map(l => l.restaurant_id);
   if (ids.length === 0) return [];
   const [{ data }, { data: cfgs }] = await Promise.all([
-    supabase.from("restaurants").select("id, name, plan").in("id", ids).order("name"),
+    supabase.from("restaurants").select("id, name, plan").in("id", ids).eq("ativo", true).order("name"),
     supabase.from("restaurante_config").select("restaurant_id, nome_exibicao, logo_url, cor_primaria").in("restaurant_id", ids)
   ]);
   const cfg = new Map((cfgs || []).map(c => [c.restaurant_id, c]));
@@ -8200,6 +8254,8 @@ async function requireOwnerRestaurante(req, res, next) {
       .from("owner_restaurants").select("restaurant_id")
       .eq("owner_id", req.owner.id).eq("restaurant_id", req.params.restaurant_id).maybeSingle();
     if (!data) return res.status(403).json({ error: "Sem acesso a este restaurante" });
+    const { data: rest } = await supabase.from("restaurants").select("ativo").eq("id", req.params.restaurant_id).maybeSingle();
+    if (rest?.ativo === false) return res.status(403).json({ error: "Este restaurante está desativado" });
     return next();
   } catch (err) {
     return res.status(403).json({ error: "Sem acesso a este restaurante" });
@@ -9618,6 +9674,24 @@ app.patch("/admin/owners/:id", requireAdmin, async (req, res) => {
     if (error) return sendError(res, 500, "Erro ao atualizar dono");
 
     await logAdminAction(req.auth.email, "editar_owner", { owner_id: id, campos: Object.keys(campos) });
+    return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// excluir uma pessoa de vez (só quem já está desativado). Pra voltar, cadastra de novo com o CPF.
+app.delete("/admin/owners/:id", requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: dono } = await supabase.from("owners").select("id, nome, ativo").eq("id", id).maybeSingle();
+    if (!dono) return sendError(res, 404, "Pessoa não encontrada");
+    if (dono.ativo !== false) return sendError(res, 400, "Desative a pessoa antes de excluir");
+    await supabase.from("owner_restaurants").delete().eq("owner_id", id);
+    await supabase.from("owner_otp").delete().eq("owner_id", id).then(() => {}, () => {});
+    const { error } = await supabase.from("owners").delete().eq("id", id);
+    if (error) return sendError(res, 500, "Não deu pra excluir: " + error.message);
+    await logAdminAction(req.auth.email, "excluir_owner", { owner_id: id, nome: dono.nome });
     return res.json({ success: true });
   } catch (err) {
     return sendError(res, 500, "Erro interno");
