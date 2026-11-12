@@ -387,7 +387,7 @@ function desenharParede() {
     const donos = donosDe(r.id);
     const cor = corValida(r.cor_primaria) || corDe(r.name);
     return `
-      <a class="cartao" href="#/r/${esc(r.id)}" style="--c:${cor}; text-decoration:none; color:inherit">
+      <a class="cartao ${r.ativo === false ? "off" : ""}" href="#/r/${esc(r.id)}" style="--c:${cor}; text-decoration:none; color:inherit">
         <div class="cartao-topo">
           ${logoHtml(r)}
           <div class="cartao-nome"><b>${esc(nomeRest(r))}</b><small>${esc(r.email)}</small></div>
@@ -397,7 +397,7 @@ function desenharParede() {
           <span class="donos-mini">${donos.length
             ? `<span class="pilha">${donos.slice(0, 3).map(o => `<span style="background:${corDe(o.nome)}">${esc(iniciais(o.nome)[0])}</span>`).join("")}</span><em>${esc(donos.map(o => o.nome.split(" ")[0]).join(" e "))}</em>`
             : S.donosOk ? `<em class="sem-dono">Sem dono no app</em>` : ""}</span>
-          ${planoHtml(r.plan)}
+          ${r.ativo === false ? `<span class="estado off">Desativado</span>` : planoHtml(r.plan)}
         </div>
       </a>`;
   }).join("");
@@ -509,7 +509,9 @@ function secConta(el) {
         <div class="seg" id="f-plano">${PLANOS.map(([v, n]) => `<button type="button" data-v="${v}" class="${r.plan === v ? "on" : ""}">${n}</button>`).join("")}</div>
         <small>A Central do cliente só fica no ar a partir do Advanced.</small>
       </div>
-    </div>`;
+    </div>
+    ${zonaPerigoHtml(r)}`;
+  zonaPerigo(r);
   let plano = r.plan;
   $("f-plano").onclick = (e) => {
     const b = e.target.closest("[data-v]"); if (!b) return;
@@ -525,6 +527,67 @@ function secConta(el) {
     toast("Conta salva");
     desenharRestaurante();
   };
+}
+
+// --- Desativar / reativar / excluir de vez (fim da seção Conta)
+function zonaPerigoHtml(r) {
+  const off = r.ativo === false;
+  const desde = r.desativado_em ? new Date(r.desativado_em).toLocaleDateString("pt-BR") : "";
+  return `
+    <div class="bloco zona-perigo ${off ? "off" : ""}">
+      <h3>${off ? "Restaurante desativado" : "Desativar ou excluir"}</h3>
+      <p>${off
+        ? `Fora do ar${desde ? ` desde ${desde}` : ""}. Os links do cliente, o login do FluxON e o app Owner estão parados, mas tudo continua guardado.`
+        : "Desativar tira o restaurante do ar na hora (links do cliente, login do FluxON e app Owner), mas guarda tudo. Dá pra reativar quando quiser."}</p>
+      <div class="zona-botoes">
+        <button type="button" class="btn ${off ? "btn-pri" : "btn-perigo"}" id="zp-ativo">${off ? "Reativar restaurante" : "Desativar restaurante"}</button>
+        ${off ? `<button type="button" class="btn btn-perigo" id="zp-excluir">Excluir de vez</button>` : ""}
+      </div>
+      ${off ? "" : `<small>Pra excluir de vez, desative primeiro.</small>`}
+    </div>`;
+}
+function zonaPerigo(r) {
+  $("zp-ativo").onclick = async () => {
+    const desativar = r.ativo !== false;
+    const ok = await perguntar(desativar
+      ? { titulo: `Desativar ${esc(nomeRest(r))}?`, texto: "Na hora: o cardápio, o delivery e os outros links param, ninguém do restaurante entra no FluxON e o dono sai do app Owner. Nada é apagado; dá pra reativar depois.", sim: "Desativar", perigo: true }
+      : { titulo: `Reativar ${esc(nomeRest(r))}?`, texto: "Tudo volta a funcionar como antes, com os mesmos dados.", sim: "Reativar" });
+    if (!ok) return;
+    try {
+      await api(`/restaurants/${r.id}/ativo`, { metodo: "PATCH", corpo: { ativo: !desativar } });
+      r.ativo = !desativar;
+      r.desativado_em = desativar ? new Date().toISOString() : null;
+      toast(desativar ? "Restaurante desativado" : "Restaurante reativado");
+      desenharRestaurante();
+    } catch (e) { toast(e.message, "erro"); }
+  };
+  $("zp-excluir")?.addEventListener("click", () => janelaExcluirRestaurante(r));
+}
+async function janelaExcluirRestaurante(r) {
+  let c = null;
+  try { c = await api(`/restaurants/${r.id}/contagem`); } catch {}
+  const j = abrirJanela({
+    titulo: `Excluir ${esc(nomeRest(r))} de vez?`,
+    sub: "Isso não tem volta.",
+    corpo: `
+      <p style="color:var(--tx-2)">Apaga o restaurante e tudo ligado a ele${c ? `: <b>${c.pedidos}</b> pedido${c.pedidos === 1 ? "" : "s"}, <b>${c.clientes}</b> cliente${c.clientes === 1 ? "" : "s"},` : ":"} cardápio, caixa, fidelidade, vouchers, reservas e entregadores. Se ele quiser voltar depois, começa do zero.</p>
+      <label class="campo"><span>Pra confirmar, digite <b>${esc(r.name)}</b></span><input class="inp" id="ex-nome" autocomplete="off" spellcheck="false"></label>`,
+    pe: `<p class="erro"></p><button type="button" class="btn" data-fechar-pe>Cancelar</button><button type="button" class="btn btn-perigo" id="ex-ok" disabled>Excluir de vez</button>`
+  });
+  j.q("[data-fechar-pe]").onclick = j.fechar;
+  const inp = j.q("#ex-nome"), bt = j.q("#ex-ok");
+  inp.oninput = () => { bt.disabled = inp.value.trim().toLowerCase() !== String(r.name || "").trim().toLowerCase(); };
+  bt.onclick = () => ocupado(bt, async () => {
+    try {
+      await api(`/restaurants/${r.id}/excluir`, { metodo: "POST", corpo: { confirmar: inp.value.trim() } });
+      j.fechar();
+      S.restaurantes = S.restaurantes.filter(x => x.id !== r.id);
+      await carregarDonos().catch(() => {});
+      limparSujo();
+      toast("Restaurante excluído");
+      ir("#/");
+    } catch (e) { j.erro(e.message); }
+  });
 }
 
 // --- Aparência
@@ -861,6 +924,7 @@ function telaDonos() {
           <div class="pessoa-pe">
             <button type="button" class="btn btn-sm" data-editar="${esc(o.id)}">${ico("editar", "ico ico-sm")}Editar</button>
             <button type="button" class="btn btn-sm btn-ghost ${o.ativo ? "btn-perigo" : ""}" data-ativo="${esc(o.id)}">${o.ativo ? "Desativar" : "Reativar"}</button>
+            ${o.ativo ? "" : `<button type="button" class="btn btn-sm btn-ghost btn-perigo" data-excluir="${esc(o.id)}">Excluir de vez</button>`}
           </div>
         </article>`).join("") : `<div class="vazio" style="grid-column:1/-1"><b>Ninguém cadastrado ainda</b>Cadastre o dono de um restaurante pra ele acompanhar tudo pelo app.</div>`}
     </div>`;
@@ -869,7 +933,21 @@ function telaDonos() {
     const ed = e.target.closest("[data-editar]"), at = e.target.closest("[data-ativo]");
     if (ed) janelaPessoa(S.donos.find(o => o.id === ed.dataset.editar));
     if (at) alternarAtivo(S.donos.find(o => o.id === at.dataset.ativo));
+    const ex = e.target.closest("[data-excluir]");
+    if (ex) excluirPessoa(S.donos.find(o => o.id === ex.dataset.excluir));
   };
+}
+
+async function excluirPessoa(o) {
+  if (!o) return;
+  const ok = await perguntar({ titulo: `Excluir ${esc(o.nome)} de vez?`, texto: "Apaga o cadastro dele. Não tem volta: pra ele usar o app de novo, cadastre outra vez com o CPF.", sim: "Excluir de vez", perigo: true });
+  if (!ok) return;
+  try {
+    await api(`/owners/${o.id}`, { metodo: "DELETE" });
+    await carregarDonos();
+    toast("Pessoa excluída");
+    telaDonos();
+  } catch (e) { toast(e.message, "erro"); }
 }
 
 async function alternarAtivo(o, depois = telaDonos) {
