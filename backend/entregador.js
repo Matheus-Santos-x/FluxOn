@@ -767,7 +767,7 @@ export function registrarEntregador(ctx) {
   app.get(OP, async (req, res) => {
     const rid = req.params.restaurant_id;
     const [{ data: lista, error }, { data: naRua }] = await Promise.all([
-      supabase.from("entregadores").select("id, nome, telefone, tipo_pagamento, valor_diaria, ativo, disponivel, lat, lng, posicao_em, visto_em, ultimo_login, created_at").eq("restaurant_id", rid).order("nome"),
+supabase.from("entregadores").select("id, nome, telefone, tipo_pagamento, valor_diaria, valor_entrega, entrega_por_km, ativo, disponivel, lat, lng, posicao_em, visto_em, ultimo_login, created_at").eq("restaurant_id", rid).order("nome"),
       supabase.from("orders").select("id, order_number, entregador_id, address").eq("restaurant_id", rid).eq("status", "delivering").not("entregador_id", "is", null)
     ]);
     if (error) return erro(res, 500, "Não deu pra carregar os entregadores", error);
@@ -779,6 +779,7 @@ export function registrarEntregador(ctx) {
       const pedidos = (naRua || []).filter((o) => o.entregador_id === e.id);
       return {
         id: e.id, nome: e.nome, telefone: e.telefone, tipo_pagamento: e.tipo_pagamento, valor_diaria: r2(e.valor_diaria),
+        valor_entrega: r2(e.valor_entrega || 0), entrega_por_km: !!e.entrega_por_km,
         ativo: e.ativo, disponivel: !!e.disponivel, conectado: conectados.has(e.id), visto_em: e.visto_em, ja_entrou: !!e.ultimo_login,
         posicao: pos, na_rua: pedidos.map((o) => ({ id: o.id, numero: o.order_number, bairro: enderecoPartes(o.address).bairro }))
       };
@@ -799,8 +800,12 @@ export function registrarEntregador(ctx) {
     if (!parcial || b.telefone !== undefined) { const t = telefone55(b.telefone); if (!t) throw new Error("Digite o WhatsApp com DDD"); d.telefone = t; }
     if (!parcial || b.tipo_pagamento !== undefined) { if (!["entrega", "diaria_entrega", "diaria"].includes(b.tipo_pagamento)) throw new Error("Escolha como ele recebe"); d.tipo_pagamento = b.tipo_pagamento; }
     if (!parcial || b.valor_diaria !== undefined) { const v = r2(String(b.valor_diaria ?? 0).replace(",", ".")); if (v < 0 || v > 10000) throw new Error("Valor da diária inválido"); d.valor_diaria = v; }
+    // quanto ele cobra por entrega: valor fixo ou por km (por enquanto só fica anotado, não entra na conta)
+    if (!parcial || b.valor_entrega !== undefined) { const v = r2(String(b.valor_entrega ?? 0).replace(",", ".")); if (!(v >= 0 && v <= 1000)) throw new Error("Valor da entrega inválido"); d.valor_entrega = v; }
+    if (!parcial || b.entrega_por_km !== undefined) d.entrega_por_km = !!b.entrega_por_km;
     if (b.ativo !== undefined) d.ativo = !!b.ativo;
     if (d.tipo_pagamento === "entrega") d.valor_diaria = 0;
+    if (d.tipo_pagamento === "diaria") { d.valor_entrega = 0; d.entrega_por_km = false; }
     return d;
   };
 
