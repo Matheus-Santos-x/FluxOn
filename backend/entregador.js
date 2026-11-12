@@ -158,6 +158,34 @@ function inicioDoDia() {
   return d.toISOString();
 }
 
+/* ---------------- turnos ----------------
+   O entregador começa e encerra o próprio turno. A diária é por turno (fez 2 turnos no dia? o dono divide o valor).
+   Pegou pedido sem ter começado: o turno começa sozinho. Esqueceu de encerrar: o caixa encerra pela aba Entregadores. */
+async function turnoAberto(entId) {
+  const { data } = await C.supabase.from("entregador_turnos").select("id, inicio, fim, valor_turno").eq("entregador_id", entId).is("fim", null).order("inicio", { ascending: false }).limit(1);
+  return data?.[0] || null;
+}
+async function garantirTurno(ent) {
+  const aberto = await turnoAberto(ent.id);
+  if (aberto) return aberto;
+  const { data: e } = await C.supabase.from("entregadores").select("restaurant_id, tipo_pagamento, valor_diaria").eq("id", ent.id).maybeSingle();
+  if (!e) throw new Error("Entregador não encontrado");
+  const { data, error } = await C.supabase.from("entregador_turnos")
+    .insert([{ restaurant_id: e.restaurant_id, entregador_id: ent.id, valor_turno: e.tipo_pagamento === "entrega" ? 0 : r2(e.valor_diaria) }])
+    .select("id, inicio, fim, valor_turno").single();
+  if (error) { if (error.code === "23505") return turnoAberto(ent.id); throw new Error(error.message); } // dois toques juntos: o banco deixa abrir um só
+  C.io.to(e.restaurant_id).emit("entregadores_mudou");
+  return data;
+}
+
+async function encerrarTurno(ent, por) {
+  const { count } = await C.supabase.from("orders").select("id", { count: "exact", head: true }).eq("entregador_id", ent.id).eq("status", "delivering");
+  if (count) throw Object.assign(new Error(`Ainda tem ${count} pedido${count > 1 ? "s" : ""} na rua. Entregue ou devolva antes de encerrar o turno.`), { status: 409 });
+  const { data } = await C.supabase.from("entregador_turnos").update({ fim: new Date().toISOString(), encerrado_por: por }).eq("entregador_id", ent.id).is("fim", null).select("id");
+  if (!data?.length) throw Object.assign(new Error("Não tem turno aberto"), { status: 409 });
+  await C.supabase.from("entregadores").update({ disponivel: false }).eq("id", ent.id);
+}
+
 async function nomeRestaurante(rid) {
   const [{ data: cfg }, { data: r }, tt] = await Promise.all([
     C.supabase.from("restaurante_config").select("nome_exibicao, logo_url, cor_primaria, endereco, telefone").eq("restaurant_id", rid).maybeSingle(),
@@ -367,6 +395,7 @@ async function levarPedidos(rid, ent, ids, { peloCaixa = false } = {}) {
   const pegos = levados || [];
 
   if (!pegos.length && rod.nova) await C.supabase.from("entregador_rodadas").delete().eq("id", rod.id).eq("status", "na_rua");
+  if (pegos.length) await garantirTurno(ent).catch((e) => console.error("⚠️ turno:", e.message)); // pegou sem começar o turno: começa sozinho
   _cacheAtivos.delete(ent.id);
 
   // some da tela dos outros entregadores na hora
@@ -438,10 +467,10 @@ async function avisarClientes(rid, ent, pedidos) {
 
 /* ---------------- ganhos ---------------- */
 
-function ganhosDe(ent, entregues, apareceuHoje) {
+// diariaTurnos = soma do valor dos turnos do período (a diária é por turno)
+function ganhosDe(ent, entregues, diariaTurnos) {
   const taxas = r2(entregues.reduce((a, o) => a + (Number(o.taxa_entrega) || 0), 0));
-  const temDiaria = ent.tipo_pagamento !== "entrega" && (entregues.length > 0 || apareceuHoje);
-  const diaria = temDiaria ? r2(ent.valor_diaria) : 0;
+  const diaria = ent.tipo_pagamento === "entrega" ? 0 : r2(diariaTurnos);
   const porEntrega = ent.tipo_pagamento === "diaria" ? 0 : taxas;
   return { entregas: entregues.length, taxas, diaria, por_entrega: porEntrega, total: r2(diaria + porEntrega), tipo_pagamento: ent.tipo_pagamento, valor_diaria: r2(ent.valor_diaria) };
 }
@@ -661,18 +690,38 @@ export function registrarEntregador(ctx) {
     } catch (e) { return erro(res, 500, "Não deu pra devolver o pedido", e); }
   });
 
-  // "Meu dia": entregas, quanto vai receber e as rodadas
+  // começar e encerrar o turno (o app do entregador)
+  app.post("/api/v1/entregador/turno/comecar", async (req, res) => {
+    try {
+      const t = await garantirTurno(req.ent);
+      await supabase.from("entregadores").update({ disponivel: true, visto_em: new Date().toISOString() }).eq("id", req.ent.id);
+      io.to(req.ent.restaurant_id).emit("entregadores_mudou");
+      return res.json({ success: true, turno: t });
+    } catch (e) { return erro(res, 500, "Não deu pra começar o turno", e); }
+  });
+  app.post("/api/v1/entregador/turno/encerrar", async (req, res) => {
+    try {
+      await encerrarTurno(req.ent, "entregador");
+      io.to(req.ent.restaurant_id).emit("entregadores_mudou");
+      return res.json({ success: true });
+    } catch (e) { return e.status ? res.status(e.status).json({ error: e.message }) : erro(res, 500, "Não deu pra encerrar o turno", e); }
+  });
+
+  // "Meu dia": o turno aberto (ou o último de hoje), as entregas, quanto vai receber e as rodadas
   app.get("/api/v1/entregador/dia", async (req, res) => {
-    const e = req.ent, desde = inicioDoDia();
-    const [{ data: entregues, error }, { data: rodadas }, { data: eu }] = await Promise.all([
-      supabase.from("orders").select("id, order_number, client_name, address, taxa_entrega, total_price, delivered_at").eq("entregador_id", e.id).eq("status", "finished").gte("delivered_at", desde).order("delivered_at", { ascending: false }),
-      supabase.from("entregador_rodadas").select("id, status, saiu_em, voltou_em, dinheiro, valor_recebido, acertada_em").eq("entregador_id", e.id).gte("saiu_em", desde).order("saiu_em", { ascending: false }),
-      supabase.from("entregadores").select("visto_em").eq("id", e.id).maybeSingle()
+    const e = req.ent;
+    let t = await turnoAberto(e.id);
+    if (!t) { const { data } = await supabase.from("entregador_turnos").select("id, inicio, fim, valor_turno").eq("entregador_id", e.id).gte("inicio", inicioDoDia()).order("inicio", { ascending: false }).limit(1); t = data?.[0] || null; }
+    const desde = t ? t.inicio : inicioDoDia(), ate = t?.fim || new Date(Date.now() + 60000).toISOString();
+    const [{ data: entregues, error }, { data: rodadas }] = await Promise.all([
+      supabase.from("orders").select("id, order_number, client_name, address, taxa_entrega, total_price, delivered_at").eq("entregador_id", e.id).eq("status", "finished").gte("delivered_at", desde).lte("delivered_at", ate).order("delivered_at", { ascending: false }),
+      supabase.from("entregador_rodadas").select("id, status, saiu_em, voltou_em, dinheiro, valor_recebido, acertada_em").eq("entregador_id", e.id).gte("saiu_em", desde).lte("saiu_em", ate).order("saiu_em", { ascending: false })
     ]);
     if (error) return erro(res, 500, "Não deu pra carregar o seu dia", error);
     return res.json({
       desde,
-      ganhos: ganhosDe(e, entregues || [], !!(eu?.visto_em && depois(eu.visto_em, desde))),
+      turno: t ? { aberto: !t.fim, inicio: t.inicio, fim: t.fim } : null,
+      ganhos: ganhosDe(e, entregues || [], t ? Number(t.valor_turno) : 0),
       entregas: (entregues || []).map((o) => ({ numero: o.order_number, cliente: primeiroNome(o.client_name), bairro: enderecoPartes(o.address).bairro, taxa: r2(o.taxa_entrega), em: o.delivered_at })),
       rodadas: (rodadas || []).map((r) => ({ id: r.id, status: r.status, saiu_em: r.saiu_em, voltou_em: r.voltou_em, dinheiro: r2(r.dinheiro), recebido: r.valor_recebido == null ? null : r2(r.valor_recebido) }))
     });
@@ -871,6 +920,18 @@ supabase.from("entregadores").select("id, nome, telefone, tipo_pagamento, valor_
     } catch (err) { return erro(res, 500, "Não deu pra mandar o pedido", err); }
   });
 
+  // o caixa encerra o turno de quem esqueceu
+  app.post(`${OP}/:id/encerrar-turno`, async (req, res) => {
+    try {
+      const { data: e } = await supabase.from("entregadores").select("id, restaurant_id").eq("id", req.params.id).eq("restaurant_id", req.params.restaurant_id).maybeSingle();
+      if (!e) return res.status(404).json({ error: "Entregador não encontrado" });
+      await encerrarTurno(e, "caixa");
+      io.to(req.params.restaurant_id).emit("entregadores_mudou");
+      io.to(`entd:${e.id}`).emit("turno_encerrado");
+      return res.json({ success: true });
+    } catch (err) { return err.status ? res.status(err.status).json({ error: err.message }) : erro(res, 500, "Não deu pra encerrar o turno", err); }
+  });
+
   // tira o pedido do entregador: volta pra "pronto"
   app.post(`${OP}/desatribuir`, async (req, res) => {
     const rid = req.params.restaurant_id, id = String(req.body?.order_id || "");
@@ -923,19 +984,24 @@ supabase.from("entregadores").select("id, nome, telefone, tipo_pagamento, valor_
   // resumo do dia por entregador (quanto pagar pra cada um)
   app.get(`${OP}/hoje`, async (req, res) => {
     const rid = req.params.restaurant_id, desde = inicioDoDia();
-    const [{ data: ents, error }, { data: peds }, { data: rods }] = await Promise.all([
+    const [{ data: ents, error }, { data: peds }, { data: rods }, { data: turnosHoje }, { data: abertos }] = await Promise.all([
       supabase.from("entregadores").select("id, nome, tipo_pagamento, valor_diaria, visto_em, ativo").eq("restaurant_id", rid),
       supabase.from("orders").select("entregador_id, taxa_entrega").eq("restaurant_id", rid).eq("status", "finished").not("entregador_id", "is", null).gte("delivered_at", desde),
-      supabase.from("entregador_rodadas").select("entregador_id, status, dinheiro, valor_recebido").eq("restaurant_id", rid).gte("saiu_em", desde)
+      supabase.from("entregador_rodadas").select("entregador_id, status, dinheiro, valor_recebido").eq("restaurant_id", rid).gte("saiu_em", desde),
+      supabase.from("entregador_turnos").select("entregador_id, valor_turno").eq("restaurant_id", rid).gte("inicio", desde),
+      supabase.from("entregador_turnos").select("entregador_id, inicio").eq("restaurant_id", rid).is("fim", null)
     ]);
     if (error) return erro(res, 500, "Não deu pra carregar o resumo", error);
     const lista = (ents || []).map((e) => {
       const minhas = (peds || []).filter((p) => p.entregador_id === e.id);
       const rs = (rods || []).filter((r) => r.entregador_id === e.id);
-      return { id: e.id, nome: e.nome, ...ganhosDe(e, minhas, !!(e.visto_em && depois(e.visto_em, desde))),
+      const turnos = (turnosHoje || []).filter((x) => x.entregador_id === e.id);
+      const aberto = (abertos || []).find((x) => x.entregador_id === e.id);
+      return { id: e.id, nome: e.nome, ...ganhosDe(e, minhas, turnos.reduce((a, x) => a + Number(x.valor_turno || 0), 0)),
+        turnos: turnos.length, turno_aberto: aberto ? aberto.inicio : null,
         dinheiro_recebido: r2(rs.filter((r) => r.status === "acertada").reduce((a, r) => a + Number(r.valor_recebido || 0), 0)),
         dinheiro_pendente: r2(rs.filter((r) => r.status === "a_acertar").reduce((a, r) => a + Number(r.dinheiro || 0), 0)) };
-    }).filter((e) => e.entregas > 0 || e.diaria > 0 || e.dinheiro_pendente > 0);
+    }).filter((e) => e.entregas > 0 || e.diaria > 0 || e.dinheiro_pendente > 0 || e.turno_aberto);
     return res.json({ desde, entregadores: lista, total: r2(lista.reduce((a, e) => a + e.total, 0)) });
   });
 
