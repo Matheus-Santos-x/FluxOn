@@ -179,6 +179,11 @@ async function garantirTurno(ent) {
 }
 
 async function encerrarTurno(ent, por) {
+  if (por === "entregador") { // segurança: o entregador só encerra depois de 30 min de turno (o caixa encerra a qualquer hora)
+    const t = await turnoAberto(ent.id);
+    const libera = t ? Date.parse(t.inicio) + 30 * 60000 : 0;
+    if (libera > Date.now()) throw Object.assign(new Error(`O turno só pode ser encerrado depois de 30 minutos. Libera às ${new Date(libera).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}.`), { status: 409 });
+  }
   const { count } = await C.supabase.from("orders").select("id", { count: "exact", head: true }).eq("entregador_id", ent.id).eq("status", "delivering");
   if (count) throw Object.assign(new Error(`Ainda tem ${count} pedido${count > 1 ? "s" : ""} na rua. Entregue ou devolva antes de encerrar o turno.`), { status: 409 });
   const { data } = await C.supabase.from("entregador_turnos").update({ fim: new Date().toISOString(), encerrado_por: por }).eq("entregador_id", ent.id).is("fim", null).select("id");
