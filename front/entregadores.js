@@ -191,7 +191,7 @@
         <span class="ent-ponto ${cls}" aria-hidden="true"></span>
         <div class="ent-item-meio">
           <b>${esc(e.nome)}</b>
-          <span class="ent-muted">${esc(txt)}${e.posicao && e.na_rua.length ? ` · posição ${haQuanto(e.posicao.em)}` : ""} · ${esc(TIPO[e.tipo_pagamento])}${e.tipo_pagamento !== "entrega" ? ` ${moeda(e.valor_diaria)}` : ""}</span>
+          <span class="ent-muted">${esc(txt)}${e.posicao && e.na_rua.length ? ` · posição ${haQuanto(e.posicao.em)}` : ""} · ${esc(TIPO[e.tipo_pagamento])}${e.tipo_pagamento !== "entrega" ? ` ${moeda(e.valor_diaria)}` : ""}${e.tipo_pagamento !== "diaria" && e.valor_entrega ? ` · ${moeda(e.valor_entrega)}/${e.entrega_por_km ? "km" : "entrega"}` : ""}</span>
           ${e.na_rua.length ? `<span class="ent-peds">${e.na_rua.map((p) => `#${esc(p.numero)}${p.bairro ? " " + esc(p.bairro) : ""}`).join(" · ")}</span>` : ""}
         </div>
         <div class="ent-item-acoes">
@@ -240,13 +240,24 @@
           ${Object.entries(TIPO).map(([k, v]) => `<label><input type="radio" name="tipo_pagamento" value="${k}" ${((ent?.tipo_pagamento || "entrega") === k) ? "checked" : ""}><span>${v}</span></label>`).join("")}
         </fieldset>
         <label id="ent-diaria-campo">Valor da diária (R$)<input name="valor_diaria" inputmode="decimal" value="${ent?.valor_diaria ? String(ent.valor_diaria.toFixed(2)).replace(".", ",") : ""}" placeholder="Ex.: 50,00"></label>
-        <p class="ent-muted ent-dica">Por entrega, ele recebe a taxa de entrega de cada pedido.</p>
+        <div id="ent-entrega-campo" style="display:grid;gap:12px">
+          <label><span id="ent-entrega-rotulo">Valor por entrega (R$)</span><input name="valor_entrega" inputmode="decimal" value="${ent?.valor_entrega ? String(ent.valor_entrega.toFixed(2)).replace(".", ",") : ""}" placeholder="Ex.: 5,00"></label>
+          <label class="ent-check"><input type="checkbox" name="entrega_por_km" ${ent?.entrega_por_km ? "checked" : ""}> Por distância (valor por km)</label>
+        </div>
+        <p class="ent-muted ent-dica">Por enquanto esse valor só fica anotado. O acerto ainda usa a taxa de entrega de cada pedido.</p>
         ${novo ? "" : `<label class="ent-check"><input type="checkbox" name="ativo" ${ent.ativo ? "checked" : ""}> Ativo (desmarcar tira o acesso dele na hora)</label>`}
         <p class="ent-erro" id="ent-form-erro" role="alert"></p>
         <div class="ent-botoes">${novo ? "" : `<button type="button" class="ent-excluir" id="ent-excluir">Excluir entregador</button>`}<button type="button" class="ghost-button" data-fechar>Cancelar</button><button type="submit" class="primary-button">${novo ? "Cadastrar" : "Salvar"}</button></div>
       </form>`);
     const form = f.querySelector("#ent-form");
-    const diaria = () => { const t = form.tipo_pagamento.value; f.querySelector("#ent-diaria-campo").hidden = t === "entrega"; f.querySelector(".ent-dica").hidden = t === "diaria"; };
+    const diaria = () => {
+      const t = form.tipo_pagamento.value;
+      const mostra = (sel, sim) => { f.querySelector(sel).style.display = sim ? "" : "none"; }; // style, porque o CSS do formulário passa por cima do "hidden"
+      mostra("#ent-diaria-campo", t !== "entrega");
+      f.querySelector("#ent-entrega-campo").style.display = t === "diaria" ? "none" : "grid";
+      mostra(".ent-dica", t !== "diaria");
+      f.querySelector("#ent-entrega-rotulo").textContent = form.entrega_por_km.checked ? "Valor por km (R$)" : "Valor por entrega (R$)";
+    };
     form.addEventListener("change", diaria); diaria();
          // excluir: o primeiro toque pede confirmação, o segundo exclui
     f.querySelector("#ent-excluir")?.addEventListener("click", async (e) => {
