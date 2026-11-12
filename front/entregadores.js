@@ -262,7 +262,8 @@
     });
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const body = { nome: form.nome.value, telefone: form.telefone.value, tipo_pagamento: form.tipo_pagamento.value, valor_diaria: (form.valor_diaria.value || "0").replace(/\./g, "").replace(",", ".") };
+      const body = { nome: form.nome.value, telefone: form.telefone.value, tipo_pagamento: form.tipo_pagamento.value, valor_diaria: (form.valor_diaria.value || "0").replace(/\./g, "").replace(",", "."),
+        valor_entrega: (form.valor_entrega.value || "0").replace(/\./g, "").replace(",", "."), entrega_por_km: form.entrega_por_km.checked };
       if (!novo) body.ativo = form.ativo.checked;
       try {
         const salvo = await api(novo ? "" : `/${ent.id}`, { method: novo ? "POST" : "PATCH", body });
