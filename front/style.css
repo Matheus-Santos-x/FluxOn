@@ -757,10 +757,18 @@ border: none;
 .drawer-nav {
   padding: 14px;
   flex: 1;
+  min-height: 0;              /* deixa a lista encolher pra caber na tela */
+  overflow-y: auto;           /* tela baixa: rola só a lista; topo e rodapé ficam fixos */
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
+.drawer-nav > * { flex-shrink: 0; } /* os itens não amassam, a lista rola */
+.drawer-nav::-webkit-scrollbar { width: 6px; }
+.drawer-nav::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 3px; }
 
 .drawer-item {
   width: 100%;
