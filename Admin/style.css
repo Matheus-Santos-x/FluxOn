@@ -373,6 +373,13 @@ a { color: inherit; }
 .pessoa-topo small { display: block; color: var(--tx-3); font-size: 13px; }
 .estado { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: rgba(70, 192, 138, .12); color: #8be0b8; white-space: nowrap; }
 .estado.off { background: var(--bg-4); color: var(--tx-3); }
+.cartao.off { opacity: .55; }
+.cartao.off:hover { opacity: .85; }
+.zona-perigo { border-color: rgba(255, 138, 141, .35); }
+.zona-perigo.off { border-color: var(--line); }
+.zona-perigo h3 { margin: 0; }
+.zona-perigo p { margin: 0; color: var(--tx-2); }
+.zona-botoes { display: flex; gap: 10px; flex-wrap: wrap; }
 .lojas { display: flex; flex-wrap: wrap; gap: 6px; }
 .loja { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 4px; border-radius: 99px; background: var(--bg-3); border: 1px solid var(--line); font-size: 12.5px; font-weight: 600; text-decoration: none; color: var(--tx-2); }
 .loja:hover { color: var(--tx); border-color: var(--line-2); }
