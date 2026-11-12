@@ -65,7 +65,7 @@
 
   /* ---------- menu lateral e tela ---------- */
   function montarMenu() {
-    const ref = document.getElementById("drawer-orders");
+    const ref = document.getElementById("drawer-resumo-dia"); // fica em Administrativo, embaixo do Caixa
     if (!ref || document.getElementById("drawer-entregadores")) return;
     const b = document.createElement("button");
     b.type = "button"; b.className = "drawer-item"; b.id = "drawer-entregadores";
