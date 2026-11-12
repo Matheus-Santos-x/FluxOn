@@ -312,7 +312,7 @@ app.use("/api/v1/caixa/:restaurant_id", requireAuth);
 app.use("/api/v1/rodizio/:restaurant_id", requireAuth);
 app.use("/orders", requireAuth); // só login: aqui o :id pode ser de pedido, não de restaurante
 for (const p of ["integracao", "impressora", "fiscal", "marketplace", "mp", "tracking-url",
-  "webhook-satisfaction", "webhook-fechamento", "webhook-crm", "webhook-reclamacao", "webhook-login", "webhook-entregas", "crm-mensagem",
+  "webhook-satisfaction", "webhook-fechamento", "webhook-crm", "webhook-reclamacao", "webhook-login", "webhook-entregas", "webhook-vale", "webhook-reserva", "crm-mensagem",
   "imprimir-pedido", "reimprimir-pedido"]) {
   app.use(`/api/v1/restaurante/:restaurant_id/${p}`, requireAuth);
 }
@@ -1495,8 +1495,9 @@ async function voucherWhatsApp(rid, nomeRest, nome, telefone, mensagem) {
   try {
     const tel = String(telefone || "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
     if (tel.length < 10) return false;
-    const url = (await getIntegracao(rid, "webhook_crm"))?.webhook_url;
-    if (!url) { console.error(`❌ voucher: o restaurante ${rid} não tem webhook de mensagens (Configurações → Disparo pelo CRM)`); return false; }
+    // 1º o webhook do vale-presente; vazio: o do CRM
+    const url = (await getIntegracao(rid, "webhook_vale"))?.webhook_url || (await getIntegracao(rid, "webhook_crm"))?.webhook_url;
+    if (!url) { console.error(`❌ voucher: o restaurante ${rid} não tem webhook de mensagens (Configurações → Webhooks → Vale-presente)`); return false; }
     const corpo = { restaurant_id: rid, restaurant_name: nomeRest, client_name: nome || null, client_phone: tel,
       client_phone_whatsapp: `55${tel}`, message: mensagem, sent_at: new Date().toISOString(), source: "vale_presente" };
     const r = await fetch(url, {
@@ -1848,8 +1849,9 @@ async function reservaWhatsApp(rid, nome, telefone, mensagem) {
   try {
     const tel = String(telefone || "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
     if (tel.length < 10) return false;
-    const url = (await getIntegracao(rid, "webhook_crm"))?.webhook_url;
-    if (!url) { console.error(`❌ reserva: o restaurante ${rid} não tem webhook de mensagens (Configurações → Disparo pelo CRM)`); return false; }
+       // 1º o webhook da reserva; vazio: o do CRM
+    const url = (await getIntegracao(rid, "webhook_reserva"))?.webhook_url || (await getIntegracao(rid, "webhook_crm"))?.webhook_url;
+    if (!url) { console.error(`❌ reserva: o restaurante ${rid} não tem webhook de mensagens (Configurações → Webhooks → Reserva de mesa)`); return false; }
     const { data: r } = await supabase.from("restaurants").select("name").eq("id", rid).maybeSingle();
     const corpo = { restaurant_id: rid, restaurant_name: r?.name || null, client_name: nome || null, client_phone: tel,
       client_phone_whatsapp: `55${tel}`, message: mensagem, sent_at: new Date().toISOString(), source: "reserva_mesa" };
@@ -7299,6 +7301,33 @@ app.post("/api/v1/restaurante/:restaurant_id/webhook-entregas", async (req, res)
   }
 });
 
+// ===== WEBHOOKS DO VALE-PRESENTE E DA RESERVA DE MESA (vazio: usa o do CRM) =====
+for (const [rota, tipo] of [["webhook-vale", "webhook_vale"], ["webhook-reserva", "webhook_reserva"]]) {
+  app.get(`/api/v1/restaurante/:restaurant_id/${rota}`, async (req, res) => {
+    try {
+      const dados = await getIntegracao(req.params.restaurant_id, tipo);
+      return res.json({ success: true, webhook_url: dados?.webhook_url || "" });
+    } catch (err) {
+      return sendError(res, 500, "Erro interno");
+    }
+  });
+  app.post(`/api/v1/restaurante/:restaurant_id/${rota}`, async (req, res) => {
+    try {
+      const { restaurant_id } = req.params;
+      const webhook_url = String(req.body?.webhook_url || "").trim();
+      if (webhook_url && !/^https?:\/\//i.test(webhook_url))
+        return sendError(res, 400, "A URL deve começar com http:// ou https://");
+      await supabase.from("integracoes").upsert({
+        restaurant_id, tipo, dados: { webhook_url: webhook_url || null }, ativo: true,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "restaurant_id,tipo" });
+      return res.json({ success: true });
+    } catch (err) {
+      return sendError(res, 500, "Erro interno");
+    }
+  });
+}
+
 // POST - Envia a mensagem do CRM para o webhook (n8n) do restaurante
 app.post("/api/v1/restaurante/:restaurant_id/crm-mensagem", async (req, res) => {
   try {
@@ -7582,17 +7611,6 @@ app.post("/api/v1/cliente/:restaurant_id/login/solicitar", clienteLimitSolicitar
     const r = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-          client_phone: tel, client_phone_whatsapp: `55${tel}`, message: mensagem, sent_at: new Date().toISOString(), source: "login_cliente" }
-      : { tipo: "cliente_otp", restaurant_id: rid, restaurant_name: rest?.name || null,
-          nome: String(req.body?.nome || "").slice(0, 80) || null, telefone: `55${tel}`, codigo,
-          expira_em_minutos: CLIENTE_OTP_MINUTOS, mensagem, sent_at: new Date().toISOString() };
-
-    const r = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(url === OWNER_OTP_WEBHOOK_URL && OWNER_OTP_WEBHOOK_SECRET ? { "x-fluxon-secret": OWNER_OTP_WEBHOOK_SECRET } : {})
-      },
       body: JSON.stringify(corpo),
       signal: AbortSignal.timeout(10000)
     });
