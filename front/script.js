@@ -2133,6 +2133,17 @@ async function loadSettingsData() {
     console.error("Erro ao carregar webhook de login:", e);
   }
 
+  // Webhooks do vale-presente e da reserva de mesa
+  for (const rota of ["vale", "reserva"]) {
+    try {
+      const r = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/webhook-${rota}`, { headers: buildHeaders() });
+      const d = await r.json();
+      document.getElementById(`settings-webhook-${rota}`).value = d.webhook_url || "";
+    } catch (e) {
+      console.error(`Erro ao carregar webhook ${rota}:`, e);
+    }
+  }
+
   // Webhook das mensagens de entrega (código do entregador, saiu pra entrega, você é o próximo)
   try {
     const whEntResp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/webhook-entregas`, { headers: buildHeaders() });
@@ -2293,6 +2304,24 @@ document.getElementById("btn-salvar-webhook-reclamacao")?.addEventListener("clic
     if (status) status.textContent = "❌ Erro de conexão.";
   }
 });
+
+// salvar os webhooks do vale-presente e da reserva de mesa
+for (const rota of ["vale", "reserva"]) {
+  document.getElementById(`btn-salvar-webhook-${rota}`)?.addEventListener("click", async () => {
+    const rid = getRestaurantId();
+    const url = document.getElementById(`settings-webhook-${rota}`)?.value?.trim();
+    const status = document.getElementById(`settings-webhook-${rota}-status`);
+    try {
+      const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/webhook-${rota}`, {
+        method: "POST", headers: buildHeaders(), body: JSON.stringify({ webhook_url: url || "" })
+      });
+      const data = await resp.json();
+      if (status) status.textContent = data.success ? (url ? "✅ Webhook salvo!" : "✅ Webhook removido.") : `❌ ${data.error || "Erro ao salvar."}`;
+    } catch (e) {
+      if (status) status.textContent = "❌ Erro de conexão.";
+    }
+  });
+}
 
 document.getElementById("btn-salvar-webhook-entregas")?.addEventListener("click", async () => {
   const rid = getRestaurantId();
