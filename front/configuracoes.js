@@ -11,7 +11,7 @@
     { id: "operacao", icone: "🧰", nome: "Operação", desc: "Impressoras, gaveta de dinheiro, marketplaces e o link de rastreio.", itens: ["impressora", "marketplace", "rastreio"] },
     { id: "automacao", icone: "⚡", nome: "Automação", desc: "Mesas e os tempos automáticos de cada etapa do pedido.", itens: ["mesas"] },
     { id: "webhooks", icone: "🔗", nome: "Webhooks", desc: "Pra onde o FluxON manda as mensagens do restaurante (n8n → WhatsApp).",
-      itens: ["webhook-crm", "webhook-entregas", "webhook-login", "webhook", "webhook-reclamacao", "webhook-fechamento"] }
+      itens: ["webhook-crm", "webhook-vale", "webhook-reserva", "webhook-entregas", "webhook-login", "webhook", "webhook-reclamacao", "webhook-fechamento"] }
   ];
   // nome e explicação curta de cada bloco (o que aparece no cartão fechado)
   const ITENS = {
@@ -22,7 +22,9 @@
     marketplace: ["Marketplaces", "Pedidos do iFood e do AiqFome"],
     rastreio: ["Link de rastreio", "Endereço da página de acompanhar o pedido"],
     mesas: ["Mesas e tempos automáticos", "Quantas mesas e quanto tempo em cada etapa"],
-    "webhook-crm": ["Mensagens do restaurante (CRM)", "Disparo do CRM, vale-presente e reserva. É o padrão dos outros"],
+    "webhook-crm": ["Disparo do CRM", "Campanhas do CRM. Também é o reserva dos outros quando eles estão vazios"],
+    "webhook-vale": ["Vale-presente", "Mensagem com o código quando o cliente compra o vale"],
+    "webhook-reserva": ["Reserva de mesa", "Confirmação quando a reserva é paga"],
     "webhook-entregas": ["Mensagens de entrega", "Código do entregador, \"seu pedido saiu\" e \"você é o próximo\""],
     "webhook-login": ["Login do cardápio", "Código de 6 dígitos que o cliente recebe pra entrar"],
     webhook: ["Pesquisa de satisfação", "Mensagem depois do pedido pedindo a avaliação"],
