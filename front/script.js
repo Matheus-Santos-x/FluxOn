@@ -4595,6 +4595,7 @@ async function checkAndRefreshToken() {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}` }
       });
+      if (resp.status === 401) { logout(); return; } // login venceu de vez: volta pra tela de entrar em vez de seguir sem permissão
       const data = await resp.json();
       if (data.token) {
         localStorage.setItem("fluxon_token", data.token);
@@ -4621,6 +4622,7 @@ async function init() {
   board?.classList.remove("hidden");
   board?.classList.add("hidden");
   checkAndRefreshToken(); // ← renova token se necessário
+  setInterval(checkAndRefreshToken, 30 * 60 * 1000); // sistema aberto o dia todo: confere a cada 30 min
 
   restaurantPlan = localStorage.getItem("restaurant_plan") || "basic";
   applyAccessUI();
