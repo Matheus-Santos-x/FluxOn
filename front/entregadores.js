@@ -239,7 +239,7 @@
         <fieldset class="ent-seg"><legend>Como ele recebe</legend>
           ${Object.entries(TIPO).map(([k, v]) => `<label><input type="radio" name="tipo_pagamento" value="${k}" ${((ent?.tipo_pagamento || "entrega") === k) ? "checked" : ""}><span>${v}</span></label>`).join("")}
         </fieldset>
-        <label id="ent-diaria-campo">Valor da diária (R$)<input name="valor_diaria" inputmode="decimal" value="${ent?.valor_diaria ? String(ent.valor_diaria.toFixed(2)).replace(".", ",") : ""}" placeholder="Ex.: 50,00"></label>
+        <label id="ent-diaria-campo">Valor da diária por turno (R$)<input name="valor_diaria" inputmode="decimal" value="${ent?.valor_diaria ? String(ent.valor_diaria.toFixed(2)).replace(".", ",") : ""}" placeholder="Ex.: 50,00"></label>
         <div id="ent-entrega-campo" style="display:grid;gap:12px">
           <label><span id="ent-entrega-rotulo">Valor por entrega (R$)</span><input name="valor_entrega" inputmode="decimal" value="${ent?.valor_entrega ? String(ent.valor_entrega.toFixed(2)).replace(".", ",") : ""}" placeholder="Ex.: 5,00"></label>
           <label class="ent-check"><input type="checkbox" name="entrega_por_km" ${ent?.entrega_por_km ? "checked" : ""}> Por distância (valor por km)</label>
@@ -314,7 +314,8 @@
         <thead><tr><th>Entregador</th><th>Entregas</th><th>A pagar</th><th>Dinheiro</th></tr></thead>
         <tbody>${h.entregadores.map((e) => `
           <tr>
-            <td><b>${esc(e.nome)}</b><small>${e.diaria ? `diária ${moeda(e.diaria)}` : ""}${e.diaria && e.por_entrega ? " + " : ""}${e.por_entrega ? `taxas ${moeda(e.por_entrega)}` : ""}</small></td>
+            <td><b>${esc(e.nome)}</b><small>${e.diaria ? `${e.turnos > 1 ? `${e.turnos} turnos` : "diária"} ${moeda(e.diaria)}` : ""}${e.diaria && e.por_entrega ? " + " : ""}${e.por_entrega ? `taxas ${moeda(e.por_entrega)}` : ""}</small>
+              ${e.turno_aberto ? `<small class="ent-turno">● em turno desde ${new Date(e.turno_aberto).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small><button type="button" class="ghost-button ent-encerrar" data-encerrar="${esc(e.id)}" style="margin-top:6px;padding:6px 10px;font-size:12px">Encerrar turno</button>` : ""}</td>
             <td>${e.entregas}</td>
             <td><b>${moeda(e.total)}</b></td>
             <td>${moeda(e.dinheiro_recebido)}${e.dinheiro_pendente ? `<small class="ent-pend">falta ${moeda(e.dinheiro_pendente)}</small>` : ""}</td>
@@ -322,6 +323,13 @@
         </tbody>
         <tfoot><tr><td>Total a pagar</td><td></td><td><b>${moeda(h.total)}</b></td><td></td></tr></tfoot>
       </table>`;
+    // encerrar o turno de quem esqueceu: o primeiro toque pede confirmação, o segundo encerra
+    box.querySelectorAll("[data-encerrar]").forEach((b) => b.addEventListener("click", async () => {
+      if (!b.dataset.certeza) { b.dataset.certeza = "1"; b.textContent = "Toque de novo pra encerrar"; return; }
+      b.disabled = true;
+      try { await api(`/${b.dataset.encerrar}/encerrar-turno`, { method: "POST" }); aviso("Turno encerrado"); carregarHoje(); carregarLista(); }
+      catch (err) { aviso(err.message); b.disabled = false; b.textContent = "Encerrar turno"; delete b.dataset.certeza; }
+    }));
   }
 
   /* ---------- configurações e link do app ---------- */
@@ -467,7 +475,7 @@
   function ligarSocket() {
     if (typeof socket === "undefined" || !socket) return setTimeout(ligarSocket, 1000);
     socket.on("connect", () => setTimeout(tudo, 300));
-    socket.on("entregadores_mudou", () => { clearTimeout(E._tm); E._tm = setTimeout(carregarLista, 400); });
+    socket.on("entregadores_mudou", () => { clearTimeout(E._tm); E._tm = setTimeout(() => { carregarLista(); if (visivel()) carregarHoje(); }, 400); });
     socket.on("acertos_mudou", () => { carregarAcertos(); if (visivel()) carregarHoje(); });
     socket.on("entregador_posicao", (p) => {
       const e = E.lista.find((x) => x.id === p.id);
