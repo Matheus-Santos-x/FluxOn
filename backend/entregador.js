@@ -460,7 +460,7 @@ async function avisarClientes(rid, ent, pedidos) {
     _jaAvisados.add(o.id);
     if (_jaAvisados.size > 5000) _jaAvisados.clear();
     const url = await linkRastreio(rid, o);
-    const link = url ? `\n\nAcompanhe a entrega: ${url}` : "";
+    const link = url ? `\n\n📍 Acompanhe pelo app do ${rest.nome}:\n${url}\n\nÉ só tocar no link que o mapa abre com a moto a caminho. Entrando no app com o seu número de WhatsApp (sem senha), você vê todos os seus pedidos e junta pontos.` : "";
     const nome = primeiroNome(o.client_name);
     const pg = pagamentoInfo(o);
     const lembrete = pg.tipo === "dinheiro" && pg.troco ? `\nO ${primeiroNome(ent.nome)} já leva o seu troco.` : "";
