@@ -1,0 +1,46 @@
+/* FluxON Operacional · Configurações em grupos (montado pelo configuracoes.js) */
+.cfg{display:grid;grid-template-columns:230px minmax(0,1fr);gap:28px;align-items:start;max-width:1080px}
+
+/* grupos à esquerda */
+.cfg-nav{position:sticky;top:16px;display:grid;gap:4px;padding:8px;border-radius:18px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07)}
+.cfg-nav-item{display:flex;align-items:center;gap:12px;width:100%;padding:11px 12px;border:0;border-radius:12px;background:transparent;color:rgba(252,228,228,.7);font:700 14.5px Manrope,sans-serif;text-align:left;cursor:pointer;transition:background .15s,color .15s}
+.cfg-nav-item:hover{background:rgba(255,255,255,.04);color:#fff}
+.cfg-nav-item.on{background:rgba(239,68,68,.12);color:#fff;box-shadow:inset 3px 0 0 #ef4444}
+.cfg-nav-item:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.cfg-nav-ic{width:30px;height:30px;flex-shrink:0;border-radius:9px;display:grid;place-items:center;font-size:16px;background:rgba(255,255,255,.05)}
+.cfg-nav-item.on .cfg-nav-ic{background:rgba(239,68,68,.18)}
+.cfg-nav-nome{flex:1}
+.cfg-nav-n{min-width:22px;padding:1px 7px;border-radius:999px;font-size:12px;text-align:center;color:rgba(252,228,228,.5);background:rgba(255,255,255,.06)}
+
+/* grupo aberto */
+.cfg-painel[hidden]{display:none}
+.cfg-painel-topo{margin:2px 0 16px}
+.cfg-painel-topo h2{margin:0;font:800 22px "Space Grotesk",sans-serif;color:#fff}
+.cfg-painel-topo p{margin:6px 0 0;color:rgba(252,228,228,.5);font-size:14px}
+.cfg-lista{display:grid;gap:12px}
+
+/* cada bloco vira um cartão (os !important passam por cima dos estilos escritos direto no HTML) */
+.cfg-card{background:#101012 !important;border:1px solid rgba(255,255,255,.08) !important;border-radius:16px !important;overflow:hidden;transition:border-color .15s}
+.cfg-card:hover{border-color:rgba(255,255,255,.15) !important}
+.cfg-card:has(> .cfg-card-corpo[style*="display: flex"]){border-color:rgba(239,68,68,.35) !important}
+.cfg-card-topo{width:100%;display:flex !important;align-items:center;justify-content:space-between;gap:14px;padding:16px 18px !important;background:transparent !important;border:0 !important;cursor:pointer;text-align:left}
+.cfg-card-topo:focus-visible{outline:2px solid #fff;outline-offset:-2px;border-radius:16px}
+.cfg-card-esq{display:flex;align-items:center;gap:14px;min-width:0}
+.cfg-ic{width:40px;height:40px;flex-shrink:0;border-radius:12px;display:grid;place-items:center;font-size:19px;background:rgba(255,255,255,.05)}
+.cfg-card-txt{display:grid;gap:3px;min-width:0}
+.cfg-card-txt b{color:#fff;font:800 15.5px Manrope,sans-serif}
+.cfg-card-txt small{color:rgba(252,228,228,.5);font-size:13px;font-weight:600;line-height:1.35}
+.cfg-card-topo > span:last-child{flex-shrink:0;font-size:14px !important;opacity:.7}
+.cfg-card-corpo{padding:4px 18px 20px !important;border-top:1px solid rgba(255,255,255,.06)}
+.cfg-card-corpo:not([style*="display: flex"]){border-top:0}
+
+/* celular e tablet: os grupos viram uma faixa de botões em cima */
+@media (max-width:860px){
+  .cfg{grid-template-columns:1fr;gap:16px}
+  .cfg-nav{position:static;display:flex;overflow-x:auto;padding:6px;scrollbar-width:none}
+  .cfg-nav::-webkit-scrollbar{display:none}
+  .cfg-nav-item{width:auto;flex-shrink:0;padding:9px 12px}
+  .cfg-nav-n{display:none}
+  .cfg-nav-item.on{box-shadow:inset 0 -3px 0 #ef4444}
+}
+@media (prefers-reduced-motion:reduce){.cfg-nav-item,.cfg-card{transition:none}}
