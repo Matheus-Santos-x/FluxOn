@@ -5329,6 +5329,9 @@ socket.on("caixa_atualizado", (data) => {
 });
   
 let _renderDebounce = null;
+// o Painel Admin desativou o restaurante: sai do FluxON na hora
+socket.on("restaurante_desativado", () => { alert("Este restaurante foi desativado. Fale com a Evorise."); logout(); });
+
 socket.on("order_updated", (order) => {
   if (!order || !order.id) return;
     // rascunho e agendado ficam fora do Kanban (o agendado aparece em "📅 Agendados")
