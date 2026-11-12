@@ -5059,7 +5059,8 @@ app.get("/api/v1/restaurante/:restaurant_id/impressora", async (req, res) => {
     const dados = await getIntegracao(restaurant_id, "printnode");
     return res.json({
       api_key: dados?.api_key ? "configurado" : "",
-      impressoras: dados?.impressoras || []
+      impressoras: dados?.impressoras || [],
+      gaveta: dados?.gaveta || { ativa: false, pino: 2 }
     });
   } catch (err) {
     return sendError(res, 500, "Erro interno");
@@ -5076,9 +5077,11 @@ app.patch("/api/v1/restaurante/:restaurant_id/impressora", async (req, res) => {
       return sendError(res, 400, "api_key e impressoras são obrigatórios");
 
     const existing = await getIntegracao(restaurant_id, "printnode");
+    const g = req.body?.gaveta;
     const dados = {
       api_key: api_key !== "configurado" ? api_key : existing?.api_key,
-      impressoras
+      impressoras,
+      gaveta: g ? { ativa: !!g.ativa, pino: Number(g.pino) === 5 ? 5 : 2 } : (existing?.gaveta || { ativa: false, pino: 2 })
     };
 
     await supabase.from("integracoes").upsert({
@@ -5087,6 +5090,26 @@ app.patch("/api/v1/restaurante/:restaurant_id/impressora", async (req, res) => {
     }, { onConflict: "restaurant_id,tipo" });
 
     return res.json({ success: true });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
+
+// 💵 POST - abre a gaveta sem imprimir (finalizou em dinheiro sem cupom, ou o botão "Testar gaveta")
+app.post("/api/v1/restaurante/:restaurant_id/abrir-gaveta", async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const config = await getIntegracao(restaurant_id, "printnode");
+    const imp = (config?.impressoras || []).find(i => toBool(i.is_caixa) || toBool(i.caixa));
+    if (!config?.api_key || !imp?.printer_id) return sendError(res, 400, "Impressora do caixa não configurada");
+    const teste = !!req.body?.teste;
+    if (!teste) {
+      if (!config.gaveta?.ativa) return res.json({ success: true, aberta: false });
+      const { data: o } = await supabase.from("orders").select("payment_method").eq("id", String(req.body?.order_id || "")).eq("restaurant_id", restaurant_id).maybeSingle();
+      if (!o || !pagouDinheiro(o.payment_method)) return res.json({ success: true, aberta: false });
+    }
+    const ok = await enviarRawPrintNode(config.api_key, imp.printer_id, [0x1B, 0x40, ...pulsoGaveta(teste ? req.body?.pino : config.gaveta?.pino)], "Gaveta");
+    return ok ? res.json({ success: true, aberta: true }) : sendError(res, 502, "A impressora do caixa não respondeu");
   } catch (err) {
     return sendError(res, 500, "Erro interno");
   }
@@ -5477,7 +5500,22 @@ function gerarCupom(origin) {
   return `${prefixo}-${codigo}`;
 }
 
-async function printOrder(order, apiKey, printerId, is_caixa = false, nfce = null) {
+// 💵 GAVETA DE DINHEIRO: fica atrás da impressora do caixa e abre com um pulso (ESC p).
+// Ligada por restaurante em Configurações → Impressoras, com o pino (2 ou 5, depende da gaveta).
+const pagouDinheiro = (pm) => repartirPagamento(pm, 1).some(p => p.metodo === "dinheiro");
+const pulsoGaveta = (pino) => [0x1B, 0x70, Number(pino) === 5 ? 0x01 : 0x00, 0x19, 0xFA];
+async function enviarRawPrintNode(apiKey, printerId, bytes, titulo) {
+  const r = await fetch("https://api.printnode.com/printjobs", {
+    method: "POST",
+    headers: { "Authorization": "Basic " + Buffer.from(`${apiKey}:`).toString("base64"), "Content-Type": "application/json" },
+    body: JSON.stringify({ printerId: parseInt(printerId), title: titulo, contentType: "raw_base64", content: Buffer.from(bytes).toString("base64"), source: "FluxON" }),
+    signal: AbortSignal.timeout(10000)
+  }).catch(() => null);
+  return !!r?.ok;
+}
+
+// gaveta: { pino } pra abrir a gaveta junto com o cupom do caixa (só quando foi pago em dinheiro)
+async function printOrder(order, apiKey, printerId, is_caixa = false, nfce = null, gaveta = null) {
   try {
     const isDelivery = String(order.service_type || '').toLowerCase() === 'delivery';
     const itens = Array.isArray(order.itens) ? order.itens : [];
@@ -5609,6 +5647,7 @@ lf();
     // ══════════════════════════════════════
     } else {
       b(ESC, 0x40);
+      if (gaveta) b(...pulsoGaveta(gaveta.pino)); // abre a gaveta enquanto o cupom sai
 
       b(ESC, 0x61, 0x01);
       b(GS, 0x21, 0x11);
@@ -5967,7 +6006,9 @@ app.post("/api/v1/restaurante/:restaurant_id/imprimir-pedido", async (req, res) 
 
         // Emissão ligada + pedido já finalizado: espera a nota e imprime o QR no fim do resumo
     const nfce = await aguardarNFCeParaImpressao(order);
-    const success = await printOrder(order, config.api_key, printer_id_override, true, nfce);
+    // finalizou pago em dinheiro (e a gaveta está ligada): abre a gaveta junto com o cupom
+    const gaveta = req.body?.abrir_gaveta && config.gaveta?.ativa && pagouDinheiro(order.payment_method) ? config.gaveta : null;
+    const success = await printOrder(order, config.api_key, printer_id_override, true, nfce, gaveta);
     if (!success) return sendError(res, 500, "Erro ao enviar para impressora");
     return res.json({ success: true });
 
