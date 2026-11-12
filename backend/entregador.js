@@ -206,21 +206,20 @@ async function configDo(rid) {
   return { avisar_cliente: data ? !!data.avisar_cliente : true };
 }
 
-// manda WhatsApp pelo webhook do restaurante (o mesmo dos vales); sem ele, pelo webhook do FluxON
+// manda WhatsApp pelo webhook DO RESTAURANTE (é o restaurante falando com o cliente e o entregador dele):
+// 1º o "Mensagens de entrega" das Configurações; sem ele, o do CRM. Nunca pelo número da Evorise.
 async function whatsApp(rid, nomeRest, nome, telefone, mensagem, source) {
   try {
     const tel = digitos(telefone).replace(/^55(?=\d{10,11}$)/, "");
     if (tel.length < 10) return false;
-    const crm = await C.getIntegracao(rid, "webhook_crm");
-    const url = crm?.webhook_url || C.OWNER_OTP_WEBHOOK_URL;
-    if (!url) { console.error("❌ entregador: nenhum webhook de WhatsApp configurado"); return false; }
-    const corpo = crm?.webhook_url
-      ? { restaurant_id: rid, restaurant_name: nomeRest, client_name: nome || null, client_phone: tel,
-          client_phone_whatsapp: `55${tel}`, message: mensagem, sent_at: new Date().toISOString(), source }
-      : { tipo: source, nome: nome || null, telefone: `55${tel}`, mensagem };
+    const ent = await C.getIntegracao(rid, "webhook_entregas");
+    const url = ent?.webhook_url || (await C.getIntegracao(rid, "webhook_crm"))?.webhook_url;
+    if (!url) { console.error(`❌ entregador: o restaurante ${rid} não tem webhook de mensagens (Configurações → Mensagens de entrega)`); return false; }
+    const corpo = { evento: source, source, restaurant_id: rid, restaurant_name: nomeRest, client_name: nome || null, client_phone: tel,
+      client_phone_whatsapp: `55${tel}`, message: mensagem, sent_at: new Date().toISOString() };
     const r = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...(!crm?.webhook_url && C.OWNER_OTP_WEBHOOK_SECRET ? { "x-fluxon-secret": C.OWNER_OTP_WEBHOOK_SECRET } : {}) },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(corpo),
       signal: AbortSignal.timeout(10000)
     });
