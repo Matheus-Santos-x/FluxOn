@@ -79,10 +79,11 @@
     const v = document.createElement("main");
     v.className = "crm-view hidden"; v.id = "entregadores-view";
     v.innerHTML = `
-      <div class="crm-header">
-        <div class="crm-title">🛵 Entregadores</div>
+      <div class="crm-header ent-cabeca">
+        <div><div class="crm-title">🛵 Entregadores</div><p class="ent-sub" id="ent-sub"></p></div>
         <button class="primary-button" type="button" id="ent-novo">+ Novo entregador</button>
       </div>
+      <div class="ent-status" id="ent-status" hidden></div>
       <div class="ent-grade">
         <div class="ent-col">
           <section class="ent-bloco ent-acertos-bloco" id="ent-acertos-bloco" hidden>
@@ -90,7 +91,7 @@
             <div id="ent-acertos"></div>
           </section>
           <section class="ent-bloco">
-            <div class="ent-bloco-topo"><h3>Agora</h3><span class="ent-muted" id="ent-agora-resumo"></span></div>
+<div class="ent-bloco-topo"><h3>Equipe</h3></div>
             <div class="ent-mapa" id="ent-mapa"></div>
             <div id="ent-lista" class="ent-lista"></div>
           </section>
@@ -173,24 +174,63 @@
     if (!e.ja_entrou) return ["ainda não entrou no app", "off"];
     return ["fora do app", "off"];
   }
+
+  const iniciais = (n) => { const p = String(n || "").trim().split(/\s+/); return ((p[0]?.[0] || "") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase() || "?"; };
+  function pagamentoTxt(e) {
+    const partes = [];
+    if (e.tipo_pagamento !== "entrega") partes.push(`Diária ${moeda(e.valor_diaria)} por turno`);
+    if (e.tipo_pagamento !== "diaria") partes.push(e.valor_entrega ? `${moeda(e.valor_entrega)}/${e.entrega_por_km ? "km" : "entrega"}` : "taxa de cada pedido");
+    return partes.join(" + ");
+  }
+  // faixa "na rua / disponíveis / em pausa / fora do app" e a frase embaixo do título
+  function desenharResumo() {
+    const ativos = E.lista.filter((e) => e.ativo);
+    const conta = (c) => ativos.filter((e) => situacao(e)[1] === c).length;
+    const st = document.getElementById("ent-status");
+    if (st) {
+      st.hidden = !ativos.length;
+      st.innerHTML = [["rua", "Na rua"], ["ok", "Disponíveis"], ["pausa", "Em pausa"], ["off", "Fora do app"]]
+        .map(([c, t]) => `<div class="ent-st ${c}"><i aria-hidden="true"></i><b>${conta(c)}</b><span>${t}</span></div>`).join("");
+    }
+    const sub = document.getElementById("ent-sub");
+    if (sub) {
+      const h = E.hoje, emTurno = h ? h.entregadores.filter((e) => e.turno_aberto).length : 0;
+      sub.textContent = ativos.length
+        ? [`${ativos.length} na equipe`, emTurno ? `${emTurno} em turno agora` : "", h?.total ? `${moeda(h.total)} a pagar hoje` : ""].filter(Boolean).join(" · ")
+        : "Cadastre quem faz as suas entregas";
+    }
+  }
   function desenharEntregadores() {
     const box = document.getElementById("ent-lista");
     if (!box) return;
-    const ativos = E.lista.filter((e) => e.ativo);
-    const naRua = ativos.filter((e) => e.na_rua.length).length, disp = ativos.filter((e) => e.conectado && e.disponivel && !e.na_rua.length).length;
-    document.getElementById("ent-agora-resumo").textContent = ativos.length ? `${naRua} na rua · ${disp} disponíve${disp === 1 ? "l" : "is"}` : "";
+    desenharResumo();
     if (!E.lista.length) {
-      box.innerHTML = `<div class="ent-vazio"><b>Nenhum entregador cadastrado</b><p>Cadastre o nome e o WhatsApp. Ele entra no app com um código e pega os pedidos prontos sozinho.</p><button class="primary-button" type="button" onclick="document.getElementById('ent-novo').click()">+ Cadastrar o primeiro</button></div>`;
+      box.innerHTML = `
+        <div class="ent-vazio2">
+          <span class="ent-vazio-ic" aria-hidden="true">🛵</span>
+          <b>Monte a sua equipe de entregas</b>
+          <ol class="ent-passos">
+            <li><span><b>Cadastre</b> o nome e o WhatsApp do entregador</span></li>
+            <li><span><b>Mande o código</b> pra ele entrar no app</span></li>
+            <li><span><b>Ele pega</b> os pedidos prontos e sai pra entregar</span></li>
+          </ol>
+          <button class="primary-button" type="button" onclick="document.getElementById('ent-novo').click()">+ Cadastrar o primeiro</button>
+        </div>`;
       return;
     }
+     
     const ordem = { rua: 0, ok: 1, pausa: 2, off: 3 };
     box.innerHTML = [...E.lista].sort((a, b) => ordem[situacao(a)[1]] - ordem[situacao(b)[1]] || a.nome.localeCompare(b.nome)).map((e) => {
       const [txt, cls] = situacao(e);
       return `
-      <div class="ent-item${e.ativo ? "" : " inativo"}" data-id="${esc(e.id)}">
-        <span class="ent-ponto ${cls}" aria-hidden="true"></span>
-        <div class="ent-item-meio">
+      <div class="ent-card ${cls}${e.ativo ? "" : " inativo"}" data-id="${esc(e.id)}">
+        <span class="ent-av ${cls}" aria-hidden="true">${esc(iniciais(e.nome))}</span>
+        <div class="ent-card-meio">
           <b>${esc(e.nome)}</b>
+          <span class="ent-sit ${cls}">${esc(txt)}${e.posicao && e.na_rua.length ? ` · posição ${haQuanto(e.posicao.em)}` : ""}</span>
+          ${e.na_rua.length ? `<span class="ent-peds2">${e.na_rua.map((p) => `<span>#${esc(p.numero)}${p.bairro ? " · " + esc(p.bairro) : ""}</span>`).join("")}</span>` : ""}
+          <span class="ent-pg">${esc(pagamentoTxt(e))}</span>
+        </div>
           <span class="ent-muted">${esc(txt)}${e.posicao && e.na_rua.length ? ` · posição ${haQuanto(e.posicao.em)}` : ""} · ${esc(TIPO[e.tipo_pagamento])}${e.tipo_pagamento !== "entrega" ? ` ${moeda(e.valor_diaria)}` : ""}${e.tipo_pagamento !== "diaria" && e.valor_entrega ? ` · ${moeda(e.valor_entrega)}/${e.entrega_por_km ? "km" : "entrega"}` : ""}</span>
           ${e.na_rua.length ? `<span class="ent-peds">${e.na_rua.map((p) => `#${esc(p.numero)}${p.bairro ? " " + esc(p.bairro) : ""}`).join(" · ")}</span>` : ""}
         </div>
@@ -308,21 +348,23 @@
     const box = document.getElementById("ent-hoje");
     if (!box) return;
     const h = E.hoje;
-    if (!h || !h.entregadores.length) { box.innerHTML = `<p class="ent-muted">Nenhuma entrega hoje ainda.</p>`; return; }
+    desenharResumo();
+    if (!h || !h.entregadores.length) { box.innerHTML = `<p class="ent-nada">Nenhuma entrega hoje ainda. Quando alguém começar o turno, o resumo do que pagar aparece aqui.</p>`; return; }
+    const hm = (iso) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     box.innerHTML = `
-      <table class="ent-tabela">
-        <thead><tr><th>Entregador</th><th>Entregas</th><th>A pagar</th><th>Dinheiro</th></tr></thead>
-        <tbody>${h.entregadores.map((e) => `
-          <tr>
-            <td><b>${esc(e.nome)}</b><small>${e.diaria ? `${e.turnos > 1 ? `${e.turnos} turnos` : "diária"} ${moeda(e.diaria)}` : ""}${e.diaria && e.por_entrega ? " + " : ""}${e.por_entrega ? `taxas ${moeda(e.por_entrega)}` : ""}</small>
-              ${e.turno_aberto ? `<small class="ent-turno">● em turno desde ${new Date(e.turno_aberto).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small><button type="button" class="ghost-button ent-encerrar" data-encerrar="${esc(e.id)}" style="margin-top:6px;padding:6px 10px;font-size:12px">Encerrar turno</button>` : ""}</td>
-            <td>${e.entregas}</td>
-            <td><b>${moeda(e.total)}</b></td>
-            <td>${moeda(e.dinheiro_recebido)}${e.dinheiro_pendente ? `<small class="ent-pend">falta ${moeda(e.dinheiro_pendente)}</small>` : ""}</td>
-          </tr>`).join("")}
-        </tbody>
-        <tfoot><tr><td>Total a pagar</td><td></td><td><b>${moeda(h.total)}</b></td><td></td></tr></tfoot>
-      </table>`;
+      <div class="ent-hoje">${h.entregadores.map((e) => `
+        <div class="ent-hoje-linha">
+          <span class="ent-av mini${e.turno_aberto ? " ok" : ""}" aria-hidden="true">${esc(iniciais(e.nome))}</span>
+          <div class="ent-hoje-meio">
+            <b>${esc(e.nome)}</b>
+            <small>${e.entregas} entrega${e.entregas === 1 ? "" : "s"}${e.diaria ? ` · ${e.turnos > 1 ? `${e.turnos} turnos` : "diária"} ${moeda(e.diaria)}` : ""}${e.por_entrega ? ` · taxas ${moeda(e.por_entrega)}` : ""}</small>
+            ${e.dinheiro_recebido || e.dinheiro_pendente ? `<small>💵 devolveu ${moeda(e.dinheiro_recebido)}${e.dinheiro_pendente ? ` · <span class="ent-pend">falta ${moeda(e.dinheiro_pendente)}</span>` : ""}</small>` : ""}
+            ${e.turno_aberto ? `<span class="ent-turno-on">● em turno desde ${hm(e.turno_aberto)}<button type="button" class="ent-encerrar" data-encerrar="${esc(e.id)}">Encerrar turno</button></span>` : ""}
+          </div>
+          <b class="ent-hoje-valor">${moeda(e.total)}</b>
+        </div>`).join("")}
+      </div>
+      <div class="ent-hoje-total"><span>Total a pagar hoje</span><b>${moeda(h.total)}</b></div>`;
     // encerrar o turno de quem esqueceu: o primeiro toque pede confirmação, o segundo encerra
     box.querySelectorAll("[data-encerrar]").forEach((b) => b.addEventListener("click", async () => {
       if (!b.dataset.certeza) { b.dataset.certeza = "1"; b.textContent = "Toque de novo pra encerrar"; return; }
@@ -339,8 +381,9 @@
     const link = E.config.link_app;
     box.innerHTML = `
       <h3>Configurações</h3>
-      <label class="ent-check"><input type="checkbox" id="ent-avisar" ${E.config.avisar_cliente ? "checked" : ""}> Avisar o cliente no WhatsApp quando o pedido sair, com o link do mapa</label>
-      ${link ? `<div class="ent-link"><span>App dos entregadores</span><b>${esc(link)}</b><button class="ghost-button small" type="button" id="ent-copiar">Copiar link</button></div>` : ""}`;
+      <label class="ent-switch"><input type="checkbox" id="ent-avisar" ${E.config.avisar_cliente ? "checked" : ""}><i aria-hidden="true"></i>
+        <span><b>Avisar o cliente no WhatsApp</b><small>Quando o pedido sai, ele recebe o link do mapa pra acompanhar a entrega</small></span></label>
+      ${link ? `<div class="ent-link"><span>Link do app dos entregadores</span><div class="ent-link-linha"><b>${esc(link)}</b><button class="ghost-button small" type="button" id="ent-copiar">Copiar</button></div></div>` : ""}`;
     document.getElementById("ent-avisar").onchange = async (e) => {
       try { await api("/config", { method: "PATCH", body: { avisar_cliente: e.target.checked } }); E.config.avisar_cliente = e.target.checked; aviso("Salvo ✓"); }
       catch (err) { e.target.checked = !e.target.checked; aviso(err.message, true); }
