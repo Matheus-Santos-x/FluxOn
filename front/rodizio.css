@@ -1,0 +1,100 @@
+/* FluxON Operacional · Rodízio (visual novo, montado pelo rodizio.js) */
+.rz{display:grid;gap:22px;max-width:1080px}
+.rz-sec-topo{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 12px}
+.rz-sec-topo h3{margin:0;font:800 17px "Space Grotesk",sans-serif;color:#fff}
+.rz-sec-topo span{font-size:13px;font-weight:600;color:rgba(252,228,228,.5)}
+.rz-vazio-txt{margin:0;color:rgba(252,228,228,.5);font-size:14px}
+
+/* a data em bloco, como folha de calendário: é o que dá a cara da tela */
+.rz-data{width:64px;flex-shrink:0;display:grid;justify-items:center;align-content:center;gap:1px;padding:10px 0 9px;border-radius:14px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.28)}
+.rz-data b{font:800 26px/1 "Space Grotesk",sans-serif;color:#fff}
+.rz-data small{font:800 11px Manrope,sans-serif;letter-spacing:.06em;color:#f87171;text-transform:uppercase}
+.rz-data i{font:600 11px Manrope,sans-serif;font-style:normal;color:rgba(252,228,228,.5)}
+.rz-data.mini{width:46px;padding:7px 0;border-radius:11px;background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08)}
+.rz-data.mini b{font-size:18px}
+.rz-data.mini small{color:rgba(252,228,228,.5)}
+
+/* situação */
+.rz-st{flex-shrink:0;padding:3px 10px;border-radius:999px;font:800 11.5px Manrope,sans-serif;font-style:normal;white-space:nowrap;color:rgba(252,228,228,.6);background:rgba(255,255,255,.06)}
+.rz-st.aberto,.rz-st.chegou{color:#4ade80;background:rgba(34,197,94,.12)}
+.rz-st.fechado{color:#fbbf24;background:rgba(245,158,11,.12)}
+.rz-st.lotado{color:#f87171;background:rgba(239,68,68,.12)}
+.rz-st.cancelado{color:rgba(252,228,228,.45);background:rgba(255,255,255,.05);text-decoration:line-through}
+
+/* barra de vagas */
+.rz-barra{display:block;height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
+.rz-barra i{display:block;height:100%;border-radius:999px;background:#22c55e;transition:width .3s}
+.rz-barra.meio i{background:#f59e0b}
+.rz-barra.cheia i{background:#ef4444}
+
+/* cartões da lista */
+.rz-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+.rz-card{display:flex;gap:16px;align-items:stretch;width:100%;padding:16px;border-radius:16px;background:#101012;border:1px solid rgba(255,255,255,.08);text-align:left;cursor:pointer;color:inherit;font:inherit;transition:border-color .15s,transform .15s}
+.rz-card:hover{border-color:rgba(255,255,255,.18)}
+.rz-card:focus-visible,.rz-linha:focus-visible,.rz-reserva:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.rz-card-meio{flex:1;min-width:0;display:grid;gap:7px;align-content:center}
+.rz-card-nome{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.rz-card-nome b{font:800 16px Manrope,sans-serif;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rz-card-meio > small{font-size:13px;color:rgba(252,228,228,.55)}
+.rz-vagas b{color:#fff}
+.rz-vazio{display:grid;justify-items:center;gap:12px;padding:40px 16px;text-align:center;border-radius:16px;border:1px dashed rgba(255,255,255,.12)}
+.rz-vazio > span{font-size:34px}
+.rz-vazio b{font:800 19px "Space Grotesk",sans-serif;color:#fff}
+.rz-vazio p{margin:0;max-width:380px;color:rgba(252,228,228,.55);font-size:14px}
+
+/* encerrados (fecha sozinho, abre no toque) */
+.rz-encerrados{border-radius:16px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.015)}
+.rz-encerrados summary{display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;list-style:none;font:800 15px Manrope,sans-serif;color:rgba(252,228,228,.75)}
+.rz-encerrados summary::-webkit-details-marker{display:none}
+.rz-encerrados summary::after{content:"›";margin-left:auto;font-size:20px;transition:transform .2s}
+.rz-encerrados[open] summary::after{transform:rotate(90deg)}
+.rz-encerrados summary span{padding:1px 8px;border-radius:999px;font-size:12px;background:rgba(255,255,255,.07);color:rgba(252,228,228,.6)}
+.rz-encerrados .rz-linhas{padding:0 10px 10px}
+.rz-linhas{display:grid;gap:8px}
+.rz-linha{display:flex;align-items:center;gap:14px;width:100%;padding:10px 12px;border-radius:13px;border:1px solid transparent;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.rz-linha:hover{background:rgba(255,255,255,.04)}
+.rz-linha-meio{flex:1;min-width:0;display:grid;gap:2px}
+.rz-linha-meio b{color:#fff;font-size:14.5px}
+.rz-linha-meio small{color:rgba(252,228,228,.5);font-size:12.5px}
+.rz-seta{font-size:22px;color:rgba(252,228,228,.35)}
+
+/* um rodízio aberto */
+.rz-topo{display:flex;align-items:center;gap:18px}
+.rz-topo .rz-data{width:76px;padding:12px 0}
+.rz-topo .rz-data b{font-size:32px}
+.rz-topo-meio{flex:1;min-width:0;display:grid;gap:6px}
+.rz-topo h2{margin:0;font:800 26px "Space Grotesk",sans-serif;color:#fff}
+.rz-topo p{margin:0;color:rgba(252,228,228,.55);font-size:14px}
+.rz-nums{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:1px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.08)}
+.rz-nums > div{display:grid;gap:6px;align-content:start;padding:16px 18px;background:#0e0e10}
+.rz-nums small{font-size:12.5px;font-weight:700;color:rgba(252,228,228,.5)}
+.rz-nums b{font:800 26px/1 "Space Grotesk",sans-serif;color:#fff}
+.rz-nums b span{font-size:16px;color:rgba(252,228,228,.4)}
+.rz-nums b.ouro{color:#fbbf24}
+.rz-nums .rz-barra{margin-top:6px}
+.rz-acoes{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.rz-remover{margin-left:auto;padding:10px 4px;border:0;background:none;color:#f87171;font:700 13.5px Manrope,sans-serif;cursor:pointer}
+.rz-remover:hover{text-decoration:underline}
+
+/* reservas */
+.rz-reserva{display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:14px;background:#101012;border:1px solid rgba(255,255,255,.07);cursor:pointer}
+.rz-reserva:hover{border-color:rgba(255,255,255,.16)}
+.rz-reserva.cancelado{opacity:.5}
+.rz-av{width:38px;height:38px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;font:800 15px "Space Grotesk",sans-serif;color:#fff;background:#1c1c20;border:2px solid rgba(255,255,255,.14)}
+.rz-reserva.resgatado .rz-av{border-color:#22c55e}
+.rz-reserva.pago .rz-av{border-color:#f59e0b}
+.rz-reserva-dir{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.rz-reserva-dir > b{font:800 15px "Space Grotesk",sans-serif;color:#fbbf24}
+.rz-chegou{padding:7px 12px;border-radius:10px;border:1px solid rgba(34,197,94,.45);background:rgba(34,197,94,.1);color:#4ade80;font:800 12.5px Manrope,sans-serif;cursor:pointer}
+.rz-chegou:hover{background:rgba(34,197,94,.2)}
+
+@media (max-width:700px){
+  .rz-grade{grid-template-columns:1fr}
+  .rz-nums{grid-template-columns:1fr 1fr}
+  .rz-nums > div:first-child{grid-column:1/-1}
+  .rz-topo h2{font-size:22px}
+  .rz-remover{margin-left:0}
+  .rz-reserva{flex-wrap:wrap}
+  .rz-reserva-dir{width:100%;justify-content:space-between;padding-left:52px}
+}
+@media (prefers-reduced-motion:reduce){.rz-card,.rz-barra i,.rz-encerrados summary::after{transition:none}}
