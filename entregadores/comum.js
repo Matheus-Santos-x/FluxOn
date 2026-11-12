@@ -153,6 +153,7 @@ const tempoReal = {
     s.on("fila_saiu", (d) => pegar.saiuDaFila(d.ids || [], d.entregador_id));
     s.on("fila_mudou", () => pegar.recarregarLogo());
     s.on("minhas_mudou", (d) => rua.mudou(d || {}));
+    s.on("turno_encerrado", () => { if (S.eu) S.eu.disponivel = false; perfil.bolinha(); aviso("O caixa encerrou o seu turno"); if (S.aba === "dia") ganhos.recarregar(); });
     s.on("caixa_mandou", (d) => {
       vibrar([150, 80, 150]);
       aviso(`O caixa mandou ${plural(d.qtd, "pedido", "pedidos")} pra você`, "bom");
