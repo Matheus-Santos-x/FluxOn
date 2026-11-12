@@ -231,9 +231,6 @@
           ${e.na_rua.length ? `<span class="ent-peds2">${e.na_rua.map((p) => `<span>#${esc(p.numero)}${p.bairro ? " · " + esc(p.bairro) : ""}</span>`).join("")}</span>` : ""}
           <span class="ent-pg">${esc(pagamentoTxt(e))}</span>
         </div>
-          <span class="ent-muted">${esc(txt)}${e.posicao && e.na_rua.length ? ` · posição ${haQuanto(e.posicao.em)}` : ""} · ${esc(TIPO[e.tipo_pagamento])}${e.tipo_pagamento !== "entrega" ? ` ${moeda(e.valor_diaria)}` : ""}${e.tipo_pagamento !== "diaria" && e.valor_entrega ? ` · ${moeda(e.valor_entrega)}/${e.entrega_por_km ? "km" : "entrega"}` : ""}</span>
-          ${e.na_rua.length ? `<span class="ent-peds">${e.na_rua.map((p) => `#${esc(p.numero)}${p.bairro ? " " + esc(p.bairro) : ""}`).join(" · ")}</span>` : ""}
-        </div>
         <div class="ent-item-acoes">
           ${e.ativo ? `<button class="ghost-button small" type="button" data-acao="codigo" title="Código pra entrar no app">🔑 Código</button>` : ""}
           <button class="ghost-button small" type="button" data-acao="editar">Editar</button>
