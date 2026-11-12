@@ -1042,18 +1042,22 @@ async function rodizioOcupadas(restaurant_id, ids) {
   return mapa;
 }
 
-// lista os rodízios (eventos) com vagas ocupadas
+// o rodízio já passou? (vale até o fim do dia do evento, no horário de Brasília)
+const hojeSP = () => new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+const rodizioPassou = (r) => String(r?.data_evento || "") < hojeSP();
+
+// lista os rodízios (eventos) com vagas ocupadas. Os removidos (ativo = false) não aparecem.
 app.get("/api/v1/rodizio/:restaurant_id", async (req, res) => {
   try {
     const { restaurant_id } = req.params;
     const { data, error } = await supabase.from("rodizios").select("*")
-      .eq("restaurant_id", restaurant_id)
+      .eq("restaurant_id", restaurant_id).or("ativo.is.null,ativo.eq.true")
       .order("data_evento", { ascending: false });
     if (error) throw error;
     const lista = data || [];
     const oc = await rodizioOcupadas(restaurant_id, lista.map((r) => r.id));
     return res.json(lista.map((r) => ({
-      ...r, ocupadas: oc[r.id] || 0, restantes: Math.max(0, (r.vagas || 0) - (oc[r.id] || 0))
+      ...r, ocupadas: oc[r.id] || 0, restantes: Math.max(0, (r.vagas || 0) - (oc[r.id] || 0)), encerrado: rodizioPassou(r)
     })));
   } catch (err) {
     return sendError(res, 500, "Erro ao listar rodízios");
@@ -1107,18 +1111,31 @@ app.patch("/api/v1/rodizio/:restaurant_id/:id", async (req, res) => {
   }
 });
 
-// remove (só se não tiver reservas)
+// remove o rodízio da lista.
+// Sem reserva nenhuma: apaga de vez. Com reservas pagas/resgatadas: só some da lista (o dinheiro continua no caixa e no Owner).
+// Bloqueia se tiver Pix acontecendo agora, ou reserva paga de um rodízio que ainda não aconteceu.
 app.delete("/api/v1/rodizio/:restaurant_id/:id", async (req, res) => {
   try {
     const { restaurant_id, id } = req.params;
-    const agora = new Date().toISOString();
-    const { count } = await supabase.from("rodizio_reservas").select("id", { count: "exact", head: true })
-      .eq("restaurant_id", restaurant_id).eq("rodizio_id", id)
-      .or(`status.in.(pago,resgatado),and(status.eq.aguardando,expira_em.gt.${agora})`);
-    if (count > 0) return sendError(res, 409, "Este rodízio tem reservas pagas ou em andamento. Feche-o em vez de remover.");
-    const { error } = await supabase.from("rodizios").delete().eq("id", id).eq("restaurant_id", restaurant_id);
+    const { data: rod } = await supabase.from("rodizios").select("id, data_evento")
+      .eq("id", id).eq("restaurant_id", restaurant_id).maybeSingle();
+    if (!rod) return sendError(res, 404, "Rodízio não encontrado");
+    const { data: reservas } = await supabase.from("rodizio_reservas").select("status, expira_em")
+      .eq("restaurant_id", restaurant_id).eq("rodizio_id", id);
+    const lista = reservas || [];
+    if (lista.some((x) => x.status === "aguardando" && Date.parse(x.expira_em) > Date.now()))
+      return sendError(res, 409, "Tem um cliente pagando uma reserva agora. Espere alguns minutos e tente de novo.");
+    const pendentes = lista.filter((x) => x.status === "pago").length;
+    if (pendentes && !rodizioPassou(rod))
+      return sendError(res, 409, `Tem ${pendentes} reserva${pendentes > 1 ? "s pagas que ainda não vieram" : " paga que ainda não veio"}. Marque como resgatada ou cancele antes de remover.`);
+    const temDinheiro = lista.some((x) => x.status === "pago" || x.status === "resgatado");
+    if (!temDinheiro) {
+      const { error } = await supabase.from("rodizios").delete().eq("id", id).eq("restaurant_id", restaurant_id);
+      if (!error) return res.json({ ok: true, apagado: true });
+    }
+    const { error } = await supabase.from("rodizios").update({ ativo: false, status: "fechado" }).eq("id", id).eq("restaurant_id", restaurant_id);
     if (error) throw error;
-    return res.json({ ok: true });
+    return res.json({ ok: true, arquivado: true });
   } catch (err) {
     return sendError(res, 500, "Erro ao remover rodízio");
   }
@@ -1159,6 +1176,7 @@ app.post("/api/v1/rodizio/:restaurant_id/:id/reservas", async (req, res) => {
       .eq("id", id).eq("restaurant_id", restaurant_id).maybeSingle();
     if (!rod) return sendError(res, 404, "Rodízio não encontrado");
     if (rod.status !== "aberto") return sendError(res, 409, "Este rodízio não está aberto para reservas");
+    if (rodizioPassou(rod)) return sendError(res, 409, "Este rodízio já passou");
 
     const ocupadas = (await rodizioOcupadas(restaurant_id, [id]))[id] || 0;
     if (ocupadas + ad + cr > (rod.vagas || 0)) return sendError(res, 409, "Vagas insuficientes");
@@ -1343,7 +1361,8 @@ const PIX_TIPOS = {
       const { data: rod } = await supabase.from("rodizios").select("*")
         .eq("id", dados.rodizio_id).eq("restaurant_id", restaurant_id).maybeSingle();
       if (!rod) throw new PixErro(404, "Rodízio não encontrado");
-      if (rod.status !== "aberto") throw new PixErro(409, "Este rodízio não está aberto para reservas");
+      if (rod.status !== "aberto" || rod.ativo === false) throw new PixErro(409, "Este rodízio não está aberto para reservas");
+      if (rodizioPassou(rod)) throw new PixErro(409, "Este rodízio já passou");
 
       const ocupadas = (await rodizioOcupadas(restaurant_id, [rod.id]))[rod.id] || 0;
       if (ocupadas + ad + cr > (rod.vagas || 0)) throw new PixErro(409, "Vagas insuficientes");
