@@ -3184,3 +3184,80 @@ input[type="number"] {
 #create-modal .np-status { min-height: 0; font-size: 12px; font-weight: 700; color: rgba(252,228,228,.55); }
 #create-modal .np-status:empty { display: none; }
 #create-modal .np-status.ok { color: #86efac; }
+
+
+/* ===== visual novo da tela Entregadores ===== */
+.ent-cabeca{align-items:flex-start}
+.ent-sub{margin:6px 0 0;color:rgba(252,228,228,.55);font-size:14px;font-weight:600}
+/* faixa ao vivo: quantos na rua, disponíveis, em pausa e fora do app */
+.ent-status{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin:0 0 18px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.08)}
+.ent-status[hidden]{display:none}
+.ent-st{display:flex;align-items:center;gap:10px;padding:14px 18px;background:#0e0e10}
+.ent-st i{width:10px;height:10px;flex-shrink:0;border-radius:50%;background:rgba(255,255,255,.25)}
+.ent-st b{font:800 26px/1 "Space Grotesk",sans-serif;color:#fff}
+.ent-st span{font-size:13px;font-weight:700;color:rgba(252,228,228,.6)}
+.ent-st.rua i{background:#38bdf8;box-shadow:0 0 0 4px rgba(56,189,248,.18)}
+.ent-st.ok i{background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.18)}
+.ent-st.pausa i{background:#f59e0b}
+@media (max-width:700px){.ent-status{grid-template-columns:repeat(2,minmax(0,1fr))}.ent-st{padding:12px 14px}}
+/* cartão de cada entregador: a inicial com o anel da cor da situação (igual à bolinha do app dele) */
+.ent-lista{gap:10px}
+.ent-card{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);transition:border-color .15s}
+.ent-card:hover{border-color:rgba(255,255,255,.16)}
+.ent-card.rua{border-color:rgba(56,189,248,.35);background:rgba(56,189,248,.05)}
+.ent-card.inativo{opacity:.45}
+.ent-av{width:46px;height:46px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;font:800 16px "Space Grotesk",sans-serif;color:#fff;background:#1c1c20;border:3px solid rgba(255,255,255,.16)}
+.ent-av.ok{border-color:#22c55e}
+.ent-av.rua{border-color:#38bdf8}
+.ent-av.pausa{border-color:#f59e0b}
+.ent-av.mini{width:34px;height:34px;font-size:12.5px;border-width:2px}
+.ent-card-meio{flex:1;min-width:0;display:grid;gap:3px}
+.ent-card-meio > b{color:#fff;font-size:15.5px}
+.ent-sit{font-size:13px;font-weight:700;color:rgba(252,228,228,.5)}
+.ent-sit.ok{color:#4ade80}
+.ent-sit.rua{color:#38bdf8}
+.ent-sit.pausa{color:#fbbf24}
+.ent-pg{font-size:12.5px;color:rgba(252,228,228,.42)}
+.ent-peds2{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0}
+.ent-peds2 span{padding:3px 9px;border-radius:999px;font-size:12px;font-weight:800;color:#38bdf8;background:rgba(56,189,248,.12)}
+@media (max-width:560px){.ent-card{flex-wrap:wrap}.ent-card .ent-item-acoes{width:100%;justify-content:flex-end}}
+/* sem ninguém cadastrado */
+.ent-vazio2{display:grid;justify-items:center;gap:16px;padding:28px 12px 18px;text-align:center}
+.ent-vazio-ic{width:72px;height:72px;border-radius:50%;display:grid;place-items:center;font-size:34px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35)}
+.ent-vazio2 > b{font:800 21px "Space Grotesk",sans-serif;color:#fff}
+.ent-passos{list-style:none;counter-reset:passo;margin:0;padding:0;display:grid;gap:10px;text-align:left}
+.ent-passos li{counter-increment:passo;display:flex;align-items:center;gap:12px;font-size:14px;color:rgba(252,228,228,.7)}
+.ent-passos li::before{content:counter(passo);width:26px;height:26px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;font:800 12.5px Manrope,sans-serif;color:#fff;background:rgba(255,255,255,.08)}
+.ent-passos li b{color:#fff}
+/* hoje */
+.ent-nada{margin:0;color:rgba(252,228,228,.5);font-size:14px;line-height:1.55}
+.ent-hoje{display:grid}
+.ent-hoje-linha{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid rgba(255,255,255,.07)}
+.ent-hoje-linha:first-child{border-top:0;padding-top:2px}
+.ent-hoje-meio{flex:1;min-width:0;display:grid;gap:3px}
+.ent-hoje-meio b{color:#fff;font-size:14.5px}
+.ent-hoje-meio small{font-size:12.5px;color:rgba(252,228,228,.55)}
+.ent-hoje-valor{font:800 16px "Space Grotesk",sans-serif;color:#fff;white-space:nowrap;padding-top:2px}
+.ent-pend{color:#fbbf24}
+.ent-turno-on{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:3px;font-size:12.5px;font-weight:700;color:#4ade80}
+.ent-encerrar{padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:transparent;color:rgba(252,228,228,.85);font:700 12px Manrope,sans-serif;cursor:pointer}
+.ent-encerrar:hover{border-color:rgba(255,255,255,.3)}
+.ent-encerrar[data-certeza]{background:#ef4444;border-color:#ef4444;color:#fff}
+.ent-hoje-total{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:4px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12)}
+.ent-hoje-total span{font-size:13px;font-weight:700;color:rgba(252,228,228,.6)}
+.ent-hoje-total b{font:800 26px "Space Grotesk",sans-serif;color:#fff}
+/* configurações: chave liga/desliga */
+.ent-switch{display:flex;gap:14px;align-items:flex-start;cursor:pointer;position:relative}
+.ent-switch input{position:absolute;opacity:0;width:1px;height:1px}
+.ent-switch i{flex-shrink:0;width:42px;height:24px;margin-top:1px;border-radius:999px;background:rgba(255,255,255,.15);position:relative;transition:background .2s}
+.ent-switch i::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s}
+.ent-switch input:checked + i{background:#ef4444}
+.ent-switch input:checked + i::after{transform:translateX(18px)}
+.ent-switch input:focus-visible + i{outline:2px solid #fff;outline-offset:2px}
+.ent-switch span{display:grid;gap:3px}
+.ent-switch b{color:#fff;font-size:14.5px}
+.ent-switch small{color:rgba(252,228,228,.55);font-size:13px;line-height:1.45}
+.ent-link-linha{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ent-link-linha b{min-width:0;font-size:13.5px}
+.ent-link-linha button{margin:0;flex-shrink:0}
+@media (prefers-reduced-motion:reduce){.ent-switch i,.ent-switch i::after,.ent-card{transition:none}}
