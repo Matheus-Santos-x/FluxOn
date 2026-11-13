@@ -7791,11 +7791,12 @@ function _labelStyle(r, g, b) {
 }
 
 function _sectionStyle() {
-  return `background:rgba(28,28,30,0.45); border:1px solid rgba(255,255,255,0.18); border-radius:14px; padding:16px; margin-bottom:0;`;
+  return `background:transparent; border:0; border-top:1px solid rgba(239,68,68,0.35); border-radius:0; padding:16px 0 4px; margin-bottom:0;`;
 }
 
 function _sectionTitle(icon, label) {
-  return `<div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.5); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">${icon} ${label}</div>`;
+  const texto = label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
+  return `<div style="font-size:13px; font-weight:700; color:rgba(252,228,228,0.6); margin-bottom:10px;">${texto}</div>`;
 }
 
 // ---------- TELA 1: ABERTURA DE CAIXA ----------
