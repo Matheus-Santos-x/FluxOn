@@ -2037,21 +2037,6 @@ async function loadSettingsData() {
     console.error("Erro ao carregar marketplace:", e);
   }
 
-  // Link de rastreio
-  try {
-    const respTracking = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/tracking-url`);
-    const dataTracking = await respTracking.json();
-    if (dataTracking.tracking_url)
-      document.getElementById("settings-tracking-url").value = dataTracking.tracking_url;
-    else {
-      const local = localStorage.getItem("tracking_url") || "https://rastreio.evoriseai.com.br";
-      document.getElementById("settings-tracking-url").value = local;
-    }
-  } catch (e) {
-    const local = localStorage.getItem("tracking_url") || "https://rastreio.evoriseai.com.br";
-    document.getElementById("settings-tracking-url").value = local;
-  }
-
   // Webhook satisfação
   try {
     const whResp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/webhook-satisfaction`);
