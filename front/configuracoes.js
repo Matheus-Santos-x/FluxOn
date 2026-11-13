@@ -8,7 +8,7 @@
 (() => {
   const GRUPOS = [
     { id: "financeiro", icone: "💳", nome: "Financeiro", desc: "Como o restaurante recebe e emite nota.", itens: ["mp", "pixonline", "nfe"] },
-    { id: "operacao", icone: "🧰", nome: "Operação", desc: "Impressoras, gaveta de dinheiro, marketplaces e o link de rastreio.", itens: ["impressora", "marketplace", "rastreio"] },
+    { id: "operacao", icone: "🧰", nome: "Operação", desc: "Impressoras, gaveta de dinheiro e marketplaces.", itens: ["impressora", "marketplace"] },
     { id: "automacao", icone: "⚡", nome: "Automação", desc: "Mesas e os tempos automáticos de cada etapa do pedido.", itens: ["mesas"] },
     { id: "webhooks", icone: "🔗", nome: "Webhooks", desc: "Pra onde o FluxON manda as mensagens do restaurante (n8n → WhatsApp).",
       itens: ["webhook-crm", "webhook-vale", "webhook-reserva", "webhook-entregas", "webhook-login", "webhook", "webhook-reclamacao", "webhook-fechamento"] }
