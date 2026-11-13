@@ -436,7 +436,7 @@ function setCrmFiltersOpen(open) {
   const bar = document.getElementById("crm-filters-bar");
   const toggleBtn = document.getElementById("crm-f-toggle");
   if (bar) bar.style.display = open ? "flex" : "none";
-  if (toggleBtn) toggleBtn.textContent = open ? "Limpar filtros" : "Filtros";
+  if (toggleBtn) toggleBtn.classList.toggle("on", open);
 }
 
 function showCRM() {
@@ -4050,69 +4050,71 @@ function getFilteredCrmClients() {
   });
 }
 
+
+function crmTelefone(t) {
+  let d = String(t || "").replace(/\D/g, "");
+  if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return t || "";
+}
+
+// última compra do jeito que a gente fala: "Hoje, 22:50", "Ontem", "Há 3 dias"
+function crmQuando(iso) {
+  const d = iso ? new Date(iso) : null;
+  if (!d || Number.isNaN(d.getTime())) return { txt: "—", velho: true };
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const dia = new Date(d); dia.setHours(0, 0, 0, 0);
+  const dias = Math.round((hoje - dia) / 864e5);
+  const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  if (dias <= 0) return { txt: `Hoje, ${hora}`, velho: false };
+  if (dias === 1) return { txt: `Ontem, ${hora}`, velho: false };
+  if (dias < 30) return { txt: `Há ${dias} dias`, velho: false };
+  const meses = Math.floor(dias / 30);
+  if (meses < 12) return { txt: meses === 1 ? "Há 1 mês" : `Há ${meses} meses`, velho: dias >= 60 };
+  const anos = Math.floor(dias / 365);
+  return { txt: anos <= 1 ? "Há 1 ano" : `Há ${anos} anos`, velho: true };
+}
+
+function crmIniciais(nome) {
+  const partes = String(nome || "Cliente").trim().split(/\s+/);
+  return ((partes[0]?.[0] || "") + (partes.length > 1 ? partes[partes.length - 1][0] : "")).toUpperCase() || "?";
+}
+
 function renderCRM() {
   if (!crmContent) return;
 
-  crmContent.innerHTML = "";
-
   if (crmClients.length === 0) {
-    crmContent.innerHTML = `
-      <div class="empty-state">
-        <p>Nenhum cliente cadastrado ainda.</p>
-      </div>
-    `;
+    crmContent.innerHTML = `<div class="crm-vazio">Nenhum cliente ainda. Eles aparecem aqui a partir do primeiro pedido.</div>`;
     return;
   }
 
   const filtrados = getFilteredCrmClients();
-
   if (filtrados.length === 0) {
-    crmContent.innerHTML = `
-      <div class="empty-state">
-        <p>Nenhum cliente encontrado com esses filtros.</p>
-      </div>
-    `;
+    crmContent.innerHTML = `<div class="crm-vazio">Nenhum cliente com esses filtros.</div>`;
     return;
   }
 
-  const table = document.createElement("table");
-  table.className = "crm-table";
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th>Cliente</th>
-        <th>Telefone</th>
-        <th>Pedidos</th>
-        <th>Total Gasto</th>
-        <th>Última compra</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  `;
+  crmContent.innerHTML = `
+    <div class="crm-lista">
+      <div class="crm-th"><span>Cliente</span><span>Pedidos</span><span>Total gasto</span><span>Última compra</span></div>
+      ${filtrados.map((c, i) => {
+        const q = crmQuando(c.last_order_at);
+        return `
+        <button type="button" class="crm-tr" data-i="${i}">
+          <span class="crm-quem">
+            <span class="crm-av">${escapeHtml(crmIniciais(c.client_name))}</span>
+            <span><b>${escapeHtml(c.client_name || "Cliente")}</b><small>${escapeHtml(crmTelefone(c.client_phone) || "Sem telefone")}</small></span>
+          </span>
+          <span class="crm-num">${Number(c.orders || 0)}</span>
+          <span class="crm-gasto">${formatCurrency(c.total_spent || 0)}</span>
+          <span class="crm-quando${q.velho ? " velho" : ""}">${q.txt}</span>
+        </button>`;
+      }).join("")}
+    </div>`;
 
-  const tbody = table.querySelector("tbody");
-
-  filtrados.forEach((c) => {
-    const tr = document.createElement("tr");
-    const phone = c.client_phone || "—";
-    const totalSpent = c.total_spent || 0;
-
-    tr.innerHTML = `
-      <td>${escapeHtml(c.client_name || "Cliente")}</td>
-      <td class="crm-phone-clickable">${escapeHtml(phone)}</td>
-      <td>${Number(c.orders || 0)}</td>
-      <td>${formatCurrency(totalSpent)}</td>
-      <td>${escapeHtml(formatDateTime(c.last_order_at))}</td>
-    `;
-    
-    // Click para abrir popup com pedidos do cliente
-    tr.style.cursor = "pointer";
-    tr.addEventListener("click", () => openClientDetailsModal(c));
-    
-    tbody.appendChild(tr);
-  });
-
-  crmContent.appendChild(table);
+  crmContent.querySelectorAll(".crm-tr").forEach(el =>
+    el.addEventListener("click", () => openClientDetailsModal(filtrados[Number(el.dataset.i)])));
 }
 
 // ===== ENVIO DE MENSAGEM PELO CRM =====
@@ -4259,18 +4261,19 @@ try {
     modal.className = "modal-backdrop open";
 
     modal.innerHTML = `
-      <div class="modal client-details-modal-content">
-        <div class="modal-header">
-          <div style="flex:1;">
-            <div id="crm-view-mode" style="display:flex; flex-direction:column; gap:2px;">
-              <h3 id="crm-client-name-display">${escapeHtml(client.client_name)}</h3>
-              <p class="muted" id="crm-client-phone-display">${escapeHtml(client.client_phone || "—")}</p>
+      <div class="modal client-details-modal-content crm-janela">
+        <div class="crm-jtopo">
+          <span class="crm-av crm-av-g">${escapeHtml(crmIniciais(client.client_name))}</span>
+          <div style="flex:1; min-width:0;">
+            <div id="crm-view-mode" class="crm-jquem">
+              <b><span id="crm-client-name-display">${escapeHtml(client.client_name)}</span>
+                ${phoneNorm ? `<button type="button" class="crm-lapis" id="crm-edit-toggle" title="Editar nome e telefone" aria-label="Editar nome e telefone"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg></button>` : ""}
+              </b>
+              <small id="crm-client-phone-display">${escapeHtml(crmTelefone(client.client_phone) || "Sem telefone")}</small>
             </div>
-            <div id="crm-edit-mode" style="display:none; flex-direction:column; gap:8px; margin-top:4px;">
-              <input id="crm-edit-nome" type="text" value="${escapeHtml(client.client_name || "")}"
-                style="padding:8px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.6); color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
-              <input id="crm-edit-telefone" type="text" value="${escapeHtml(client.client_phone || "")}"
-                style="padding:8px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.18); background:rgba(28,28,30,0.6); color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
+            <div id="crm-edit-mode" class="crm-jedit" style="display:none;">
+              <input id="crm-edit-nome" type="text" value="${escapeHtml(client.client_name || "")}" placeholder="Nome" />
+              <input id="crm-edit-telefone" type="text" value="${escapeHtml(client.client_phone || "")}" placeholder="Telefone" />
               <div style="display:flex; gap:8px;">
                 <button class="ghost-button" id="crm-edit-cancel" style="flex:1; padding:8px; font-size:12px;">Cancelar</button>
                 <button class="primary-button" id="crm-edit-save" style="flex:1; padding:8px; font-size:12px;">Salvar</button>
@@ -4278,54 +4281,32 @@ try {
               <p id="crm-edit-status" style="font-size:12px; min-height:16px; margin:0;"></p>
             </div>
           </div>
-          ${phoneNorm ? `<button class="icon-button" id="crm-edit-toggle" title="Editar nome/telefone" style="margin-left:8px;">✏️</button>` : ""}
-          <button class="icon-button" id="close-client-details" style="margin-left: 8px;">×</button>
+          <button class="icon-button" id="close-client-details" aria-label="Fechar">×</button>
         </div>
-        
-        <div class="modal-body">
-          <div class="client-stats">
-            <div class="stat-item">
-              <span class="stat-label">Total de Pedidos</span>
-              <span class="stat-value">${client.orders}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Total Gasto</span>
-              <span class="stat-value">${formatCurrency(client.total_spent)}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Ticket Médio</span>
-              <span class="stat-value">${formatCurrency(client.total_spent / client.orders)}</span>
-            </div>
-          </div>
-          
-          <div class="client-orders-section">
-            <h4>Histórico de Pedidos</h4>
-            <div class="client-orders-list">
-              ${clientOrders.map(order => `
-                <div class="client-order-item">
-                  <div class="order-item-header">
-                    <span class="order-item-number">#${order.order_number}</span>
-                    <span class="order-item-date">${formatDateTime(order.created_at)}</span>
-                    <span class="order-item-price">${formatCurrency(order.total_price)}</span>
-                  </div>
-                  <div class="order-item-details">
-                    ${(order.itens || []).map(item => 
-                      `<span class="order-item-tag">${item.name || item.nome} x${item.qty || item.quantidade || 1}</span>`
-                    ).join('')}
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        </div>
-        
 
-        <div class="modal-actions" style="justify-content:space-between;">
+        <div class="crm-jcorpo">
+          <div class="crm-resumo">
+            <span>Pedidos<b>${client.orders}</b></span>
+            <span>Total gasto<b class="ouro">${formatCurrency(client.total_spent)}</b></span>
+            <span>Ticket médio<b>${formatCurrency(client.orders ? client.total_spent / client.orders : 0)}</b></span>
+          </div>
+
           ${phoneNorm ? `
-          <button class="primary-button" id="crm-msg-open" style="background:rgba(34,197,94,0.9);">
-            💬 Enviar mensagem
-          </button>` : `<span></span>`}
-          <button class="ghost-button" id="close-client-details-2">Fechar</button>
+          <button type="button" class="crm-zap" id="crm-msg-open">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M21 12a9 9 0 0 1-13.5 7.8L3 21l1.2-4.5A9 9 0 1 1 21 12z"/></svg>
+            Mandar mensagem no WhatsApp
+          </button>` : ""}
+
+          <h4 class="crm-h4">Pedidos</h4>
+          <div class="crm-hist">
+            ${clientOrders.length ? clientOrders.map(order => `
+              <div class="crm-ped">
+                <b>#${order.order_number} · ${formatDateTime(order.created_at)}</b>
+                <em>${formatCurrency(order.total_price)}</em>
+                <small>${(order.itens || []).map(item => `${item.qty || item.quantidade || 1}× ${escapeHtml(item.name || item.nome || "Item")}`).join(", ")}</small>
+              </div>
+            `).join("") : `<div class="crm-vazio">Nenhum pedido encontrado.</div>`}
+          </div>
         </div>
       </div>
     `;
@@ -4693,25 +4674,31 @@ async function init() {
   }
 // Configura o drawer
 setupDrawer();
+// pílula do filtro fica vermelha quando tem valor
+function crmMarcarFiltros() {
+  ["crm-f-min-pedidos", "crm-f-min-gasto", "crm-f-desde"].forEach(id => {
+    const el = document.getElementById(id);
+    el?.closest(".crm-pilula")?.classList.toggle("on", !!el.value);
+  });
+}
+
 ["crm-f-busca", "crm-f-min-pedidos", "crm-f-min-gasto", "crm-f-desde"].forEach(id => {
-  document.getElementById(id)?.addEventListener("input", renderCRM);
+  document.getElementById(id)?.addEventListener("input", () => { crmMarcarFiltros(); renderCRM(); });
 });
 
 document.getElementById("crm-f-toggle")?.addEventListener("click", () => {
   const bar = document.getElementById("crm-filters-bar");
-  const isOpen = bar && bar.style.display === "flex";
-  if (!isOpen) {
-    setCrmFiltersOpen(true);
-  } else {
-    document.getElementById("crm-f-busca").value = "";
-    document.getElementById("crm-f-min-pedidos").value = "";
-    document.getElementById("crm-f-min-gasto").value = "";
-    document.getElementById("crm-f-desde").value = "";
-    renderCRM();
-  }
+  setCrmFiltersOpen(!(bar && bar.style.display === "flex"));
 });
 
-document.getElementById("crm-f-collapse")?.addEventListener("click", () => setCrmFiltersOpen(false));
+document.getElementById("crm-f-limpar")?.addEventListener("click", () => {
+  ["crm-f-min-pedidos", "crm-f-min-gasto", "crm-f-desde"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  crmMarcarFiltros();
+  renderCRM();
+});
   ['click', 'touchstart', 'keydown'].forEach(evt => {
   document.addEventListener(evt, () => {
     if (!_audioCtx) {
