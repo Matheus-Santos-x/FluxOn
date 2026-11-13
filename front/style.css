@@ -3521,10 +3521,10 @@ input[type="number"] {
 #search-order:focus { border-color: rgba(249,115,115,0.5) !important; }
 
 .board { border: 0; background: transparent; box-shadow: none; }
-.column { border-right: 1px solid rgba(255,255,255,0.06); }
+.column { border-right: 1px solid rgba(249,115,115,0.28); }
 .column-header { border-bottom: 0; padding: 14px 14px 6px; }
 .column-header h2 { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 800; text-transform: none; letter-spacing: 0; color: #fff; }
-.column-header h2::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--cor-col, #ef4444); }
+.column-header h2::before { content: none; }
 .column[data-status="recebido"]   { --cor-col: #3b82f6; }
 .column[data-status="preparo"]    { --cor-col: #f59e0b; }
 .column[data-status="pronto"]     { --cor-col: #22c55e; }
