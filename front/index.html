@@ -804,38 +804,7 @@ input:focus, textarea:focus, select:focus {
   <div class="crm-header">
   <div class="crm-title">Fidelidade</div>
   <div style="display:flex; gap:10px; align-items:center; position:relative;">
-    <button id="btn-config-fidelidade" onclick="toggleFidelidadeConfig()" style="
-      width:36px; height:36px; border-radius:8px;
-      border:1px solid rgba(255,255,255,0.14);
-      background:rgba(28,28,30,0.45);
-      color:rgba(252,228,228,0.7);
-      font-size:18px; cursor:pointer;
-      display:flex; align-items:center; justify-content:center;
-    " title="Configurações">⋯</button>
-    <div id="fidelidade-popover" style="
-      display:none; position:absolute; right:0; top:44px;
-      width:320px; background:rgba(20,20,22,0.98);
-      border:1px solid rgba(255,255,255,0.14); border-radius:12px;
-      padding:16px; box-shadow:0 12px 40px rgba(0,0,0,0.6); z-index:999;
-    ">
-      <div style="font-size:12px; font-weight:700; color:rgba(252,228,228,0.5); letter-spacing:2px; text-transform:uppercase; margin-bottom:10px;">
-        ⚙️ Configuração
-      </div>
-      <label style="color:rgba(252,228,228,0.8); font-size:13px; font-weight:600; display:block; margin-bottom:6px;">
-        Domínio da página de fidelidade
-      </label>
-      <input type="text" id="input-fidelidade-url"
-        placeholder="fidelidade.seunegocio.com.br"
-        style="width:100%; padding:9px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:rgba(28,28,30,0.6); color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-      <small style="color:rgba(252,228,228,0.35); font-size:11px; margin-top:6px; display:block; line-height:1.5;">
-        O cliente acessa:<br/>https://[domínio]?token=xxx
-      </small>
-      <button onclick="salvarFidelidadeUrl()" style="
-        margin-top:12px; width:100%; padding:8px; border-radius:8px; border:none;
-        background:rgba(249,115,115,0.85); color:#000; font-weight:700; font-size:13px;
-        cursor:pointer; font-family:inherit;
-      ">Salvar</button>
-    </div>
+
     <button class="primary-button" type="button" onclick="openPremioModal()">Novo prêmio</button>
   </div>
 </div>
@@ -990,27 +959,6 @@ input:focus, textarea:focus, select:focus {
             <button class="ghost-button" id="btn-testar-impressora">🖨️ Testar</button>
           </div>
           <p id="settings-printer-status" style="margin-top:4px; font-size:13px; min-height:18px;"></p>
-        </div>
-      </div>
-
-      <!-- 🔗 RASTREIO -->
-      <div style="background:transparent; border:none; border-bottom:1px solid rgba(255,255,255,0.07); overflow:hidden;">
-        <button onclick="toggleAccordion('rastreio')" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:14px 0; background:transparent; border:none; border-bottom:1px solid rgba(255,255,255,0.06); cursor:pointer;">
-          <div style="display:flex; align-items:center; gap:10px;">
-            <span style="font-size:20px;">🔗</span>
-            <span style="color:rgba(252,228,228,1); font-size:16px; font-weight:800;">Link de Rastreio</span>
-          </div>
-          <span id="arrow-rastreio" style="color:rgba(252,228,228,0.5); font-size:18px; transition:transform 0.2s;">▼</span>
-        </button>
-        <div id="accordion-rastreio" style="display:none; padding:0 24px 24px 24px; flex-direction:column; gap:12px;">
-          <p style="color:rgba(252,228,228,0.45); font-size:13px; margin:0 0 8px 0;">URL enviada ao cliente para acompanhar o pedido em tempo real.</p>
-          <label style="display:flex; flex-direction:column; gap:6px;">
-            <span style="color:rgba(252,228,228,0.6); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px;">URL Base</span>
-            <input type="text" id="settings-tracking-url" placeholder="https://rastreio.seudominio.com.br"
-              style="padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:#0a0a0a; color:rgba(252,228,228,1); font-size:14px; outline:none; font-family:inherit;" />
-          </label>
-          <button class="primary-button" id="btn-salvar-rastreio" style="margin-top:4px; width:100%;">Salvar URL</button>
-          <p id="settings-tracking-status" style="margin-top:4px; font-size:13px; min-height:18px;"></p>
         </div>
       </div>
 
