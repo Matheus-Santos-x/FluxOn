@@ -2726,14 +2726,15 @@ if (!trackingCode) {
 
 const { data: restData } = await supabase
   .from("restaurants")
-  .select("tracking_url")
+  .select("tracking_url, cardapio_delivery_url")
   .eq("id", restaurant_id)
   .single();
 
-const baseUrl = restData?.tracking_url;
-
-// Só gera o link se tiver tracking_url cadastrado
-const trackingLink = baseUrl ? `${baseUrl}?code=${trackingCode}` : null;
+// o rastreio fica dentro do app de pedidos: https://<domínio do app>?acompanhar=CÓDIGO
+const dominioApp = String(restData?.cardapio_delivery_url || "").replace(/^https?:\/\//, "").replace(/\/+$/, "");
+const trackingLink = dominioApp
+  ? `https://${dominioApp}?acompanhar=${trackingCode}`
+  : (restData?.tracking_url ? `${restData.tracking_url}?code=${trackingCode}` : null);
     
 // ⭐ FIDELIZAÇÃO (roda por trás: o pedido não espera os pontos)
 (async () => { try {
