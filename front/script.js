@@ -4009,6 +4009,7 @@ async function fetchCRM() {
     }
 
     crmClients = data;
+    await crmJuntarPontos();
     renderCRM();
   } catch (e) {
     console.error("❌ Erro fatal ao buscar CRM:", e);
@@ -4050,6 +4051,30 @@ function getFilteredCrmClients() {
   });
 }
 
+// pontos da fidelidade no CRM (só nos planos com fidelidade; nos outros fica 0)
+async function crmJuntarPontos() {
+  const chave = (t) => {
+    let d = String(t || "").replace(/\D/g, "");
+    if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
+    return d;
+  };
+  const plano = String(restaurantPlan || "").toLowerCase();
+  let base = [];
+  if (plano === "executive" || plano === "custom") {
+    try {
+      const resp = await fetch(`${API_BASE}/api/v1/fidelidade/${getRestaurantId()}/clientes`, { headers: buildHeaders() });
+      if (resp.ok) base = await resp.json();
+    } catch (e) {
+      console.warn("pontos da fidelidade:", e.message);
+    }
+  }
+  const mapa = new Map((Array.isArray(base) ? base : []).map(b => [chave(b.numero), b]));
+  crmClients.forEach(c => {
+    const b = mapa.get(chave(c.client_phone));
+    c.pontos = Number(b?.pontos) || 0;
+    c.pontos_resgatados = Number(b?.pontos_resgatados) || 0;
+  });
+}
 
 function crmTelefone(t) {
   let d = String(t || "").replace(/\D/g, "");
@@ -4097,7 +4122,7 @@ function renderCRM() {
 
   crmContent.innerHTML = `
     <div class="crm-lista">
-      <div class="crm-th"><span>Cliente</span><span>Pedidos</span><span>Total gasto</span><span>Última compra</span></div>
+      <div class="crm-th"><span>Cliente</span><span>Pedidos</span><span>Pontos</span><span>Total gasto</span><span>Última compra</span></div>
       ${filtrados.map((c, i) => {
         const q = crmQuando(c.last_order_at);
         return `
@@ -4107,6 +4132,7 @@ function renderCRM() {
             <span><b>${escapeHtml(c.client_name || "Cliente")}</b><small>${escapeHtml(crmTelefone(c.client_phone) || "Sem telefone")}</small></span>
           </span>
           <span class="crm-num">${Number(c.orders || 0)}</span>
+          <span class="crm-pts"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>${Number(c.pontos || 0).toLocaleString("pt-BR")}</span>
           <span class="crm-gasto">${formatCurrency(c.total_spent || 0)}</span>
           <span class="crm-quando${q.velho ? " velho" : ""}">${q.txt}</span>
         </button>`;
@@ -4289,6 +4315,8 @@ try {
             <span>Pedidos<b>${client.orders}</b></span>
             <span>Total gasto<b class="ouro">${formatCurrency(client.total_spent)}</b></span>
             <span>Ticket médio<b>${formatCurrency(client.orders ? client.total_spent / client.orders : 0)}</b></span>
+            <span>Pontos<b class="ouro">${Number(client.pontos || 0).toLocaleString("pt-BR")}</b></span>
+            <span>Já resgatou<b>${Number(client.pontos_resgatados || 0).toLocaleString("pt-BR")}</b></span>
           </div>
 
           ${phoneNorm ? `
@@ -8544,8 +8572,7 @@ function salvarFidelidadeUrl() {
 // ⭐ FIDELIDADE
 // ========================================
 async function initFidelidade() {
-  setupFidelidadeTabs();
-  await fetchFidelidadeClientes();
+  await fetchFidelidadePremios();
 }
 
 function setupFidelidadeTabs() {
@@ -8629,31 +8656,31 @@ async function fetchFidelidadePremios() {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error);
 
-    painel.innerHTML = `
-      <button class="primary-button" id="btn-novo-premio" style="margin-bottom:20px;">+ Novo Prêmio</button>
-      <div id="lista-premios">
-        ${data.length === 0 
-          ? `<p style="color:var(--muted); text-align:center; padding:40px 0;">Nenhum prêmio cadastrado ainda.</p>`
-          : data.map(p => `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:rgba(28,28,30,0.45); border:1px solid rgba(255,255,255,0.18); border-radius:12px; margin-bottom:8px;">
-              <div>
-                <div style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px;">${escapeHtml(p.nome)}</div>
-                ${p.descricao ? `<div style="color:var(--muted); font-size:12px;">${escapeHtml(p.descricao)}</div>` : ""}
-                <div style="color:rgba(251,191,36,1); font-weight:800; font-size:13px; margin-top:4px;">⭐ ${p.pontos_necessarios} pontos</div>
+    const estrela = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>`;
+    const cadeado = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`;
+    const pts = (n) => Number(n || 0).toLocaleString("pt-BR");
+
+    painel.innerHTML = data.length === 0
+      ? `<div class="crm-vazio">Nenhum prêmio cadastrado ainda. Toque em "Novo prêmio" para criar o primeiro.</div>`
+      : `<div class="fid-lista">
+          ${data.map(p => `
+            <div class="fid-pr">
+              ${p.foto_url
+                ? `<img class="fid-foto" src="${escapeHtml(p.foto_url)}" alt="" loading="lazy">`
+                : `<span class="fid-foto cd-sem-foto">Sem foto</span>`}
+              <div class="fid-meio">
+                <b>${escapeHtml(p.nome)}</b>
+                ${p.descricao ? `<span>${escapeHtml(p.descricao)}</span>` : ""}
                 ${Number(p.piso_resgate) > 0
-                  ? `<div style="color:var(--muted); font-size:11px; margin-top:2px;">Mínimo definido pelo dono: ${p.piso_resgate} pontos</div>`
-                  : `<div style="color:#f87171; font-size:11px; font-weight:700; margin-top:4px;">⏳ Aguardando o dono definir o mínimo. Ainda não pode ser resgatado.</div>`}
+                  ? `<span class="fid-trava">${cadeado}Mínimo do dono: ${pts(p.piso_resgate)} pts</span>`
+                  : `<span class="fid-trava alerta">${cadeado}Esperando o dono definir o mínimo. Ainda não pode ser resgatado.</span>`}
               </div>
-              <div style="display:flex; gap:8px;">
-                <button onclick="openPremioModal(${JSON.stringify(p).replace(/"/g, '&quot;')})" style="padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.18); background:transparent; color:rgba(252,228,228,0.7); cursor:pointer; font-size:11px;">Editar</button>
-                <button onclick="deletarPremio('${p.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid rgba(239,68,68,0.5); background:transparent; color:rgba(239,68,68,0.8); cursor:pointer; font-size:11px;">Excluir</button>
-              </div>
+              <span class="fid-pts">${estrela}${pts(p.pontos_necessarios)} pts</span>
+              <button type="button" class="cd-mini" onclick="openPremioModal(${JSON.stringify(p).replace(/"/g, '&quot;')})">Editar</button>
+              <button type="button" class="cd-mini cd-perigo" onclick="deletarPremio('${p.id}')">Excluir</button>
             </div>
           `).join("")}
-      </div>
-    `;
-
-    document.getElementById("btn-novo-premio")?.addEventListener("click", () => openPremioModal());
+        </div>`;
   } catch (e) {
     painel.innerHTML = `<p style="color:#ef4444; text-align:center; padding:40px 0;">Erro ao carregar prêmios.</p>`;
   }
