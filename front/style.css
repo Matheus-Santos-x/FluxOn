@@ -3477,3 +3477,26 @@ input[type="number"] {
   .fid-meio { flex-basis: calc(100% - 90px); }
 }
 
+/* ===== CAIXA: campos de escrever só com a linha de baixo ===== */
+#caixa-modal input[type="text"],
+#caixa-modal input[type="number"] {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(255,255,255,0.2) !important;
+  border-radius: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  box-shadow: none !important;
+  transition: border-color 0.15s;
+}
+#caixa-modal input[type="text"]:focus,
+#caixa-modal input[type="number"]:focus {
+  border-bottom-color: rgba(239,68,68,0.7) !important;
+}
+#caixa-modal input::placeholder { color: rgba(252,228,228,0.35); }
+
+/* o "R$" do valor encosta na esquerda junto com o campo */
+#caixa-modal #cx-fundo { padding-left: 26px !important; }
+#caixa-modal div[style*="position:relative"] > span { left: 0 !important; }
+
+
