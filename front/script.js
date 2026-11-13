@@ -5337,7 +5337,12 @@ document.getElementById("btn-remover-pix")?.addEventListener("click", async () =
 if (logoutBtn) logoutBtn.addEventListener("click", logout);
 if (unauthClose) unauthClose.addEventListener("click", () => closeBackdrop(unauthorizedModal));
 
-
+// Busca no board
+document.getElementById("search-order")?.addEventListener("input", function() {
+  searchTerm = this.value.toLowerCase().trim();
+  renderBoard();
+});
+  
 // abas (Ativos, Finalizados, Cancelados) e busca sobem para a barra de cima
 (() => {
   const header = document.querySelector(".app-header");
