@@ -826,10 +826,11 @@ input:focus, textarea:focus, select:focus {
   <!-- CARDÁPIO VIEW -->
 <main class="crm-view hidden" id="cardapio-view">
   <div class="crm-header">
-    <div class="crm-title">🍽️ Cardápio</div>
-    <div style="display:flex; gap:10px; align-items:center;">
-     <button class="ghost-button" type="button" onclick="openCategoriasModal()">📂 Categorias</button>
-<button class="primary-button" id="btn-novo-item-cardapio">Novo Item</button>
+    <div class="crm-title">Cardápio</div>
+    <div class="cd-topo">
+      <input id="cardapio-busca" class="cd-busca" type="search" placeholder="Buscar item" oninput="cardapioBuscar(this.value)">
+      <button class="ghost-button" type="button" onclick="openCategoriasModal()">Categorias</button>
+      <button class="primary-button" id="btn-novo-item-cardapio">Novo item</button>
     </div>
   </div>
   <div class="crm-content">
