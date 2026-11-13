@@ -766,7 +766,7 @@ input:focus, textarea:focus, select:focus {
 <!-- FIDELIDADE VIEW -->
 <main class="crm-view hidden" id="fidelidade-view">
   <div class="crm-header">
-  <div class="crm-title">⭐ Fidelidade</div>
+  <div class="crm-title">Fidelidade</div>
   <div style="display:flex; gap:10px; align-items:center; position:relative;">
     <button id="btn-config-fidelidade" onclick="toggleFidelidadeConfig()" style="
       width:36px; height:36px; border-radius:8px;
@@ -800,16 +800,11 @@ input:focus, textarea:focus, select:focus {
         cursor:pointer; font-family:inherit;
       ">Salvar</button>
     </div>
-    <button class="ghost-button" type="button" id="fidelidade-back-btn">Voltar</button>
+    <button class="primary-button" type="button" onclick="openPremioModal()">Novo prêmio</button>
   </div>
 </div>
   <div class="crm-content">
-    <div style="display:flex; gap:12px; margin-bottom:24px;">
-      <button class="period-btn active" id="tab-fid-clientes">👥 Clientes</button>
-      <button class="period-btn" id="tab-fid-premios">🎁 Prêmios</button>
-    </div>
-    <div id="painel-fid-clientes"></div>
-    <div id="painel-fid-premios" class="hidden"></div>
+    <div id="painel-fid-premios"></div>
   </div>
 </main>
 
