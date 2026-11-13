@@ -3450,3 +3450,30 @@ input[type="number"] {
   .crm-num { display: none; }
   .crm-quando { grid-column: 2; }
 }
+
+/* ===== PONTOS NO CRM ===== */
+.crm-th, .crm-tr { grid-template-columns: minmax(0, 2fr) 90px 120px 150px 170px; }
+.crm-pts { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; font: 800 15px 'Space Grotesk', sans-serif; color: #fbbf24; white-space: nowrap; }
+@media (max-width: 760px) {
+  .crm-tr { grid-template-columns: minmax(0, 1fr) auto; }
+  .crm-pts { display: none; }
+}
+
+/* ===== FIDELIDADE (prêmios) ===== */
+#fidelidade-view .crm-content { padding: 0; }
+.fid-lista { display: flex; flex-direction: column; }
+.fid-pr { display: flex; align-items: center; gap: 16px; padding: 12px 18px 12px 12px; border-top: 1px solid rgba(255,255,255,0.05); }
+.fid-pr:first-child { border-top: 0; }
+.fid-foto { width: 64px; height: 64px; flex-shrink: 0; border-radius: 12px; object-fit: cover; }
+.fid-meio { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.fid-meio b { font-size: 15px; font-weight: 800; color: #fff; }
+.fid-meio span { font-size: 13px; font-weight: 600; color: rgba(252,228,228,0.55); }
+.fid-meio .fid-trava { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: rgba(252,228,228,0.5); }
+.fid-meio .fid-trava.alerta { color: #f87171; }
+.fid-pts { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 110px; font: 800 17px 'Space Grotesk', sans-serif; color: #fbbf24; white-space: nowrap; }
+#btn-config-fidelidade { width: 42px !important; height: 42px !important; border-radius: 12px !important; background: transparent !important; }
+@media (max-width: 760px) {
+  .fid-pr { flex-wrap: wrap; }
+  .fid-meio { flex-basis: calc(100% - 90px); }
+}
+
