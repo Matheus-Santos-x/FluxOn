@@ -3511,3 +3511,62 @@ input[type="number"] {
 #caixa-modal .modal-header p { font-size: 13px !important; margin-top: 2px !important; color: rgba(252,228,228,0.5) !important; }
 #caixa-modal .modal-header p::first-letter { text-transform: uppercase; }
 #caixa-modal .modal-body { padding: 22px 0 10px; gap: 18px !important; }
+
+/* ===== KANBAN (visual novo) ===== */
+#tabs-bar > div:first-child { gap: 4px !important; padding: 4px; border-radius: 12px; background: #0e0e10; border: 1px solid rgba(255,255,255,0.08); }
+#tabs-bar .tab { height: 34px; padding: 0 16px; border: 0; border-radius: 9px; background: transparent; color: rgba(252,228,228,0.6); font-size: 13.5px; font-weight: 800; box-shadow: none; }
+#tabs-bar .tab:hover { transform: none; color: #fff; }
+#tabs-bar .tab.active { background: rgba(239,68,68,0.16); color: #fff; box-shadow: none; }
+#search-order { height: 40px; width: 300px !important; padding: 0 14px !important; border: 1px solid rgba(255,255,255,0.1) !important; background: #0e0e10 !important; font-weight: 600; }
+#search-order:focus { border-color: rgba(249,115,115,0.5) !important; }
+
+.board { border: 0; background: transparent; box-shadow: none; }
+.column { border-right: 1px solid rgba(255,255,255,0.06); }
+.column-header { border-bottom: 0; padding: 14px 14px 6px; }
+.column-header h2 { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 800; text-transform: none; letter-spacing: 0; color: #fff; }
+.column-header h2::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--cor-col, #ef4444); }
+.column[data-status="recebido"]   { --cor-col: #3b82f6; }
+.column[data-status="preparo"]    { --cor-col: #f59e0b; }
+.column[data-status="pronto"]     { --cor-col: #22c55e; }
+.column[data-status="caminho"]    { --cor-col: #38bdf8; }
+.column[data-status="finalizado"] { --cor-col: #16a34a; }
+.column[data-status="cancelado"]  { --cor-col: #ef4444; }
+.column-body { padding: 6px 14px 16px; }
+
+.order-card {
+  --s: rgba(255,255,255,0.14);
+  overflow: hidden;
+  padding: 10px 12px 10px 15px;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255,255,255,0.07) !important;
+  background: #0f0f11;
+  box-shadow: none;
+}
+.column[data-status="caminho"] .order-card { --s: #38bdf8; }
+.order-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--s); }
+.order-card:hover { transform: none; border-color: rgba(255,255,255,0.18) !important; box-shadow: none; }
+
+.order-card .order-top { align-items: center; margin-bottom: 6px; }
+.order-card .order-number {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  margin-left: -12px; padding: 4px 10px; border-radius: 0 8px 8px 0;
+  background: rgba(239,68,68,0.14); color: #fca5a5; line-height: 1.1;
+}
+.order-card .order-number small { font-size: 9.5px; font-weight: 800; letter-spacing: 0.14em; opacity: 0.75; }
+.order-card .order-number b { font-size: 13.5px; font-weight: 800; letter-spacing: 0.04em; white-space: nowrap; }
+.order-card .order-time-row { margin: 0; font-size: 12px; font-weight: 700; color: rgba(252,228,228,0.45); }
+.order-card .order-client { max-width: none; font-size: 14px; font-weight: 700; color: #fce4e4; }
+.order-card .order-client em { font-style: normal; font-weight: 700; color: rgba(252,228,228,0.45); }
+.order-card .order-card-footer { align-items: center; margin-top: 8px; }
+.order-card .order-delivery-tag,
+.order-card .order-payment-tag,
+.order-card .order-origin-tag,
+.order-card .order-entregador-tag,
+.order-card .order-fidelidade-tag {
+  padding: 2px 8px; border: 0; border-radius: 999px; font-size: 11px; font-weight: 800; line-height: 1.5;
+  background: rgba(255,255,255,0.06); color: rgba(252,228,228,0.75); white-space: nowrap;
+}
+.order-card .order-entregador-tag { background: rgba(56,189,248,0.12); color: #7dd3fc; }
+.order-card .order-fidelidade-tag { background: rgba(245,158,11,0.12); color: #fbbf24; }
+.order-card .order-timer { font-size: 12.5px; font-weight: 700; }
+.order-card .order-meta { margin: 0; font-size: 12px; font-weight: 700; color: rgba(252,228,228,0.45); }
