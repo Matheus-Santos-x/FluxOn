@@ -3499,4 +3499,15 @@ input[type="number"] {
 #caixa-modal #cx-fundo { padding-left: 26px !important; }
 #caixa-modal div[style*="position:relative"] > span { left: 0 !important; }
 
-
+/* ===== CAIXA: topo alinhado e corpo sem recuo extra ===== */
+#caixa-modal .modal-header { align-items: center; }
+#caixa-modal .modal-header h3 {
+  text-align: left;
+  width: auto;
+  font: 800 22px 'Space Grotesk', sans-serif;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+#caixa-modal .modal-header p { font-size: 13px !important; margin-top: 2px !important; color: rgba(252,228,228,0.5) !important; }
+#caixa-modal .modal-header p::first-letter { text-transform: uppercase; }
+#caixa-modal .modal-body { padding: 22px 0 10px; gap: 18px !important; }
