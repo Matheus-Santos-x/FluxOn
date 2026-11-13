@@ -3516,7 +3516,7 @@ input[type="number"] {
 /* abas e busca do Kanban dentro da barra de cima */
 .app-header { grid-template-columns: auto 1fr auto; }
 .app-header .brand { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; }
-.app-header #tabs-bar { max-width: none; margin: 0; padding: 0 0 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.app-header #tabs-bar { max-width: none; margin: 0; padding: 0 0 0 clamp(18px, 5vw, 110px); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 #tabs-bar > div:first-child { gap: 20px !important; padding: 0; border: 0; border-radius: 0; background: transparent; }
 #tabs-bar > div:last-child { padding-right: 0 !important; }
 #tabs-bar .tab { position: relative; height: 40px; padding: 0; border: 0; border-radius: 0; background: transparent; color: rgba(252,228,228,0.5); font-size: 13.5px; font-weight: 800; box-shadow: none; }
@@ -3536,7 +3536,8 @@ input[type="number"] {
 #search-order:focus, #search-order:not(:placeholder-shown) { width: 260px !important; cursor: text; border-color: rgba(249,115,115,0.5) !important; }
 #search-order:focus::placeholder { color: rgba(252,228,228,0.4); }
 
-.board { border: 0; background: transparent; box-shadow: none; }
+.board { max-width: none; margin: 18px clamp(16px, 2vw, 40px) 40px; border: 0; background: transparent; box-shadow: none; }
+.board .column { min-width: 220px; }
 .column { border-right: 1px solid rgba(249,115,115,0.28); }
 .column-header { position: relative; justify-content: center; border-bottom: 0; padding: 14px 14px 10px; }
 .column-header::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(249,115,115,0.55) 50%, transparent); }
