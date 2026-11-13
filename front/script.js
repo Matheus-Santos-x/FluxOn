@@ -7791,7 +7791,7 @@ function _labelStyle(r, g, b) {
 }
 
 function _sectionStyle() {
-  return `background:transparent; border:0; border-top:1px solid rgba(239,68,68,0.35); border-radius:0; padding:16px 0 4px; margin-bottom:0;`;
+  return `background:transparent; border:0; border-radius:0; padding:0; margin-bottom:6px;`;
 }
 
 function _sectionTitle(icon, label) {
@@ -7856,7 +7856,6 @@ function showAberturaCaixa() {
     </div>
   `;
   document.body.appendChild(modal);
-  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
 }
 
 let _turnoSelecionado = "";
@@ -8043,7 +8042,6 @@ async function showCaixa() {
     </div>
   `;
   document.body.appendChild(modal);
-  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
 }
 
 // ---------- TELA 3: FECHAMENTO (conferência + obs) ----------
@@ -8138,7 +8136,6 @@ async function _showFechamentoCaixa() {
     </div>
   `;
   document.body.appendChild(modal);
-  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
 }
 
 function _atualizarDiferenca(esperado) {
