@@ -3275,11 +3275,17 @@ input[type="number"] {
 .cd-corpo { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 24px; align-items: start; }
 
 .cd-nav {
-  position: sticky; top: 16px; display: grid; gap: 4px; padding: 8px;
+  position: sticky; top: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 8px;
   border-radius: 18px; background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07);
-  max-height: calc(100vh - 140px); overflow-y: auto;
+  max-height: calc(100vh - 140px); overflow-y: auto; overflow-x: hidden;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent;
 }
-#categorias-container { display: grid; gap: 2px; }
+.cd-nav:hover { scrollbar-color: rgba(249,115,115,0.4) transparent; }
+.cd-nav::-webkit-scrollbar { width: 6px; }
+.cd-nav::-webkit-scrollbar-track { background: transparent; margin: 12px 0; }
+.cd-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
+.cd-nav:hover::-webkit-scrollbar-thumb { background: rgba(249,115,115,0.4); }
+#categorias-container { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 .cd-cat {
   display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px;
   cursor: pointer; color: rgba(252,228,228,0.75); font-size: 14px; font-weight: 700; user-select: none;
