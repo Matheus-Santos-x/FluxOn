@@ -6300,93 +6300,146 @@ async function fetchCardapio() {
 // Ordem das categorias salva localmente
 let categoriasOrdem = [];
 
-async function renderCardapio() {
-   const rid = getRestaurantId();
+let cardapioCatAtiva = null; // categoria aberta na direita
+let cardapioBusca = "";      // texto da busca do topo
+let cardapioCatsDb = [];     // categorias da tabela (com foto), inclusive as vazias
 
-  // 🔥 BUSCA ORDEM SALVA ANTES DE RENDERIZAR
-  try {
-    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/config`);
-    const config = await resp.json();
+function cardapioBuscar(valor) {
+  cardapioBusca = String(valor || "").trim().toLowerCase();
+  renderCardapio(true);
+}
+
+function cardapioAbrirCategoria(cat) {
+  cardapioCatAtiva = cat;
+  cardapioBusca = "";
+  const busca = document.getElementById("cardapio-busca");
+  if (busca) busca.value = "";
+  renderCardapio(true);
+}
+
+async function renderCardapio(soDesenhar = false) {
+  const rid = getRestaurantId();
+
+  // ordem salva + categorias com foto (só quando os dados mudam; filtro e clique só redesenham)
+  if (!soDesenhar) {
+    const [config, cats] = await Promise.all([
+      fetch(`${API_BASE}/api/v1/restaurante/${rid}/config`).then(r => r.json()).catch(() => null),
+      fetch(`${API_BASE}/api/v1/cardapio/${rid}/categorias`).then(r => r.json()).catch(() => [])
+    ]);
     if (Array.isArray(config?.categorias_ordem) && config.categorias_ordem.length > 0) {
-      categoriasOrdem = config.categorias_ordem;
+      categoriasOrdem = config.categorias_ordem.map(c => typeof c === "string" ? c : c?.nome).filter(Boolean);
     }
-  } catch(e) {}
+    cardapioCatsDb = Array.isArray(cats) ? cats : [];
+  }
+
   const lista = document.getElementById("lista-cardapio-view") || document.getElementById("lista-cardapio");
   if (!lista) {
     console.error("❌ Elemento da lista do cardápio não encontrado no HTML.");
     return;
   }
- 
 
-  if (cardapioItems.length === 0) {
-    lista.innerHTML = `<p style="color:rgba(252,228,228,0.5); text-align:center; padding:40px 0;">Nenhum item cadastrado. Clique em "+ Novo Item" para começar.</p>`;
-    return;
-  }
-
+  // todas as categorias: as que têm item e as cadastradas vazias
   const categoriasMap = {};
+  cardapioCatsDb.forEach(c => { if (c?.nome) categoriasMap[c.nome] = []; });
   cardapioItems.forEach(item => {
     const cat = item.categoria || "Geral";
     if (!categoriasMap[cat]) categoriasMap[cat] = [];
     categoriasMap[cat].push(item);
   });
 
-  // Mantém ordem salva, adiciona novas categorias no fim
+  // mantém a ordem salva, categorias novas entram no fim
   const todasCats = Object.keys(categoriasMap);
   todasCats.forEach(c => { if (!categoriasOrdem.includes(c)) categoriasOrdem.push(c); });
   categoriasOrdem = categoriasOrdem.filter(c => todasCats.includes(c));
 
+  if (!categoriasOrdem.length) {
+    lista.innerHTML = `<div class="cd-vazio">Nenhum item cadastrado. Toque em "Novo item" para começar.</div>`;
+    return;
+  }
+  if (!categoriasOrdem.includes(cardapioCatAtiva)) cardapioCatAtiva = categoriasOrdem[0];
+
+  const fotoCat = (cat) => cardapioCatsDb.find(c => c.nome === cat)?.foto_url || "";
+  const miniCat = (cat, cls) => {
+    const f = fotoCat(cat);
+    return f
+      ? `<img class="${cls}" src="${escapeHtml(f)}" alt="" loading="lazy">`
+      : `<span class="${cls} cd-sem-foto">${escapeHtml(cat.charAt(0).toUpperCase())}</span>`;
+  };
+
+  const cardItem = (item, arrastavel) => {
+    const foto = getFotoUrl(item, 0);
+    return `
+      <article class="sortable-item cd-item${item.ativo ? "" : " off"}" data-id="${item.id}" ${arrastavel ? 'draggable="true"' : ""}>
+        ${arrastavel ? `<span class="drag-handle cd-alca" title="Arraste para mudar a ordem">⠿</span>` : ""}
+        ${foto
+          ? `<img class="cd-foto" src="${escapeHtml(foto)}" alt="" loading="lazy">`
+          : `<span class="cd-foto cd-sem-foto">Sem foto</span>`}
+        <div class="cd-meio">
+          <b>${escapeHtml(item.nome)}${item.ativo ? "" : ` <em>Pausado</em>`}</b>
+          ${item.descricao ? `<span>${escapeHtml(item.descricao)}</span>` : ""}
+          ${!arrastavel && item.categoria ? `<small>${escapeHtml(item.categoria)}</small>` : ""}
+        </div>
+        <span class="cd-preco">${formatCurrency(item.preco)}</span>
+        <button type="button" class="cd-sw${item.ativo ? " on" : ""}" data-acao="ativo" role="switch" aria-checked="${item.ativo ? "true" : "false"}" title="${item.ativo ? "Pausar item" : "Ativar item"}"></button>
+        <button type="button" class="cd-mini" data-acao="editar">Editar</button>
+        <button type="button" class="cd-mini cd-perigo" data-acao="excluir">Excluir</button>
+      </article>`;
+  };
+
+  let direita;
+  if (cardapioBusca) {
+    const achados = cardapioItems.filter(i =>
+      `${i.nome || ""} ${i.descricao || ""} ${i.categoria || ""}`.toLowerCase().includes(cardapioBusca));
+    direita = `
+      <div class="cd-sec"><h2>Busca</h2></div>
+      ${achados.length ? achados.map(i => cardItem(i, false)).join("") : `<div class="cd-vazio">Nenhum item encontrado.</div>`}`;
+  } else {
+    const cat = cardapioCatAtiva;
+    const itens = categoriasMap[cat] || [];
+    direita = `
+      <div class="cd-sec">
+        <button type="button" class="cd-sec-foto" onclick="openCategoriasModal()" title="Trocar a foto da categoria">${miniCat(cat, "cd-cat-grande")}</button>
+        <h2>${escapeHtml(cat)}</h2>
+        <small>Arraste ⠿ para mudar a ordem no cardápio</small>
+      </div>
+      <div class="sortable-list cd-itens" data-categoria="${escapeHtml(cat)}">
+        ${itens.length ? itens.map(i => cardItem(i, true)).join("") : `<div class="cd-vazio">Nenhum item nesta categoria.</div>`}
+      </div>`;
+  }
+
   lista.innerHTML = `
-    <div id="categorias-container">
-      ${categoriasOrdem.map((cat, catIndex) => {
-        const itens = categoriasMap[cat];
-        const collapsed = true;
-        return `
-          <div class="categoria-bloco" data-cat="${escapeHtml(cat)}" draggable="true" style="margin-bottom:24px;">
-            <div onclick="toggleCategoria('${escapeHtml(cat)}')" style="
-              display:flex; align-items:center; justify-content:space-between;
-              cursor:pointer; padding:8px 4px; user-select:none;
-              border-bottom:1px solid rgba(255,255,255,0.07); margin-bottom:12px;
-            ">
-              <div style="display:flex; align-items:center; gap:10px;">
-                <span class="cat-drag-handle" style="cursor:grab; font-size:18px; color:rgba(252,228,228,0.2);">⠿</span>
-                <h4 style="color:rgba(252,228,228,0.6); font-size:12px; text-transform:uppercase; letter-spacing:2px; margin:0;">${escapeHtml(cat)}</h4>
-                <span style="color:rgba(252,228,228,0.3); font-size:11px;">(${itens.length})</span>
-              </div>
-              <span id="arrow-cat-${escapeHtml(cat)}" style="color:rgba(252,228,228,0.4); font-size:14px; transition:transform 0.2s; transform:rotate(-90deg);">▼</span>
-            </div>
-            <div id="itens-cat-${escapeHtml(cat)}" class="sortable-list" data-categoria="${escapeHtml(cat)}" style="display:none;">
-              ${itens.map(item => `
-                <div class="sortable-item" data-id="${item.id}" draggable="true"
-                  onclick="openItemDetailModal(${JSON.stringify(item).replace(/"/g, '&quot;')})"
-                  style="display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:rgba(28,28,30,0.45); border:1px solid rgba(255,255,255,0.18); border-radius:12px; margin-bottom:8px; cursor:pointer;">
-                  <div style="display:flex; align-items:center; gap:12px;">
-                    <span class="drag-handle" style="cursor:grab; font-size:16px; color:rgba(252,228,228,0.3); padding:0 4px;">⠿</span>
-                    <div style="width:10px; height:10px; border-radius:50%; background:${item.ativo ? 'rgba(34,197,94,1)' : 'rgba(107,114,128,1)'}"></div>
-                    <div>
-                      <div style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px;">${escapeHtml(item.nome)}</div>
-                      ${item.descricao ? `<div style="color:rgba(252,228,228,0.5); font-size:12px;">${escapeHtml(item.descricao)}</div>` : ""}
-                    </div>
-                  </div>
-                  <div style="display:flex; align-items:center; gap:12px;">
-                    <span style="color:rgba(251,191,36,1); font-weight:900; font-size:16px;">${formatCurrency(item.preco)}</span>
-                    <button onclick="event.stopPropagation(); toggleAtivo('${item.id}', ${item.ativo})" style="padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.18); background:transparent; color:rgba(252,228,228,0.7); cursor:pointer; font-size:11px;">
-                      ${item.ativo ? "Desativar" : "Ativar"}
-                    </button>
-                    <button onclick="event.stopPropagation(); openItemModal(${JSON.stringify(item).replace(/"/g, '&quot;')})" style="padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.18); background:transparent; color:rgba(252,228,228,0.7); cursor:pointer; font-size:11px;">
-                      Editar
-                    </button>
-                    <button onclick="event.stopPropagation(); deletarItem('${item.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid rgba(239,68,68,0.5); background:transparent; color:rgba(239,68,68,0.8); cursor:pointer; font-size:11px;">
-                      Excluir
-                    </button>
-                  </div>
-                </div>
-              `).join("")}
-            </div>
-          </div>
-        `;
-      }).join("")}
-    </div>
-  `;
+    <div class="cd-corpo">
+      <nav class="cd-nav" aria-label="Categorias">
+        <div id="categorias-container">
+          ${categoriasOrdem.map(cat => `
+            <div class="categoria-bloco cd-cat${!cardapioBusca && cat === cardapioCatAtiva ? " on" : ""}" data-cat="${escapeHtml(cat)}">
+              <span class="cat-drag-handle cd-alca" title="Arraste para mudar a ordem">⠿</span>
+              ${miniCat(cat, "cd-cat-foto")}
+              <span class="cd-cat-nome">${escapeHtml(cat)}</span>
+              <span class="cd-cat-n">${categoriasMap[cat].length}</span>
+            </div>`).join("")}
+        </div>
+        <button type="button" class="cd-nova" onclick="openCategoriasModal()">+ Nova categoria</button>
+      </nav>
+      <section class="cd-lista">${direita}</section>
+    </div>`;
+
+  // clique na categoria (a alça ⠿ é só para arrastar)
+  lista.querySelectorAll(".cd-cat").forEach(el => el.addEventListener("click", (e) => {
+    if (e.target.closest(".cat-drag-handle")) return;
+    cardapioAbrirCategoria(el.dataset.cat);
+  }));
+
+  // botões do item e clique no card
+  lista.querySelectorAll(".cd-item").forEach(el => el.addEventListener("click", (e) => {
+    const item = cardapioItems.find(i => String(i.id) === el.dataset.id);
+    if (!item || e.target.closest(".drag-handle")) return;
+    const acao = e.target.closest("[data-acao]")?.dataset.acao;
+    if (acao === "ativo") return toggleAtivo(item.id, item.ativo);
+    if (acao === "editar") return openItemModal(item);
+    if (acao === "excluir") return deletarItem(item.id);
+    openItemDetailModal(item);
+  }));
 
   // Drag and drop dos itens dentro de cada categoria
   document.querySelectorAll('.sortable-list').forEach(list => setupDragDrop(list));
@@ -6439,7 +6492,7 @@ const rid = getRestaurantId();
 if (rid) {
   fetch(`${API_BASE}/api/v1/cardapio/${rid}/ordem-categorias`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: buildHeaders(),
     body: JSON.stringify({ ordem: categoriasOrdem })
   }).catch(e => console.error("Erro ao salvar ordem:", e));
 }  
@@ -7186,6 +7239,7 @@ async function criarCategoria() {
 
   input.value = '';
   openCategoriasModal();
+  fetchCardapio();
 }
 
 async function renomearCategoria(id, nomeAntigo) {
@@ -7272,6 +7326,7 @@ async function deletarCategoria(id, nome) {
       return;
     }
     openCategoriasModal();
+    fetchCardapio();
   });
 }
 
@@ -7294,6 +7349,7 @@ async function uploadFotoCategoria(id, input) {
     });
 
     openCategoriasModal();
+    fetchCardapio();
   } catch(e) {
     alert('Erro ao enviar foto: ' + e.message);
   }
