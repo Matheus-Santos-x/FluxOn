@@ -310,28 +310,18 @@ input:focus, textarea:focus, select:focus {
 <!-- CRM VIEW -->
 <main class="crm-view hidden" id="crm-view">
   <div class="crm-header">
-    <div class="crm-title">👥 CRM de Clientes</div>
-    <button class="ghost-button" type="button" id="crm-f-toggle">Filtros</button>
+    <div class="crm-title">Clientes</div>
+    <div class="crm-ferr">
+      <input id="crm-f-busca" class="cd-busca" type="search" placeholder="Nome ou telefone" />
+      <button class="ghost-button" type="button" id="crm-f-toggle">Filtros</button>
+    </div>
   </div>
 
-  <div id="crm-filters-bar" style="display:none; flex-wrap:wrap; gap:12px; align-items:flex-end; padding:0 0 20px; border-bottom:1px solid rgba(255,255,255,0.07); margin-bottom:20px;">
-    <button class="icon-button" type="button" id="crm-f-collapse" title="Recolher filtros" style="align-self:center; flex-shrink:0;">→</button>
-    <label style="display:flex; flex-direction:column; gap:4px; flex:2; min-width:200px;">
-      <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Buscar</span>
-      <input id="crm-f-busca" type="text" placeholder="Nome ou telefone..." style="padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-    </label>
-    <label style="display:flex; flex-direction:column; gap:4px; width:120px;">
-      <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Mín. pedidos</span>
-      <input id="crm-f-min-pedidos" type="number" min="0" placeholder="0" style="padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-    </label>
-    <label style="display:flex; flex-direction:column; gap:4px; width:140px;">
-      <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Mín. gasto (R$)</span>
-      <input id="crm-f-min-gasto" type="number" min="0" step="0.01" placeholder="0,00" style="padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-    </label>
-    <label style="display:flex; flex-direction:column; gap:4px; width:160px;">
-      <span style="color:rgba(252,228,228,0.5); font-size:11px; font-weight:700; text-transform:uppercase;">Comprou desde</span>
-      <input id="crm-f-desde" type="date" style="padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:#0a0a0a; color:rgba(252,228,228,1); font-size:13px; outline:none; font-family:inherit;" />
-    </label>
+  <div id="crm-filters-bar" class="crm-filtros" style="display:none;">
+    <label class="crm-pilula">Pedidos no mínimo<input id="crm-f-min-pedidos" type="number" min="0" placeholder="—" /></label>
+    <label class="crm-pilula">Gastou no mínimo<span>R$</span><input id="crm-f-min-gasto" type="number" min="0" step="0.01" placeholder="—" /></label>
+    <label class="crm-pilula">Comprou desde<input id="crm-f-desde" type="date" /></label>
+    <button type="button" class="crm-limpar" id="crm-f-limpar">Limpar</button>
   </div>
 
   <div class="crm-content"></div>
