@@ -2530,10 +2530,10 @@ function buildOrderCard(order) {
 
   card.innerHTML = `
     <div class="order-top">
-      <div class="order-number">#${order.order_number || ""} ${mesaLabel}</div>
-      <div class="order-client">${escapeHtml(order.client_name || "Cliente")}</div>
+      <div class="order-number"><small>PEDIDO</small><b>Nº ${order.order_number || ""}</b></div>
+      <div class="order-time-row">${formatTime(order.created_at)}</div>
     </div>
-    <div class="order-time-row">${formatTime(order.created_at)}</div>
+    <div class="order-client">${escapeHtml(order.client_name || "Cliente")}${mesaLabel ? ` <em>${mesaLabel}</em>` : ""}</div>
     <div class="order-card-footer">
       <div class="order-tags-row">
         ${isDelivery ? `<div class="order-delivery-tag">Delivery</div>` : ""}
@@ -2553,10 +2553,7 @@ function buildOrderCard(order) {
 
   // Semáforo
   const waitColor = getWaitColor(order._frontStatus, order.created_at);
-  if (waitColor) {
-    card.style.borderLeft = `4px solid ${waitColor}`;
-    card.style.borderRadius = "0 12px 12px 0";
-  }
+  if (waitColor) card.style.setProperty("--s", waitColor);
 
   if (["recebido", "preparo", "pronto"].includes(order._frontStatus)) {
     setTimeout(() => startAutoTimer(order.id, order.created_at), 50);
@@ -2568,8 +2565,7 @@ function buildOrderCard(order) {
 function buildMesaCard(pedidos) {
   const card = document.createElement("div");
   card.className = "order-card";
-  card.style.borderLeft = "4px solid var(--amber)";
-  card.style.borderRadius = "0 14px 14px 0";
+  card.style.setProperty("--s", "#fbbf24");
 
   const mesa = pedidos[0].table_number;
   const totalItens = pedidos.reduce((s, p) => s + (Array.isArray(p.itens) ? p.itens.length : 0), 0);
@@ -2579,11 +2575,11 @@ function buildMesaCard(pedidos) {
 
   card.innerHTML = `
     <div class="order-top">
-      <div class="order-number">#${primeiroNumero} · Mesa ${mesa}</div>
-      <div class="order-client">${escapeHtml(nomeLabel)}</div>
+      <div class="order-number"><small>PEDIDO</small><b>Nº ${primeiroNumero}</b></div>
+      <div class="order-time-row">${horario}</div>
     </div>
+    <div class="order-client">${escapeHtml(nomeLabel)} <em>· Mesa ${mesa}</em></div>
     <div class="order-meta">
-      <div class="order-time">${horario}</div>
       <div class="order-items">${totalItens} item(ns) · ${pedidos.length} pedido(s)</div>
     </div>
     <div class="order-origin-tag">Autoatendimento</div>
