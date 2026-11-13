@@ -6281,7 +6281,7 @@ async function fetchCardapio() {
     return;
   }
   try {
-    const resp = await fetch(`${API_BASE}/api/v1/cardapio/${rid}`);
+    const resp = await fetch(`${API_BASE}/api/v1/cardapio/${rid}?admin=true`);
     if (!resp.ok) {
       console.error("❌ Erro HTTP cardápio:", resp.status);
       return;
