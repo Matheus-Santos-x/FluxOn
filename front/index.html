@@ -349,6 +349,10 @@ input:focus, textarea:focus, select:focus {
 
     @keyframes fxFloor{ to{ background-position:0 80px } }
     @keyframes fxBreathe{ 0%,100%{ opacity:.75 } 50%{ opacity:1 } }
+        /* brasas subindo do horizonte */
+    #home-view .fx-brasas{ position:absolute; inset:0; }
+    #home-view .fx-brasas i{ position:absolute; top:62%; border-radius:50%; opacity:0; animation:fxBrasa linear infinite; }
+    @keyframes fxBrasa{ 0%{ transform:translate(0,0); opacity:0 } 12%{ opacity:.75 } 70%{ opacity:.35 } 100%{ transform:translate(var(--dx),-45vh); opacity:0 } }
 
     /* ───────── CARDS: vidro simples, borda fina ───────── */
     #home-view .fx-card{ border-radius:14px;
@@ -388,6 +392,38 @@ input:focus, textarea:focus, select:focus {
     <div class="fx-glow"></div>
     <div class="fx-floor"><div class="fx-plane"></div></div>
     <div class="fx-horizon"></div>
+    <div class="fx-brasas" aria-hidden="true">
+      <i style="left:67%; width:2px; height:2px; background:#ef4444; box-shadow:0 0 6px #ef4444; animation-duration:8.8s; animation-delay:-12.4s; --dx:6px"></i>
+      <i style="left:33%; width:4px; height:4px; background:#f87171; box-shadow:0 0 12px #f87171; animation-duration:7.5s; animation-delay:-11.9s; --dx:-32px"></i>
+      <i style="left:56%; width:2px; height:2px; background:#ef4444; box-shadow:0 0 6px #ef4444; animation-duration:9.9s; animation-delay:-12.2s; --dx:-12px"></i>
+      <i style="left:33%; width:4px; height:4px; background:#f97316; box-shadow:0 0 12px #f97316; animation-duration:10.1s; animation-delay:-12.4s; --dx:-35px"></i>
+      <i style="left:97%; width:2px; height:2px; background:#ef4444; box-shadow:0 0 6px #ef4444; animation-duration:8.0s; animation-delay:-11.1s; --dx:33px"></i>
+      <i style="left:65%; width:4px; height:4px; background:#f97316; box-shadow:0 0 12px #f97316; animation-duration:11.7s; animation-delay:-10.7s; --dx:7px"></i>
+      <i style="left:38%; width:4px; height:4px; background:#f97316; box-shadow:0 0 12px #f97316; animation-duration:11.0s; animation-delay:-5.7s; --dx:23px"></i>
+      <i style="left:94%; width:3px; height:3px; background:#f87171; box-shadow:0 0 9px #f87171; animation-duration:11.4s; animation-delay:-6.9s; --dx:6px"></i>
+      <i style="left:64%; width:2px; height:2px; background:#f97316; box-shadow:0 0 6px #f97316; animation-duration:11.6s; animation-delay:-3.9s; --dx:-30px"></i>
+      <i style="left:64%; width:4px; height:4px; background:#f87171; box-shadow:0 0 12px #f87171; animation-duration:9.5s; animation-delay:-8.5s; --dx:-4px"></i>
+      <i style="left:35%; width:2px; height:2px; background:#fb923c; box-shadow:0 0 6px #fb923c; animation-duration:9.6s; animation-delay:-10.9s; --dx:-21px"></i>
+      <i style="left:88%; width:3px; height:3px; background:#fb923c; box-shadow:0 0 9px #fb923c; animation-duration:6.3s; animation-delay:-4.3s; --dx:3px"></i>
+      <i style="left:70%; width:4px; height:4px; background:#ef4444; box-shadow:0 0 12px #ef4444; animation-duration:9.5s; animation-delay:-2.6s; --dx:-29px"></i>
+      <i style="left:60%; width:3px; height:3px; background:#fb923c; box-shadow:0 0 9px #fb923c; animation-duration:10.9s; animation-delay:-12.2s; --dx:33px"></i>
+      <i style="left:83%; width:3px; height:3px; background:#fb923c; box-shadow:0 0 9px #fb923c; animation-duration:11.0s; animation-delay:-1.5s; --dx:-38px"></i>
+      <i style="left:85%; width:3px; height:3px; background:#ef4444; box-shadow:0 0 9px #ef4444; animation-duration:7.2s; animation-delay:-11.5s; --dx:-13px"></i>
+      <i style="left:62%; width:2px; height:2px; background:#f87171; box-shadow:0 0 6px #f87171; animation-duration:11.2s; animation-delay:-7.8s; --dx:-30px"></i>
+      <i style="left:47%; width:3px; height:3px; background:#f97316; box-shadow:0 0 9px #f97316; animation-duration:8.8s; animation-delay:-9.4s; --dx:15px"></i>
+      <i style="left:96%; width:3px; height:3px; background:#f87171; box-shadow:0 0 9px #f87171; animation-duration:10.9s; animation-delay:-0.2s; --dx:-11px"></i>
+      <i style="left:45%; width:2px; height:2px; background:#f97316; box-shadow:0 0 6px #f97316; animation-duration:7.2s; animation-delay:-10.0s; --dx:-39px"></i>
+      <i style="left:88%; width:4px; height:4px; background:#f97316; box-shadow:0 0 12px #f97316; animation-duration:7.3s; animation-delay:-9.3s; --dx:13px"></i>
+      <i style="left:94%; width:3px; height:3px; background:#f97316; box-shadow:0 0 9px #f97316; animation-duration:10.3s; animation-delay:-8.9s; --dx:25px"></i>
+      <i style="left:32%; width:3px; height:3px; background:#f87171; box-shadow:0 0 9px #f87171; animation-duration:12.3s; animation-delay:-2.9s; --dx:10px"></i>
+      <i style="left:77%; width:3px; height:3px; background:#ef4444; box-shadow:0 0 9px #ef4444; animation-duration:6.7s; animation-delay:-4.8s; --dx:-16px"></i>
+      <i style="left:34%; width:2px; height:2px; background:#ef4444; box-shadow:0 0 6px #ef4444; animation-duration:9.1s; animation-delay:-11.6s; --dx:-27px"></i>
+      <i style="left:26%; width:4px; height:4px; background:#fb923c; box-shadow:0 0 12px #fb923c; animation-duration:7.1s; animation-delay:-11.7s; --dx:38px"></i>
+      <i style="left:29%; width:2px; height:2px; background:#f97316; box-shadow:0 0 6px #f97316; animation-duration:12.1s; animation-delay:-5.0s; --dx:-8px"></i>
+      <i style="left:70%; width:4px; height:4px; background:#f87171; box-shadow:0 0 12px #f87171; animation-duration:8.5s; animation-delay:-11.4s; --dx:19px"></i>
+      <i style="left:87%; width:3px; height:3px; background:#fb923c; box-shadow:0 0 9px #fb923c; animation-duration:8.2s; animation-delay:-11.1s; --dx:-7px"></i>
+      <i style="left:87%; width:2px; height:2px; background:#fb923c; box-shadow:0 0 6px #fb923c; animation-duration:9.6s; animation-delay:-10.3s; --dx:-22px"></i>
+    </div>
     <div class="fx-vig"></div>
   </div>
 
