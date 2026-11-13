@@ -3589,3 +3589,10 @@ input[type="number"] {
 .order-card .order-fidelidade-tag { background: rgba(245,158,11,0.12); color: #fbbf24; }
 .order-card .order-timer { font-size: 12.5px; font-weight: 700; }
 .order-card .order-meta { margin: 0; font-size: 12px; font-weight: 700; color: rgba(252,228,228,0.45); }
+
+/* ===== MESAS ocupando a tela toda ===== */
+#mesas-view { max-width: none; margin: 18px clamp(16px, 2vw, 40px) 40px; padding: 0; }
+#mesas-view .crm-content { padding: 8px 0 20px; }
+#mesas-content > div { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)) !important; }
+
+
