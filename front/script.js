@@ -6410,6 +6410,7 @@ async function renderCardapio(soDesenhar = false) {
   lista.innerHTML = `
     <div class="cd-corpo">
       <nav class="cd-nav" aria-label="Categorias">
+        <button type="button" class="cd-nova" onclick="openCategoriasModal()">Gerenciar categorias</button>
         <div id="categorias-container">
           ${categoriasOrdem.map(cat => `
             <div class="categoria-bloco cd-cat${!cardapioBusca && cat === cardapioCatAtiva ? " on" : ""}" data-cat="${escapeHtml(cat)}">
@@ -6419,7 +6420,6 @@ async function renderCardapio(soDesenhar = false) {
               <span class="cd-cat-n">${categoriasMap[cat].length}</span>
             </div>`).join("")}
         </div>
-        <button type="button" class="cd-nova" onclick="openCategoriasModal()">+ Nova categoria</button>
       </nav>
       <section class="cd-lista">${direita}</section>
     </div>`;
