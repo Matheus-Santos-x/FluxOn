@@ -409,12 +409,12 @@ if (st.view === "overview") {
     const g = e.target.closest("[data-go]"); if (g) { st.screen = g.dataset.go; render(); window.scrollTo({ top: 0 }); }
   });
 
-  const PAI = { cuing: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos", fidmodelo: "fidelidade", fidpiso: "fidelidade",
+  const PAI = { cuing: "custos", cuhist: "cuing", cufichas: "custos", cudesp: "custos", cuver: "custos", fidmodelo: "fidelidade", fidpiso: "fidelidade",
     dre: "t-dinheiro", custos: "t-dinheiro", canais: "t-dinheiro", caixa: "t-dinheiro",
     clientes: "t-clientes", fidelidade: "t-clientes", avaliacoes: "t-clientes",
     operacao: "t-mais", previsao: "t-mais", pdf: "t-mais" };
-  const SEM_PERIODO = ["t-clientes", "t-mais", "custos", "cuing", "cufichas", "cudesp", "fidelidade", "fidmodelo", "fidpiso"];
-  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", fidmodelo: "Modelo de fidelidade", fidpiso: "Piso dos prêmios", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF", avaliacoes: "Avaliações" };
+  const SEM_PERIODO = ["t-clientes", "t-mais", "custos", "cuing", "cuhist", "cufichas", "cudesp", "fidelidade", "fidmodelo", "fidpiso"];
+  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cuhist: "Histórico de compras", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", fidmodelo: "Modelo de fidelidade", fidpiso: "Piso dos prêmios", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF", avaliacoes: "Avaliações" };
   function render() {
     const ov = st.view === "overview";
     const semPer = !ov && SEM_PERIODO.includes(st.screen);
@@ -427,7 +427,7 @@ if (st.view === "overview") {
     $("content").dataset.tela = ov ? "overview" : st.screen;
     if (ov) { $("content").innerHTML = telaOverview(st.ov); animarNumeros(); return; }
     const d = st.dash;
-    const T = { home: telaHome, "t-dinheiro": telaDinheiro, "t-clientes": telaClientesMenu, "t-mais": telaMais, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, fidmodelo: telaFidModelo, fidpiso: telaFidPiso, cuing: telaIngredientes, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf, avaliacoes: telaAvaliacoes }[st.screen];
+    const T = { home: telaHome, "t-dinheiro": telaDinheiro, "t-clientes": telaClientesMenu, "t-mais": telaMais, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, fidmodelo: telaFidModelo, fidpiso: telaFidPiso, cuing: telaIngredientes, cuhist: telaHistorico, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf, avaliacoes: telaAvaliacoes }[st.screen];
     $("content").innerHTML = T(d);
     if (st.screen === "pdf") bindPdf(d);
     if (st.screen === "home" && sino.itens.length) atualizarSinoLocal();
@@ -999,7 +999,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
   const cuBase = () => `/owner/restaurants/${encodeURIComponent(st.view)}/custos`;
   const cuPreco = (c, u) => `${brl(c)}/${u}` + (u === "un" ? "" : ` · ${brl(c / 10)} por 100 ${u === "kg" ? "g" : "ml"}`);
   const cuNorm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
-  const cuTela = { ing: "cuing", fichas: "cufichas", desp: "cudesp" };
+  const cuTela = { ing: "cuing", hist: "cuhist", fichas: "cufichas", desp: "cudesp" };
   const cuEstado = { mes: "", edit: "" };
   const cuVivo = (aba) => st.screen === cuTela[aba] && $("cu-corpo");
   const cuErro = (aba, e) => { if (cuVivo(aba)) $("cu-corpo").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`; };
@@ -1058,37 +1058,46 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
       ${rank}`;
   }
   
-  /* ingredientes e mercadorias: registrar compra, produtos e últimas compras */
+  /* ingredientes e mercadorias: registrar compra e produtos (no PC lado a lado; no celular um embaixo do outro) */
   const telaIngredientes = () => cuIniciar("ing", cuIng);
   async function cuIng() {
     try {
-      const [ins, com] = await Promise.all([api(cuBase() + "/insumos"), api(cuBase() + "/compras")]);
+      const ins = await api(cuBase() + "/insumos");
       if (!cuVivo("ing")) return;
       const lista = ins.insumos, ed = cuEstado.edit;
       const prods = lista.map((i) => ed === "p:" + i.id
         ? `<div class="split-row" style="display:grid;gap:8px"><input id="ed-nome" value="${esc(i.nome)}" maxlength="80"><div style="display:flex;gap:8px"><button class="btn primary" data-save-prod="${esc(i.id)}" style="flex:1">Salvar</button><button class="btn" data-cancel style="flex:1">Cancelar</button></div></div>`
         : `<div class="split-row"><div class="split-head"><span>${esc(i.nome)}</span><span>${cuBtnIc("data-edit-prod", i.id, "Editar produto", "✎")} ${cuBtnIc("data-del-prod", i.id, "Remover produto", "✕")}</span></div><span class="muted" style="font-size:12px">${Number(i.custo_unitario) > 0 ? cuPreco(Number(i.custo_unitario), i.unidade) : "sem compra ainda"}</span></div>`).join("");
-      const itens = com.compras.map((c) => ed === "c:" + c.id
-        ? `<div class="split-row" style="display:grid;gap:8px"><b>${esc(c.nome)}</b>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><input id="ed-qtd" inputmode="decimal" value="${esc(String(c.quantidade).replace(".", ","))}" aria-label="Quantidade em ${esc(c.unidade)}"><input id="ed-valor" inputmode="decimal" value="${esc(String(c.valor_total).replace(".", ","))}" aria-label="Valor pago"></div>
-            <input id="ed-forn" value="${esc(c.fornecedor || "")}" placeholder="Fornecedor (opcional)">
-            <div style="display:flex;gap:8px"><button class="btn primary" data-save-compra="${esc(c.id)}" style="flex:1">Salvar</button><button class="btn" data-cancel style="flex:1">Cancelar</button></div>
-            <span class="muted" style="font-size:12px">Quantidade em ${esc(c.unidade)} e valor total pago.</span></div>`
-        : `<div class="split-row"><div class="split-head"><span>${esc(c.nome)} · ${Number(c.quantidade).toLocaleString("pt-BR")} ${esc(c.unidade)}</span><span>${brl(c.valor_total)} ${cuBtnIc("data-edit-compra", c.id, "Editar compra", "✎")} ${cuBtnIc("data-del-compra", c.id, "Remover compra", "✕")}</span></div><span class="muted" style="font-size:12px">${fmtData(c.data_compra)}${c.fornecedor ? " · " + esc(c.fornecedor) : ""} · ${brl(Number(c.valor_total) / Number(c.quantidade))}/${esc(c.unidade)}</span></div>`).join("");
       $("cu-corpo").innerHTML = `
-        <section class="card"><h2>Registrar compra</h2>
-          <div style="display:grid;gap:10px">
-            <input id="cu-nome" list="cu-lista" placeholder="Produto (ex.: Alface)" autocomplete="off">
-            <datalist id="cu-lista">${lista.map((i) => `<option value="${esc(i.nome)}">`).join("")}</datalist>
-            <div style="display:grid;grid-template-columns:1fr 110px;gap:10px"><input id="cu-qtd" inputmode="decimal" placeholder="Quantidade"><select id="cu-un"><option value="kg">kg</option><option value="l">litros</option><option value="un">unidades</option></select></div>
-            <input id="cu-valor" inputmode="decimal" placeholder="Quanto pagou no total (R$)">
-            <input id="cu-forn" placeholder="Fornecedor (opcional)">
-            <button class="btn primary" id="cu-add">Registrar compra</button>
+        <div class="cu-ing-grade">
+          <section class="card"><h2>Registrar compra</h2>
+            <div style="display:grid;gap:10px">
+              <input id="cu-nome" list="cu-lista" placeholder="Produto (ex.: Alface)" autocomplete="off">
+              <datalist id="cu-lista">${lista.map((i) => `<option value="${esc(i.nome)}">`).join("")}</datalist>
+              <div style="display:grid;grid-template-columns:1fr 110px;gap:10px"><input id="cu-qtd" inputmode="decimal" placeholder="Quantidade"><select id="cu-un"><option value="kg">kg</option><option value="l">litros</option><option value="un">unidades</option></select></div>
+              <input id="cu-valor" inputmode="decimal" placeholder="Quanto pagou no total (R$)">
+              <input id="cu-forn" placeholder="Fornecedor (opcional)">
+              <div class="cu-calc hidden" id="cu-calc"></div>
+              <button class="btn primary" id="cu-add">Registrar compra</button>
+            </div>
+            <p class="foot" style="text-align:left;margin-top:10px">O custo do produto passa a ser o da última compra.</p></section>
+          <div class="cu-ing-dir">
+            <section class="card"><h2>Meus produtos</h2>${prods ? `<div class="split">${prods}</div>` : `<div class="empty">Nenhum produto ainda. Registre a primeira compra.</div>`}</section>
+            <button class="row-btn card cu-hist-btn" data-go="cuhist"><span class="row-ic">${ic("file")}</span><span class="row-t"><b>Histórico de compras</b><span>Tudo o que foi comprado, por data e fornecedor</span></span><span class="chev">›</span></button>
           </div>
-          <p class="foot" style="text-align:left;margin-top:10px">O custo do produto passa a ser o da última compra.</p></section>
-        <section class="card"><h2>Meus produtos</h2>${prods ? `<div class="split">${prods}</div>` : `<div class="empty">Nenhum produto ainda. Registre a primeira compra acima.</div>`}</section>
-        <section class="card"><h2>Últimas compras</h2>${itens ? `<div class="split">${itens}</div>` : `<div class="empty">Nenhuma compra registrada ainda.</div>`}</section>`;
+        </div>`;
       const nome = $("cu-nome"), un = $("cu-un");
+      // mostra antes de salvar quanto o produto vai custar (ajuda a pegar erro de digitação)
+      const num = (v) => parseFloat(String(v || "").replace(/\./g, "").replace(",", "."));
+      const calc = () => {
+        const q = num($("cu-qtd").value), v = num($("cu-valor").value), el = $("cu-calc");
+        if (!(q > 0) || !(v > 0) || !nome.value.trim()) { el.classList.add("hidden"); return; }
+        const u = un.value === "l" ? "l" : un.value;
+        el.innerHTML = `<span>Custo de ${esc(nome.value.trim())} passa a ser</span><b>${brl(v / q)}/${u}</b>`;
+        el.classList.remove("hidden");
+      };
+      ["cu-nome", "cu-qtd", "cu-valor"].forEach((id) => $(id).addEventListener("input", calc));
+      un.addEventListener("change", calc);
       nome.addEventListener("input", () => {
         const ach = lista.find((i) => cuNorm(i.nome) === cuNorm(nome.value));
         if (ach) { un.value = ach.unidade; un.disabled = true; } else un.disabled = false;
@@ -1105,21 +1114,13 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
       };
       const refaz = () => { if (cuVivo("ing")) cuIng(); };
       $("cu-corpo").onclick = async (e) => {
-        const t = e.target.closest("button"); if (!t) return;
+        const t = e.target.closest("button"); if (!t || t.dataset.go) return;
         try {
           if (t.dataset.cancel !== undefined) { cuEstado.edit = ""; refaz(); }
           else if (t.dataset.editProd) { cuEstado.edit = "p:" + t.dataset.editProd; refaz(); }
-          else if (t.dataset.editCompra) { cuEstado.edit = "c:" + t.dataset.editCompra; refaz(); }
           else if (t.dataset.saveProd) {
             await api(`${cuBase()}/insumos/${encodeURIComponent(t.dataset.saveProd)}`, { method: "PUT", body: JSON.stringify({ nome: $("ed-nome").value }) });
             cuEstado.edit = ""; toast("Produto atualizado."); refaz();
-          } else if (t.dataset.saveCompra) {
-            await api(`${cuBase()}/compras/${encodeURIComponent(t.dataset.saveCompra)}`, { method: "PUT", body: JSON.stringify({ quantidade: $("ed-qtd").value, valor_total: $("ed-valor").value, fornecedor: $("ed-forn").value }) });
-            cuEstado.edit = ""; toast("Compra atualizada."); refaz();
-          } else if (t.dataset.delCompra) {
-            if (!confirm("Remover esta compra?")) return;
-            const r = await api(`${cuBase()}/compras/${encodeURIComponent(t.dataset.delCompra)}`, { method: "DELETE" });
-            if (r.produto_removido) toast("Compra e produto removidos."); refaz();
           } else if (t.dataset.delProd) {
             if (!confirm("Remover este produto e as compras dele?")) return;
             await api(`${cuBase()}/insumos/${encodeURIComponent(t.dataset.delProd)}`, { method: "DELETE" }); refaz();
@@ -1127,6 +1128,58 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
         } catch (err) { toast(err.message); }
       };
     } catch (e) { cuErro("ing", e); }
+  }
+
+  /* histórico de compras: tudo o que foi comprado, separado por dia */
+  const cuHistEstado = { busca: "" };
+  const telaHistorico = () => cuIniciar("hist", cuHist);
+  async function cuHist() {
+    try {
+      const com = await api(cuBase() + "/compras");
+      if (!cuVivo("hist")) return;
+      const ed = cuEstado.edit, q = cuNorm(cuHistEstado.busca);
+      const todas = com.compras.filter((c) => !q || cuNorm(`${c.nome} ${c.fornecedor || ""}`).includes(q));
+      const diaNome = (iso) => {
+        const d = new Date(iso + "T12:00:00"), hoje = new Date(); hoje.setHours(12, 0, 0, 0);
+        const dif = Math.round((hoje - d) / 864e5);
+        const nome = dif === 0 ? "Hoje" : dif === 1 ? "Ontem" : d.toLocaleDateString("pt-BR", { weekday: "long" }).replace(/^./, (x) => x.toUpperCase());
+        return `${nome} · ${fmtData(iso)}`;
+      };
+      const linha = (c) => ed === "c:" + c.id
+        ? `<div class="split-row" style="display:grid;gap:8px"><b>${esc(c.nome)}</b>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><input id="ed-qtd" inputmode="decimal" value="${esc(String(c.quantidade).replace(".", ","))}" aria-label="Quantidade em ${esc(c.unidade)}"><input id="ed-valor" inputmode="decimal" value="${esc(String(c.valor_total).replace(".", ","))}" aria-label="Valor pago"></div>
+            <input id="ed-forn" value="${esc(c.fornecedor || "")}" placeholder="Fornecedor (opcional)">
+            <div style="display:flex;gap:8px"><button class="btn primary" data-save-compra="${esc(c.id)}" style="flex:1">Salvar</button><button class="btn" data-cancel style="flex:1">Cancelar</button></div>
+            <span class="muted" style="font-size:12px">Quantidade em ${esc(c.unidade)} e valor total pago.</span></div>`
+        : `<div class="split-row"><div class="split-head"><span>${esc(c.nome)} · ${Number(c.quantidade).toLocaleString("pt-BR")} ${esc(c.unidade)}</span><span>${brl(c.valor_total)} ${cuBtnIc("data-edit-compra", c.id, "Editar compra", "✎")} ${cuBtnIc("data-del-compra", c.id, "Remover compra", "✕")}</span></div><span class="muted" style="font-size:12px">${c.fornecedor ? esc(c.fornecedor) + " · " : ""}${brl(Number(c.valor_total) / Number(c.quantidade))}/${esc(c.unidade)}</span></div>`;
+      const dias = [];
+      todas.forEach((c) => { const ult = dias[dias.length - 1]; if (ult && ult.dia === c.data_compra) ult.itens.push(c); else dias.push({ dia: c.data_compra, itens: [c] }); });
+      const gasto = todas.reduce((s, c) => s + (Number(c.valor_total) || 0), 0);
+      $("cu-corpo").innerHTML = `
+        <section class="card">
+          <div class="cu-hist-topo"><span><small class="muted">Gasto nas compras listadas</small><b>${brl(gasto)}</b></span>
+            <input id="cu-busca" value="${esc(cuHistEstado.busca)}" placeholder="Buscar produto ou fornecedor" autocomplete="off"></div>
+          ${dias.length ? dias.map((d) => `<div class="cu-dia">${diaNome(d.dia)}</div><div class="split">${d.itens.map(linha).join("")}</div>`).join("") : `<div class="empty">${q ? "Nenhuma compra encontrada." : "Nenhuma compra registrada ainda."}</div>`}
+        </section>`;
+      const busca = $("cu-busca");
+      busca.addEventListener("input", () => { cuHistEstado.busca = busca.value; clearTimeout(cuHistEstado.t); cuHistEstado.t = setTimeout(() => { if (cuVivo("hist")) cuHist().then(() => { const b = $("cu-busca"); if (b) { b.focus(); b.setSelectionRange(b.value.length, b.value.length); } }); }, 250); });
+      const refaz = () => { if (cuVivo("hist")) cuHist(); };
+      $("cu-corpo").onclick = async (e) => {
+        const t = e.target.closest("button"); if (!t) return;
+        try {
+          if (t.dataset.cancel !== undefined) { cuEstado.edit = ""; refaz(); }
+          else if (t.dataset.editCompra) { cuEstado.edit = "c:" + t.dataset.editCompra; refaz(); }
+          else if (t.dataset.saveCompra) {
+            await api(`${cuBase()}/compras/${encodeURIComponent(t.dataset.saveCompra)}`, { method: "PUT", body: JSON.stringify({ quantidade: $("ed-qtd").value, valor_total: $("ed-valor").value, fornecedor: $("ed-forn").value }) });
+            cuEstado.edit = ""; toast("Compra atualizada."); refaz();
+          } else if (t.dataset.delCompra) {
+            if (!confirm("Remover esta compra?")) return;
+            const r = await api(`${cuBase()}/compras/${encodeURIComponent(t.dataset.delCompra)}`, { method: "DELETE" });
+            if (r.produto_removido) toast("Compra e produto removidos."); refaz();
+          }
+        } catch (err) { toast(err.message); }
+      };
+    } catch (e) { cuErro("hist", e); }
   }
 
   /* fichas dos pratos: quanto de cada produto vai em cada prato */
