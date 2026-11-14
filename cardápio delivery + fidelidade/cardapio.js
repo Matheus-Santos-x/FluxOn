@@ -226,7 +226,7 @@ async function loadBestsellers(){
   let picks = [];
   if(!IS_DEMO){
     try{
-      const res = await fetch(`${CONFIG.API_BASE}/api/v1/metrics/${RESTAURANT_ID}/top-products`);
+      const res = await fetch(`${CONFIG.API_BASE}/api/v1/cardapio/${RESTAURANT_ID}/mais-pedidos`);
       if(res.ok){
         const top = await res.json(); // [{ nome, qty }]
         picks = top
@@ -774,6 +774,7 @@ function basePayload(v, extra){
     // manda nos dois formatos (name/qty/price E nome/quantidade/preco)
     // porque é assim que o backend e a rota de impressão leem os itens
     itens: CART.map(c => ({
+      cardapio_id: String(c.id).split("__")[0],
       name:c.nome, nome:c.nome,
       qty:c.qty, quantidade:c.qty,
       price:c.preco, preco:c.preco
