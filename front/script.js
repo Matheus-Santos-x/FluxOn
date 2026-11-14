@@ -4040,20 +4040,19 @@ async function crmJuntarPontos() {
     return d;
   };
   const plano = String(restaurantPlan || "").toLowerCase();
+  const comPontos = plano === "executive" || plano === "custom";
   let base = [];
-  if (plano === "executive" || plano === "custom") {
-    try {
-      const resp = await fetch(`${API_BASE}/api/v1/fidelidade/${getRestaurantId()}/clientes`, { headers: buildHeaders() });
-      if (resp.ok) base = await resp.json();
-    } catch (e) {
-      console.warn("pontos da fidelidade:", e.message);
-    }
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/fidelidade/${getRestaurantId()}/clientes`, { headers: buildHeaders() });
+    if (resp.ok) base = await resp.json();
+  } catch (e) {
+    console.warn("clientes da base:", e.message);
   }
   const mapa = new Map((Array.isArray(base) ? base : []).map(b => [chave(b.numero), b]));
   crmClients.forEach(c => {
     const b = mapa.get(chave(c.client_phone));
-    c.pontos = Number(b?.pontos) || 0;
-    c.pontos_resgatados = Number(b?.pontos_resgatados) || 0;
+    c.pontos = comPontos ? Number(b?.pontos) || 0 : 0;
+    c.pontos_resgatados = comPontos ? Number(b?.pontos_resgatados) || 0 : 0;
     c.nascimento = b?.nascimento || null;
   });
 }
