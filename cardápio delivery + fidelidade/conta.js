@@ -100,7 +100,8 @@ function contaRender(){
       <h3>Seus dados</h3>
       <div class="field"><label for="contaNome">Nome</label><input type="text" id="contaNome" value="${escHtml(CONTA.nome)}" maxlength="80"></div>
       <div class="field"><label>Telefone (WhatsApp)</label><input type="text" value="${escHtml(telefoneMascara(CONTA.telefone))}" disabled></div>
-      <button class="conta-btn" id="contaSalvarNome">Salvar nome</button>
+      ${CONTA.nascimento_ativo ? `<div class="field"><label for="contaNasc">Data de nascimento</label><input type="text" id="contaNasc" value="${escHtml(nascParaTela(CONTA.nascimento))}" placeholder="DD/MM/AAAA" inputmode="numeric" maxlength="10" autocomplete="bday"></div>` : ""}
+      <button class="conta-btn" id="contaSalvarNome">Salvar</button>
     </section>
     <section class="conta-sec">
       <h3>Meus endereços</h3>
@@ -116,12 +117,25 @@ function contaRender(){
       <div id="contaNovoEnd"></div>
       <button class="conta-btn contorno" id="contaAddEnd">+ Adicionar endereço</button>
     </section>`;
+  const nascInp = document.getElementById("contaNasc");
+  if(nascInp) nascInp.addEventListener("input", () => { nascInp.value = nascMascara(nascInp.value); });
   document.getElementById("contaSalvarNome").onclick = async (ev) => {
     const nome = document.getElementById("contaNome").value.trim();
     if(!nome){ shake("contaNome"); return; }
+    const nasc = nascInp && nascInp.value ? nascParaIso(nascInp.value) : null;
+    if(nascInp && nascInp.value && !nasc){ shake("contaNasc"); fidToast("Confira a data: dia/mês/ano", true); return; }
     ev.target.disabled = true;
-    try{ await contaApi("/conta", { method:"PATCH", body: JSON.stringify({ nome }) }); CONTA.nome = nome; if(FID.cliente) FID.cliente.nome = nome; loginAtualizarBotao(); fidToast("Nome salvo!"); }
-    catch(e){ fidToast(e.message, true); }
+    try{
+      if(nome !== CONTA.nome){
+        await contaApi("/conta", { method:"PATCH", body: JSON.stringify({ nome }) });
+        CONTA.nome = nome; if(FID.cliente) FID.cliente.nome = nome; loginAtualizarBotao();
+      }
+      if(nasc && nasc !== CONTA.nascimento){
+        await contaApi("/nascimento", { method:"PATCH", body: JSON.stringify({ nascimento: nasc }) });
+        CONTA.nascimento = nasc;
+      }
+      fidToast("Dados salvos!");
+    }catch(e){ fidToast(e.message, true); }
     ev.target.disabled = false;
   };
   corpo.querySelectorAll("[data-principal]").forEach(b => b.onclick = async () => {
@@ -296,3 +310,73 @@ async function endPrepararEtapa(){
   if(rotulo) rotulo.textContent = "Alguma observação? (opcional)";
   obs.placeholder = "Ex: sem cebola, maionese à parte...";
 })();
+
+
+/* ---------------- data de nascimento (só no plano Executive) ---------------- */
+const nascMascara = v => { const d = String(v || "").replace(/\D/g, "").slice(0, 8); return d.length > 4 ? `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}` : d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d; };
+const nascParaTela = iso => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ""; };
+function nascParaIso(txt){
+  const m = String(txt || "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if(!m) return null;
+  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
+  const idade = (Date.now() - d.getTime()) / (365.25 * 864e5);
+  if(d.getUTCDate() !== +m[1] || d.getUTCMonth() !== +m[2] - 1 || idade < 10 || idade > 110) return null;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+const nascChave = () => `nasc_pulou_${RESTAURANT_ID}`;
+
+// pergunta 1 vez: logo depois do login, ou ao abrir o app já logado
+async function contaPerguntarNascimento(tentativa = 0){
+  if(!FID.token || document.getElementById("nascModal")) return;
+  try{ if(localStorage.getItem(nascChave())) return; }catch{}
+  if(!CONTA) await contaCarregar();
+  if(!CONTA?.nascimento_ativo || CONTA.nascimento) return;
+  // tem outra janela aberta (carrinho, login...): tenta de novo daqui a pouco
+  if(document.body.style.position === "fixed"){ if(tentativa < 6) setTimeout(() => contaPerguntarNascimento(tentativa + 1), 8000); return; }
+
+  const nome = String(CONTA.nome || FID.cliente?.nome || "").trim().split(" ")[0];
+  const wrap = document.createElement("div");
+  wrap.id = "nascModal"; wrap.className = "detail-backdrop";
+  wrap.innerHTML = `
+    <div class="detail-panel login-panel">
+      <div class="detail-body">
+        <div class="fid-sheet-head">
+          <h2>Quando é seu aniversário?</h2>
+          <button class="sheet-back" id="nascFechar" aria-label="Fechar">✕</button>
+        </div>
+        <p class="login-txt">${nome ? `${escHtml(nome)}, conta` : "Conta"} pra gente e a gente não esquece do seu dia. 🎂</p>
+        <div class="field"><label for="nascInp">Data de nascimento</label><input type="text" id="nascInp" placeholder="DD/MM/AAAA" inputmode="numeric" maxlength="10" autocomplete="bday"></div>
+        <button class="checkout-btn" id="nascSalvar">Salvar</button>
+        <button type="button" class="nasc-pular" id="nascPular">Agora não</button>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+  lockBodyScroll();
+  const fechar = (pulou) => {
+    if(pulou){ try{ localStorage.setItem(nascChave(), "1"); }catch{} }
+    unlockBodyScroll();
+    gsap.to(wrap, { opacity:0, duration:.22, onComplete:() => wrap.remove() });
+  };
+  const inp = document.getElementById("nascInp");
+  inp.addEventListener("input", () => { inp.value = nascMascara(inp.value); });
+  inp.addEventListener("keydown", e => { if(e.key === "Enter") document.getElementById("nascSalvar").click(); });
+  document.getElementById("nascFechar").onclick = () => fechar(true);
+  document.getElementById("nascPular").onclick = () => fechar(true);
+  document.getElementById("nascSalvar").onclick = async (ev) => {
+    const iso = nascParaIso(inp.value);
+    if(!iso){ shake("nascInp"); fidToast("Confira a data: dia/mês/ano", true); return; }
+    ev.target.disabled = true; ev.target.textContent = "Salvando...";
+    try{
+      await contaApi("/nascimento", { method:"PATCH", body: JSON.stringify({ nascimento: iso }) });
+      CONTA.nascimento = iso;
+      fechar(false);
+      fidToast("Anotado! 🎉");
+    }catch(e){ fidToast(e.message, true); ev.target.disabled = false; ev.target.textContent = "Salvar"; }
+  };
+  gsap.fromTo(wrap, { opacity:0 }, { opacity:1, duration:.25 });
+  gsap.fromTo(wrap.querySelector(".detail-panel"), { scale:.9, opacity:0 }, { scale:1, opacity:1, duration:.35, ease:"back.out(1.4)" });
+  setTimeout(() => inp.focus(), 350);
+}
+setTimeout(() => contaPerguntarNascimento(), 3000);
+
+
