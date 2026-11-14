@@ -4054,6 +4054,7 @@ async function crmJuntarPontos() {
     const b = mapa.get(chave(c.client_phone));
     c.pontos = Number(b?.pontos) || 0;
     c.pontos_resgatados = Number(b?.pontos_resgatados) || 0;
+    c.nascimento = b?.nascimento || null;
   });
 }
 
@@ -4298,6 +4299,7 @@ try {
             <span>Ticket médio<b>${formatCurrency(client.orders ? client.total_spent / client.orders : 0)}</b></span>
             <span>Pontos<b class="ouro">${Number(client.pontos || 0).toLocaleString("pt-BR")}</b></span>
             <span>Já resgatou<b>${Number(client.pontos_resgatados || 0).toLocaleString("pt-BR")}</b></span>
+            ${client.nascimento ? `<span>Aniversário<b>${String(client.nascimento).slice(8, 10)}/${String(client.nascimento).slice(5, 7)}</b></span>` : ""}
           </div>
 
           ${phoneNorm ? `
