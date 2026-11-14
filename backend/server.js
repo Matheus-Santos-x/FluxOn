@@ -312,7 +312,7 @@ app.use("/api/v1/caixa/:restaurant_id", requireAuth);
 app.use("/api/v1/rodizio/:restaurant_id", requireAuth);
 app.use("/orders", requireAuth); // só login: aqui o :id pode ser de pedido, não de restaurante
 for (const p of ["integracao", "impressora", "fiscal", "marketplace", "mp", "tracking-url",
-  "webhook-satisfaction", "webhook-fechamento", "webhook-crm", "webhook-reclamacao", "webhook-login", "webhook-entregas", "webhook-vale", "webhook-reserva", "crm-mensagem",
+  "webhook-satisfaction", "webhook-fechamento", "webhook-crm", "webhook-reclamacao", "webhook-login", "webhook-entregas", "webhook-vale", "webhook-reserva", "webhook-aniversario", "crm-mensagem",
   "imprimir-pedido", "reimprimir-pedido"]) {
   app.use(`/api/v1/restaurante/:restaurant_id/${p}`, requireAuth);
 }
@@ -7291,7 +7291,7 @@ app.post("/api/v1/restaurante/:restaurant_id/webhook-entregas", async (req, res)
 });
 
 // ===== WEBHOOKS DO VALE-PRESENTE E DA RESERVA DE MESA (vazio: usa o do CRM) =====
-for (const [rota, tipo] of [["webhook-vale", "webhook_vale"], ["webhook-reserva", "webhook_reserva"]]) {
+for (const [rota, tipo] of [["webhook-vale", "webhook_vale"], ["webhook-reserva", "webhook_reserva"], ["webhook-aniversario", "webhook_aniversario"]]) {
   app.get(`/api/v1/restaurante/:restaurant_id/${rota}`, async (req, res) => {
     try {
       const dados = await getIntegracao(req.params.restaurant_id, tipo);
@@ -7317,7 +7317,69 @@ for (const [rota, tipo] of [["webhook-vale", "webhook_vale"], ["webhook-reserva"
   });
 }
 
-// POST - Envia a mensagem do CRM para o webhook (n8n) do restaurante
+/* ========================================
+   🎂 ANIVERSÁRIO: no dia do aniversário, a partir das 9h, manda só o SINAL
+   pro webhook do restaurante (a mensagem é montada no n8n).
+   Só no plano Executive. Cada cliente recebe 1 vez por ano.
+======================================== */
+let aniversarioRodando = false;
+async function processarAniversarios() {
+  if (aniversarioRodando) return;
+  const agoraSP = new Date(Date.now() - SP_OFFSET_MS);
+  if (agoraSP.getUTCHours() < 9) return;
+  aniversarioRodando = true;
+  try {
+    const ano = agoraSP.getUTCFullYear(), mes = agoraSP.getUTCMonth() + 1, dia = agoraSP.getUTCDate();
+    const { data: lista, error } = await supabase.rpc("aniversariantes_do_dia", { p_mes: mes, p_dia: dia, p_ano: ano });
+    if (error) throw error;
+    const porRest = new Map();
+    for (const c of lista || []) {
+      if (!porRest.has(c.restaurant_id)) porRest.set(c.restaurant_id, []);
+      porRest.get(c.restaurant_id).push(c);
+    }
+    for (const [rid, clientes] of porRest) {
+      const { data: rest } = await supabase.from("restaurants").select("name, plan, ativo").eq("id", rid).maybeSingle();
+      if (!rest || rest.ativo === false || !hasPlan(rest.plan, "executive")) continue;
+      const url = (await getIntegracao(rid, "webhook_aniversario"))?.webhook_url;
+      if (!url) continue;
+      for (const c of clientes) {
+        const tel = String(c.numero || "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+        if (tel.length < 10) continue;
+        // marca antes de mandar: se tiver mais de um servidor rodando, só um manda
+        const { data: marcado } = await supabase.from("base_clientes").update({ aniversario_enviado_ano: ano })
+          .eq("id", c.id).or(`aniversario_enviado_ano.is.null,aniversario_enviado_ano.neq.${ano}`)
+          .select("id").maybeSingle();
+        if (!marcado) continue;
+        const nascimento = String(c.nascimento).slice(0, 10);
+        try {
+          const r = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              evento: "aniversario", restaurant_id: rid, restaurant_name: rest.name || "",
+              client_name: c.nome || null, client_phone: tel, client_phone_whatsapp: `55${tel}`,
+              nascimento, idade: ano - Number(nascimento.slice(0, 4)),
+              sent_at: new Date().toISOString(), source: "aniversario"
+            }),
+            signal: AbortSignal.timeout(10000)
+          });
+          if (!r.ok) throw new Error(`webhook respondeu ${r.status}`);
+        } catch (e) {
+          console.error(`❌ aniversário (${rid}):`, e.message);
+          // deu erro: desmarca pra tentar de novo na próxima rodada
+          await supabase.from("base_clientes").update({ aniversario_enviado_ano: null }).eq("id", c.id);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("❌ aniversários:", err.message);
+  } finally {
+    aniversarioRodando = false;
+  }
+}
+setInterval(processarAniversarios, 30 * 60 * 1000).unref();
+setTimeout(processarAniversarios, 60 * 1000).unref();
+
 app.post("/api/v1/restaurante/:restaurant_id/crm-mensagem", async (req, res) => {
   try {
     const { restaurant_id } = req.params;
