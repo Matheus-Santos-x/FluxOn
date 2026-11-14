@@ -312,7 +312,7 @@ async function endPrepararEtapa(){
 })();
 
 
-/* ---------------- data de nascimento (só no plano Executive) ---------------- */
+/* ---------------- data de nascimento (todos os planos) ---------------- */
 const nascMascara = v => { const d = String(v || "").replace(/\D/g, "").slice(0, 8); return d.length > 4 ? `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}` : d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d; };
 const nascParaTela = iso => { const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ""; };
 function nascParaIso(txt){
