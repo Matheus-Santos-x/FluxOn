@@ -8564,14 +8564,13 @@ function ownerSeparar(orders, per) {
 }
 
 function ownerCanal(o) {
-  if (String(o.service_type || "").toLowerCase() === "delivery") return "delivery";
-  return o.table_number ? "salao" : "balcao";
+  return String(o.service_type || "").toLowerCase() === "delivery" ? "delivery" : "salao";
 }
 
 function ownerResumo(orders) {
   const r = {
     revenue: 0, orders: 0, cancelados: 0, ticket: 0,
-    canais: { salao: { orders: 0, revenue: 0 }, balcao: { orders: 0, revenue: 0 }, delivery: { orders: 0, revenue: 0 } }
+    canais: { salao: { orders: 0, revenue: 0 }, delivery: { orders: 0, revenue: 0 } }
   };
   for (const o of orders) {
     if (o.origin === "fidelidade") continue;
@@ -9483,9 +9482,9 @@ app.get("/owner/restaurants/:restaurant_id/financeiro", donoRota, async (req, re
     }
 
      // percorre os itens vendidos: quanto do faturamento tem custo conhecido (total e por canal)
-    const canalDe = (o) => (String(o.service_type || "").toLowerCase() === "delivery" ? "delivery" : o.table_number ? "salao" : "balcao");
+    const canalDe = (o) => (String(o.service_type || "").toLowerCase() === "delivery" ? "delivery" : "salao");
     const novoCanal = () => ({ receita: 0, pedidos: 0, valorTotal: 0, valorCoberto: 0, cmvCoberto: 0 });
-    const por = { salao: novoCanal(), balcao: novoCanal(), delivery: novoCanal() };
+    const por = { salao: novoCanal(), delivery: novoCanal() };
     let valorTotal = 0, valorCoberto = 0, cmvCoberto = 0;
     for (const o of vendas) {
       const c = por[canalDe(o)];
