@@ -100,7 +100,7 @@ function contaRender(){
       <h3>Seus dados</h3>
       <div class="field"><label for="contaNome">Nome</label><input type="text" id="contaNome" value="${escHtml(CONTA.nome)}" maxlength="80"></div>
       <div class="field"><label>Telefone (WhatsApp)</label><input type="text" value="${escHtml(telefoneMascara(CONTA.telefone))}" disabled></div>
-      ${CONTA.nascimento_ativo ? `<div class="field"><label for="contaNasc">Data de nascimento</label><input type="text" id="contaNasc" value="${escHtml(nascParaTela(CONTA.nascimento))}" placeholder="DD/MM/AAAA" inputmode="numeric" maxlength="10" autocomplete="bday"></div>` : ""}
+      ${CONTA.nascimento_ativo ? `<div class="field"><label for="contaNasc">Data de nascimento</label><input type="text" id="contaNasc" value="${escHtml(nascParaTela(CONTA.nascimento))}" placeholder="DD/MM/AAAA" inputmode="numeric" maxlength="10" autocomplete="bday"><small class="nasc-nota">Usamos somente para lembrar do seu aniversário.</small></div>` : ""}
       <button class="conta-btn" id="contaSalvarNome">Salvar</button>
     </section>
     <section class="conta-sec">
@@ -344,8 +344,8 @@ async function contaPerguntarNascimento(tentativa = 0){
           <h2>Quando é seu aniversário?</h2>
           <button class="sheet-back" id="nascFechar" aria-label="Fechar">✕</button>
         </div>
-        <p class="login-txt">${nome ? `${escHtml(nome)}, conta` : "Conta"} pra gente e a gente não esquece do seu dia. 🎂</p>
-        <div class="field"><label for="nascInp">Data de nascimento</label><input type="text" id="nascInp" placeholder="DD/MM/AAAA" inputmode="numeric" maxlength="10" autocomplete="bday"></div>
+        <p class="login-txt">${nome ? `${escHtml(nome)}, qual` : "Qual"} é a sua data de nascimento? 🎂</p>
+        <div class="field"><label for="nascInp">Data de nascimento</label><input type="text" id="nascInp" placeholder="DD/MM/AAAA" inputmode="numeric" maxlength="10" autocomplete="bday"><small class="nasc-nota">Usamos somente para lembrar do seu aniversário.</small></div>
         <button class="checkout-btn" id="nascSalvar">Salvar</button>
         <button type="button" class="nasc-pular" id="nascPular">Agora não</button>
       </div>
