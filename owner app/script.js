@@ -93,7 +93,7 @@
     const totDesp = despesas.reduce((s, [, v]) => s + v, 0);
     return { rev, imposto, liquida, cmv, bruto, despesas, totDesp, resultado: bruto - totDesp };
   }
-  const MARGEM_CANAL = { salao: 0.24, balcao: 0.20, delivery: 0.11 };
+  const MARGEM_CANAL = { salao: 0.24, delivery: 0.11 };
 
   /* ---------- API ---------- */
   function demoData(path) {
@@ -135,7 +135,7 @@
       kpis: { revenue: s.rev, orders: s.ped, ticket: s.rev / s.ped, cancelados: 3, growth: { revenue: 12.4, orders: -3.1, ticket: 8 }, roi: l.plan === "essential" ? null : 24.1, roi_locked: l.plan === "essential", plan_price: 4000 },
       timeline: t,
       horas: peso.map((w, h) => ({ h, revenue: Math.round(s.rev * w / ps), orders: Math.round(s.ped * w / ps) })),
-      canais: { salao: { orders: Math.round(s.ped * 0.4), revenue: s.rev * 0.42 }, balcao: { orders: Math.round(s.ped * 0.25), revenue: s.rev * 0.23 }, delivery: { orders: Math.round(s.ped * 0.35), revenue: s.rev * 0.35 } },
+      canais: { salao: { orders: Math.round(s.ped * 0.65), revenue: s.rev * 0.65 }, delivery: { orders: Math.round(s.ped * 0.35), revenue: s.rev * 0.35 } },
       top_produtos: [{ nome: "X-Burger", qty: 41 * dias }, { nome: "Batata Frita", qty: 33 * dias }, { nome: "Coca 350ml", qty: 28 * dias }, { nome: "Milkshake", qty: 17 * dias }, { nome: "Onion Rings", qty: 12 * dias }]
     };
   }
@@ -511,8 +511,8 @@ if (st.view === "overview") {
     return `<section class="card"><h2>${titulo}</h2>${barras(itens, pico)}${extra ? `<p class="peak">${extra}</p>` : ""}</section>`;
   }
   function secCanais(d) {
-    const total = d.canais.salao.revenue + d.canais.balcao.revenue + d.canais.delivery.revenue;
-    const nomes = { salao: "Salão", balcao: "Balcão", delivery: "Delivery" };
+    const total = d.canais.salao.revenue + d.canais.delivery.revenue;
+    const nomes = { salao: "Salão", delivery: "Delivery" };
     const rows = Object.keys(nomes).map((c) => {
       const v = d.canais[c], p = total > 0 ? (v.revenue / total) * 100 : 0;
       return `<div class="split-row"><div class="split-head"><span>${nomes[c]}</span><span>${brl(v.revenue)} · ${int(v.orders)} ped. · ${pct(p, 0)}</span></div><div class="bar"><i style="width:${p}%"></i></div></div>`;
@@ -542,7 +542,7 @@ if (st.view === "overview") {
     </table>${notas ? `<p class="foot" style="text-align:left">${notas}</p>` : ""}</section>`;
   }
   function secRent() {
-    const nomes = { salao: "Salão", balcao: "Balcão", delivery: "Delivery" }, cs = st.fin && st.fin.canais;
+    const nomes = { salao: "Salão", delivery: "Delivery" }, cs = st.fin && st.fin.canais;
     if (!cs || !finOk()) return `<section class="card"><h2>Rentabilidade por canal</h2><div class="empty">Cadastre suas compras e as fichas dos pratos em Custos e estoque para ver quanto sobra em cada canal.</div></section>`;
     const maxL = Math.max(...Object.values(cs).map((c) => c.lucro_bruto || 0), 1);
     const rows = Object.keys(nomes).filter((k) => cs[k].pedidos > 0).sort((a, b) => (cs[b].lucro_bruto || 0) - (cs[a].lucro_bruto || 0)).map((k) => {
@@ -670,7 +670,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
       <section class="card"><ul class="list">
         ${linhaMenu(d, "dre", "wallet", "Lucro e operação", "A conta do período: faturamento, custos e o que sobrou")}
         ${linhaMenu(d, "custos", "box", "Custos e estoque", "Compras, fichas dos pratos e despesas", "custos")}
-        ${linhaMenu(d, "canais", "pie", "Rentabilidade por canal", "Quanto sobra no salão, balcão e delivery", "canais")}
+        ${linhaMenu(d, "canais", "pie", "Rentabilidade por canal", "Quanto sobra no salão e no delivery", "canais")}
         ${linhaMenu(d, "caixa", "file", "Vendas por dia", "Dia a dia do período e os mais vendidos", "vendas")}
       </ul></section>`;
   }
@@ -773,7 +773,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
     return nota(d.period) + secCanais(d) + secRent(d);
   }
 
-  const ORIGENS = { ia_whatsapp: "IA no WhatsApp", cardapio: "Cardápio digital", pdv: "PDV (caixa)", pedido_manual: "Pedido manual / balcão", autoatendimento: "Autoatendimento", outros: "Outros" };
+  const ORIGENS = { ia_whatsapp: "IA no WhatsApp", cardapio: "Cardápio digital", pdv: "PDV (caixa)", pedido_manual: "Pedido manual", autoatendimento: "Autoatendimento", outros: "Outros" };
   function telaClientes() {
     const my = ++st.reqId;
     api(`/owner/restaurants/${encodeURIComponent(st.view)}/clientes?` + qs()).then((c) => {
@@ -804,7 +804,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
         <div class="split-row"><div class="split-head"><span>Novos</span><span>${pct(pn, 0)}</span></div><div class="bar"><i style="width:${pn}%"></i></div></div>
         <div class="split-row"><div class="split-head"><span>Recorrentes</span><span>${pct(pr, 0)}</span></div><div class="bar"><i style="width:${pr}%"></i></div></div></div></section>
       <section class="card"><h2>Origem dos pedidos</h2><div class="split">${c.origem.total ? linhas(c.origem.pedidos, ORIGENS) : `<p class="foot">Sem pedidos no período.</p>`}</div></section>
-      <section class="card"><h2>Tipo de serviço</h2><div class="split">${c.origem.total ? linhas(c.servico, { local: "No local (salão e balcão)", delivery: "Delivery" }) : `<p class="foot">Sem pedidos no período.</p>`}</div></section>`;
+      <section class="card"><h2>Tipo de serviço</h2><div class="split">${c.origem.total ? linhas(c.servico, { local: "No salão", delivery: "Delivery" }) : `<p class="foot">Sem pedidos no período.</p>`}</div></section>`;
   }
 
   /* ---------- fidelidade: menu ---------- */
