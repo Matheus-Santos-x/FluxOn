@@ -120,7 +120,8 @@ const rastreio = (() => {
   /* ---------- faixa no cardápio e item no menu lateral ---------- */
   function faixa() {
     let f = document.getElementById("rtFaixa");
-    const ativos = ativosEmOrdem();
+    // a faixa só mostra pedido em andamento: entregou ou cancelou, some na hora
+    const ativos = ativosEmOrdem().filter((c) => emAndamento(R.dados.get(c)));
     if (!ativos.length) { f?.remove(); document.querySelector(".rt-side")?.remove(); return; }
     if (!f) {
       f = document.createElement("button");
