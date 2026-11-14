@@ -3597,4 +3597,10 @@ input[type="number"] {
 #mesas-content > div > div { height: 132px !important; padding: 20px 22px !important; }
 #mesas-content [style*="Space Grotesk"] { font-size: 44px !important; }
 
+/* janela do pedido: sem rolagem lateral e barra discreta */
+#modal .pm-body { overflow-x: hidden; scrollbar-width: thin; scrollbar-color: rgba(249,115,115,.35) transparent; }
+#modal .pm-body::-webkit-scrollbar { width: 6px; height: 0; }
+#modal .pm-body::-webkit-scrollbar-track { background: transparent; }
+#modal .pm-body::-webkit-scrollbar-thumb { background: rgba(249,115,115,.35); border-radius: 6px; }
+
 
