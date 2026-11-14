@@ -2586,10 +2586,10 @@ app.post("/api/v1/pedidos", async (req, res) => {
       if (pausado) return sendError(res, 400, `${pausado} acabou de esgotar. Tire do carrinho para continuar.`);
     }
     if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0 && (ehDeliveryPublico || !order_id)) {
-      const { total: totalServidor, naoEncontrados } = await calcularTotalServidor(restaurant_id, normalizedItems);
+      const { total: totalServidor, naoEncontrados, divergentes } = await calcularTotalServidor(restaurant_id, normalizedItems);
       const diverge = Math.abs(totalServidor - (parseFloat(total_price_cliente) || 0)) > 0.01;
       if (naoEncontrados.length > 0 || diverge) {
-        console.warn(`💰 TOTAL[${AUTH_MODE}] restaurante=${restaurant_id} cliente=${total_price_cliente} servidor=${totalServidor} fora_do_cardapio=${JSON.stringify(naoEncontrados)}`);
+        console.warn(`💰 TOTAL[${AUTH_MODE}] restaurante=${restaurant_id} cliente=${total_price_cliente} servidor=${totalServidor} fora_do_cardapio=${JSON.stringify(naoEncontrados)} divergentes=${JSON.stringify(divergentes)}`);
         if (AUTH_MODE === "enforce") {
           if (naoEncontrados.length > 0) return sendError(res, 400, `Item fora do cardápio: ${naoEncontrados[0]}`);
           total_price = totalServidor;
@@ -4173,12 +4173,19 @@ function validarItensCardapio(cardapio, itens) {
       .trim();
   }
 
-  function buscarItemPorNome(nomeQuery) {
+  function buscarItemPorNome(nomeQuery, precoCliente) {
     const q = normalizarNome(nomeQuery);
-    return cardapio.find(item =>
-      normalizarNome(item.nome).includes(q) ||
-      q.includes(normalizarNome(item.nome))
-    );
+    if (!q) return undefined;
+    const porPreco = (lista) => lista.find(i => Math.abs((parseFloat(i.preco) || 0) - (parseFloat(precoCliente) || 0)) < 0.01) || lista[0];
+    // 1º: nome igual (se tiver dois iguais, o de preço igual ao do carrinho)
+    const iguais = cardapio.filter(item => normalizarNome(item.nome) === q);
+    if (iguais.length) return porPreco(iguais);
+    // 2º: o nome mais parecido (tamanho mais próximo), nunca o primeiro que aparecer
+    const parecidos = cardapio.filter(item => { const n = normalizarNome(item.nome); return n && (n.includes(q) || q.includes(n)); });
+    if (!parecidos.length) return undefined;
+    const dist = (i) => Math.abs(normalizarNome(i.nome).length - q.length);
+    const menor = Math.min(...parecidos.map(dist));
+    return porPreco(parecidos.filter(i => dist(i) === menor));
   }
 
   function getPrecoComFiltro(item, filtro) {
@@ -4291,7 +4298,7 @@ function validarItensCardapio(cardapio, itens) {
       }
     }
 
-    const encontrado = buscarItemPorNome(nomeBusca) || buscarItemPorNome(nomeCompleto);
+    const encontrado = buscarItemPorNome(nomeBusca, precoCliente) || buscarItemPorNome(nomeCompleto, precoCliente);
 
     if (!encontrado) {
       return {
@@ -4338,19 +4345,26 @@ async function calcularTotalServidor(restaurant_id, itens) {
   const { data: cardapio } = await supabase
     .from("cardapio").select("id, nome, preco, opcoes")
     .eq("restaurant_id", restaurant_id).eq("ativo", true);
+  const porId = new Map((cardapio || []).map(c => [String(c.id), c]));
   const entrada = itens.map(i => ({
     nome: i.name || i.nome || "",
     preco: i.price ?? i.preco ?? 0,
-    qty: Number(i.qty || i.quantidade || i.quantity || 1)
+    qty: Number(i.qty || i.quantidade || i.quantity || 1),
+    cardapio_id: i.cardapio_id != null ? String(i.cardapio_id) : ""
   }));
   const resultados = validarItensCardapio(cardapio || [], entrada);
   let total = 0;
-  const naoEncontrados = [];
+  const naoEncontrados = [], divergentes = [];
   resultados.forEach((r, idx) => {
-    if (!r.encontrado) { naoEncontrados.push(r.nome_cliente); return; }
-    total += r.preco_correto * entrada[idx].qty;
+    const e = entrada[idx];
+    // item simples que veio com o id do cardápio: o preço é o do cadastro (sem adivinhar pelo nome)
+    const doCadastro = e.cardapio_id && !/\s—\s/.test(e.nome) ? porId.get(e.cardapio_id) : null;
+    const preco = doCadastro ? (parseFloat(doCadastro.preco) || 0) : r.encontrado ? r.preco_correto : null;
+    if (preco === null) { naoEncontrados.push(r.nome_cliente); return; }
+    if (Math.abs(preco - (parseFloat(e.preco) || 0)) > 0.01) divergentes.push(`${e.nome}: carrinho ${e.preco} / cardápio ${preco}`);
+    total += preco * e.qty;
   });
-  return { total: Math.round(total * 100) / 100, naoEncontrados };
+  return { total: Math.round(total * 100) / 100, naoEncontrados, divergentes };
 }
 
 app.post("/api/v1/cardapio/:restaurant_id/validar-itens", async (req, res) => {
@@ -4370,6 +4384,33 @@ app.post("/api/v1/cardapio/:restaurant_id/validar-itens", async (req, res) => {
   if (error) return sendError(res, 500, "Erro ao buscar cardápio");
 
   return res.json({ resultados: validarItensCardapio(cardapio, itens) });
+});
+
+// "Mais pedidos" do app de pedidos: público, só os nomes (sem quantidades nem valores), guardado 10 min
+const maisPedidosCache = new Map();
+app.get("/api/v1/cardapio/:restaurant_id/mais-pedidos", async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    const c = maisPedidosCache.get(rid);
+    if (c && Date.now() - c.em < 10 * 60000) return res.json(c.lista);
+    const desde = new Date(Date.now() - 30 * 864e5).toISOString();
+    const { data, error } = await supabase.from("orders").select("itens")
+      .eq("restaurant_id", rid).gte("created_at", desde)
+      .not("status", "in", "(draft,cancelled,canceled)")
+      .order("created_at", { ascending: false }).limit(1000);
+    if (error) throw error;
+    const ranking = {};
+    for (const o of data || []) for (const it of o.itens || []) {
+      const nome = String(it.name || it.nome || "").split(/\s+—\s+/)[0].trim();
+      if (nome) ranking[nome] = (ranking[nome] || 0) + (Number(it.qty || it.quantidade) || 1);
+    }
+    const lista = Object.entries(ranking).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([nome]) => ({ nome }));
+    maisPedidosCache.set(rid, { em: Date.now(), lista });
+    return res.json(lista);
+  } catch (err) {
+    console.error("❌ mais-pedidos:", err.message);
+    return res.json([]);
+  }
 });
 
 // PATCH - Salva ordem das categorias
