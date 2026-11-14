@@ -881,54 +881,23 @@ app.get("/crm/:restaurant_id", async (req, res) => {
       });
     }
 
-    const { data, error } = await supabase
-      .from("orders")
-      .select("id, order_number, client_name, client_phone, status, itens, total_price, created_at, update_at, preparing_at, mounting_at, delivering_at, delivered_at, service_type, address, payment_method, notes")
-      .eq("restaurant_id", restaurant_id)
-      .order("created_at", { ascending: true });
-    
-    if (error) {
-      console.error("❌ Erro ao buscar pedidos para CRM:", error);
-      return sendError(res, 500, "Erro ao buscar dados do CRM");
+    // a soma por cliente é feita no banco (função crm_clientes); vem de 1000 em 1000
+    const result = [];
+    for (let de = 0; ; de += 1000) {
+      const { data, error } = await supabase.rpc("crm_clientes", { p_restaurant_id: restaurant_id }).range(de, de + 999);
+      if (error) {
+        console.error("❌ Erro ao buscar CRM:", error);
+        return sendError(res, 500, "Erro ao buscar dados do CRM");
+      }
+      result.push(...(data || []).map(c => ({
+        client_name: c.client_name || "(Sem nome)",
+        client_phone: c.client_phone,
+        orders: Number(c.orders) || 0,
+        total_spent: Number(c.total_spent) || 0,
+        last_order_at: c.last_order_at
+      })));
+      if (!data || data.length < 1000) break;
     }
-
-    const clients = Object.create(null);
-    
-    for (const o of data || []) {
-      const phoneKey = normalizePhone(o.client_phone);
-      const key = phoneKey || `anon-${o.id}`;
-
-      if (!clients[key]) {
-        clients[key] = {
-          client_name: (o.client_name || "").trim() || "(Sem nome)",
-          client_phone: phoneKey || "—",
-          orders: 0,
-          total_spent: 0,
-          last_order_at: null
-        };
-      }
-
-      clients[key].orders += 1;
-      clients[key].total_spent += parseFloat(o.total_price) || 0;
-      
-      const currTime = o.created_at ? new Date(o.created_at).getTime() : 0;
-      const prevTime = clients[key].last_order_at ? new Date(clients[key].last_order_at).getTime() : 0;
-
-      if (currTime >= prevTime) {
-        clients[key].last_order_at = o.created_at || clients[key].last_order_at;
-      }
-
-      const name = String(o.client_name || "").trim();
-      if (name && currTime >= prevTime) {
-        clients[key].client_name = name;
-      }
-    }
-
-    const result = Object.values(clients).sort((a, b) => {
-      const ta = a.last_order_at ? new Date(a.last_order_at).getTime() : 0;
-      const tb = b.last_order_at ? new Date(b.last_order_at).getTime() : 0;
-      return tb - ta;
-    });
 
     console.log(`✅ Clientes únicos: ${result.length}`);
     return res.json(result);
