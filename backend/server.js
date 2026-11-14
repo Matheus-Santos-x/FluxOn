@@ -9131,7 +9131,7 @@ app.get("/owner/restaurants/:restaurant_id/custos/compras", donoRota, async (req
     const { data, error } = await supabase
       .from("compras").select("id, insumo_id, quantidade, valor_total, fornecedor, origem, data_compra")
       .eq("restaurant_id", restaurant_id)
-      .order("data_compra", { ascending: false }).order("created_at", { ascending: false }).limit(30);
+      .order("data_compra", { ascending: false }).order("created_at", { ascending: false }).limit(300);
     if (error) throw error;
     const nomes = Object.fromEntries((await custoListarInsumos(restaurant_id, false)).map((i) => [i.id, i]));
     return res.json({
