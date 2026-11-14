@@ -941,20 +941,19 @@ for (let i = 1; i <= numMesas; i++) mesas.push({ tipo: "mesa", numero: i });
           onmouseout="this.style.borderColor='rgba(249,115,115,0.3)'">
             <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
               ${m.tipo === "balcao"
-                ? `<div style="font-size:20px; font-weight:900; color:rgba(252,228,228,1); letter-spacing:-0.02em;">Balcão</div>`
+                ? `<div style="font-size:20px; font-weight:900; letter-spacing:-0.02em; color:${ocupada ? 'rgba(252,228,228,1)' : 'rgba(252,228,228,0.55)'};">Balcão</div>`
                 : `<div style="font-family:'Space Grotesk',sans-serif; font-size:32px; font-weight:800; line-height:1; letter-spacing:-0.02em; color:${ocupada ? 'rgba(252,228,228,1)' : 'rgba(252,228,228,0.55)'};">${String(m.numero).padStart(2, "0")}</div>`}
-              <div style="display:flex; align-items:center; gap:6px; padding-top:3px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:${ocupada ? 'rgba(249,115,115,0.9)' : 'rgba(252,228,228,0.3)'};">
-                ${ocupada ? `<span style="width:7px;height:7px;border-radius:50%;background:rgba(249,115,115,1);animation:pulse 1.5s infinite;"></span>Ocupada` : 'Livre'}
-              </div>
+              ${ocupada ? `<span style="padding-top:4px; font-size:15px; font-weight:900; color:rgba(251,191,36,1); white-space:nowrap;">${formatCurrency(totalMesa)}</span>` : ''}
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; min-height:20px;">
-              ${ocupada ? `
-                ${impresso
-                  ? `<span style="font-size:11px; color:rgba(34,197,94,1); font-weight:700;">✅</span>`
-                  : `<span id="mesa-timer-${key}" style="font-size:11px; color:rgba(34,197,94,1); font-weight:700;">⏱ ...</span>`
-                }
-                <span style="font-size:15px; font-weight:900; color:rgba(251,191,36,1); white-space:nowrap;">${formatCurrency(totalMesa)}</span>
-              ` : ''}
+              ${ocupada
+                ? (impresso
+                    ? `<span style="font-size:11px; color:rgba(34,197,94,1); font-weight:700;">✅</span>`
+                    : `<span id="mesa-timer-${key}" style="font-size:11px; color:rgba(34,197,94,1); font-weight:700;">⏱ ...</span>`)
+                : `<span></span>`}
+              <div style="display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:${ocupada ? 'rgba(249,115,115,0.9)' : 'rgba(252,228,228,0.3)'};">
+                ${ocupada ? `<span style="width:7px;height:7px;border-radius:50%;background:rgba(249,115,115,1);animation:pulse 1.5s infinite;"></span>Ocupada` : 'Livre'}
+              </div>
             </div>
           </div>
         `;
