@@ -7474,7 +7474,7 @@ const endOrdenar = (l) => [...l].sort((a, b) => (b.principal ? 1 : 0) - (a.princ
 async function clienteDoToken(req) {
   const token = String(req.get("x-cliente-token") || "").trim();
   if (!token || token.length > 64) return null;
-  const { data } = await supabase.from("base_clientes").select("id, nome, numero, enderecos")
+  const { data } = await supabase.from("base_clientes").select("id, nome, numero, enderecos, nascimento")
     .eq("token_fidelidade", token).eq("restaurant_id", req.params.restaurant_id).maybeSingle();
   if (data) data.enderecos = Array.isArray(data.enderecos) ? data.enderecos : [];
   return data || null;
@@ -7517,7 +7517,9 @@ app.get("/api/v1/cliente/:restaurant_id/conta", async (req, res) => {
   try {
     const cli = await clienteDoToken(req);
     if (!cli) return sendError(res, 401, "Entre na sua conta de novo");
-    return res.json({ nome: cli.nome || "", telefone: cli.numero || "", enderecos: endOrdenar(cli.enderecos) });
+    const nascimentoAtivo = hasPlan(await getRestaurantPlan(req.params.restaurant_id), "executive");
+    return res.json({ nome: cli.nome || "", telefone: cli.numero || "", enderecos: endOrdenar(cli.enderecos),
+      nascimento_ativo: nascimentoAtivo, nascimento: nascimentoAtivo ? (cli.nascimento || null) : null });
   } catch (err) {
     console.error("❌ conta cliente:", err.message);
     return sendError(res, 500, "Erro ao carregar a conta");
@@ -7536,6 +7538,27 @@ app.patch("/api/v1/cliente/:restaurant_id/conta", async (req, res) => {
     return res.json({ success: true, nome });
   } catch (err) {
     console.error("❌ conta cliente (nome):", err.message);
+    return sendError(res, 500, "Erro ao salvar");
+  }
+});
+
+// data de nascimento do cliente (só no plano Executive), formato AAAA-MM-DD
+app.patch("/api/v1/cliente/:restaurant_id/nascimento", async (req, res) => {
+  try {
+    const cli = await clienteDoToken(req);
+    if (!cli) return sendError(res, 401, "Entre na sua conta de novo");
+    if (!hasPlan(await getRestaurantPlan(req.params.restaurant_id), "executive")) return sendError(res, 403, "Indisponível");
+    const m = String(req.body?.nascimento || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const d = m && new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    const idade = d ? (Date.now() - d.getTime()) / (365.25 * 864e5) : 0;
+    if (!d || d.getUTCDate() !== +m[3] || d.getUTCMonth() !== +m[2] - 1 || idade < 10 || idade > 110)
+      return sendError(res, 400, "Data de nascimento inválida");
+    const nascimento = `${m[1]}-${m[2]}-${m[3]}`;
+    const { error } = await supabase.from("base_clientes").update({ nascimento }).eq("id", cli.id);
+    if (error) throw error;
+    return res.json({ success: true, nascimento });
+  } catch (err) {
+    console.error("❌ conta cliente (nascimento):", err.message);
     return sendError(res, 500, "Erro ao salvar");
   }
 });
