@@ -2116,7 +2116,7 @@ async function loadSettingsData() {
   }
 
   // Webhooks do vale-presente e da reserva de mesa
-  for (const rota of ["vale", "reserva"]) {
+for (const rota of ["vale", "reserva", "aniversario"]) {
     try {
       const r = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/webhook-${rota}`, { headers: buildHeaders() });
       const d = await r.json();
@@ -2288,7 +2288,7 @@ document.getElementById("btn-salvar-webhook-reclamacao")?.addEventListener("clic
 });
 
 // salvar os webhooks do vale-presente e da reserva de mesa
-for (const rota of ["vale", "reserva"]) {
+for (const rota of ["vale", "reserva", "aniversario"]) {
   document.getElementById(`btn-salvar-webhook-${rota}`)?.addEventListener("click", async () => {
     const rid = getRestaurantId();
     const url = document.getElementById(`settings-webhook-${rota}`)?.value?.trim();
