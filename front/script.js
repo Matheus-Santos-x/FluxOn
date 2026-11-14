@@ -583,12 +583,13 @@ function showHome() {
   if (el) el.textContent = nomeRest;
 
   const nomeEl = document.getElementById("home-greeting-name");
-  if (nomeEl) nomeEl.textContent = nomeUser ? `, ${nomeUser.split(" ")[0]}` : "";
+  const primeiroNome = nomeUser.trim().split(" ")[0];
+  if (nomeEl) nomeEl.textContent = primeiroNome ? primeiroNome.charAt(0).toUpperCase() + primeiroNome.slice(1) : "";
 
   const hora = new Date().getHours();
   const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
   const greetingEl = document.getElementById("home-greeting-label");
-  if (greetingEl) greetingEl.textContent = saudacao;
+  if (greetingEl) greetingEl.textContent = primeiroNome ? `${saudacao},` : saudacao;
 
   renderHomeStats();
 }
@@ -708,7 +709,7 @@ function _atualizarStatusHome() {
   } else if (mesasVelhas.length > 0) {
     titleEl.textContent = "Mesa aberta há mais de 1h30";
     titleEl.style.color = "rgba(251,191,36,1)";
-    subEl.textContent   = `Mesa${mesasVelhas.length > 1 ? "s" : ""} ${mesasVelhas.map(m => m.label).join(", ")} — por favor, verificar.`;
+    subEl.textContent   = `${mesasVelhas.map(m => m.label).join(", ")} — por favor, verificar.`;
   } else if (notasComErro.length > 0) {
     titleEl.textContent = "Nota fiscal com erro ⚠️";
     titleEl.style.color = "rgba(251,191,36,1)";
@@ -756,7 +757,7 @@ function _atualizarUltimoPedido() {
 
   document.getElementById("home-ultimo-cliente").textContent = ult.client_name || "Cliente";
   document.getElementById("home-ultimo-info").textContent    =
-    `${statusLabels[ult._frontStatus] || ult._frontStatus} · há ${minAtras < 1 ? "menos de 1" : minAtras} min`;
+    `${statusLabels[ult._frontStatus] || ult._frontStatus} · há ${minAtras < 1 ? "menos de 1 min" : minAtras < 60 ? `${minAtras} min` : `${Math.floor(minAtras / 60)}h${String(minAtras % 60).padStart(2, "0")}`}`;
   document.getElementById("home-ultimo-valor").textContent   = formatCurrency(ult.total_price || 0);
 
   const badge = document.getElementById("home-ultimo-badge");
