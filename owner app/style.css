@@ -369,3 +369,19 @@ body.menu-aberto .topbar{z-index:30}
 .split-head>span:last-child{display:inline-flex;align-items:center;justify-content:flex-end;gap:2px;flex-wrap:wrap}
 .split-head .btn.link.small{min-height:30px;padding:2px 7px;font-size:15px}
 .rank li,.rank button,.rank button>*{min-width:0}
+
+/* ===== Custos: ingredientes (PC lado a lado) e histórico de compras ===== */
+.cu-ing-grade { display: grid; gap: 14px; }
+.cu-ing-dir { display: grid; gap: 14px; align-content: start; }
+@media (min-width: 900px) {
+  .cu-ing-grade { grid-template-columns: 380px minmax(0, 1fr); align-items: start; }
+  .cu-ing-grade > .card:first-child { position: sticky; top: 140px; }
+}
+.cu-calc { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 12px 14px; border-radius: 12px; border: 1px dashed color-mix(in srgb, var(--red) 55%, transparent); background: color-mix(in srgb, var(--red) 8%, transparent); font-size: 13px; font-weight: 600; color: var(--muted); }
+.cu-calc b { font: 800 17px var(--display); color: #fbbf24; white-space: nowrap; }
+.cu-hist-btn { background: var(--bg-2); border: 1px solid var(--line); padding: 14px 16px; }
+.cu-hist-btn:hover { background: var(--bg-3); }
+.cu-hist-topo { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.cu-hist-topo b { display: block; font: 800 22px var(--display); color: #fbbf24; }
+.cu-hist-topo input { max-width: 300px; }
+.cu-dia { margin: 16px 0 4px; font-size: 12.5px; font-weight: 800; color: var(--muted); }
