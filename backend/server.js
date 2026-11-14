@@ -7517,9 +7517,8 @@ app.get("/api/v1/cliente/:restaurant_id/conta", async (req, res) => {
   try {
     const cli = await clienteDoToken(req);
     if (!cli) return sendError(res, 401, "Entre na sua conta de novo");
-    const nascimentoAtivo = hasPlan(await getRestaurantPlan(req.params.restaurant_id), "executive");
     return res.json({ nome: cli.nome || "", telefone: cli.numero || "", enderecos: endOrdenar(cli.enderecos),
-      nascimento_ativo: nascimentoAtivo, nascimento: nascimentoAtivo ? (cli.nascimento || null) : null });
+      nascimento_ativo: true, nascimento: cli.nascimento || null });
   } catch (err) {
     console.error("❌ conta cliente:", err.message);
     return sendError(res, 500, "Erro ao carregar a conta");
@@ -7542,12 +7541,11 @@ app.patch("/api/v1/cliente/:restaurant_id/conta", async (req, res) => {
   }
 });
 
-// data de nascimento do cliente (só no plano Executive), formato AAAA-MM-DD
+// data de nascimento do cliente (todos os planos; as campanhas do Executive usam), formato AAAA-MM-DD
 app.patch("/api/v1/cliente/:restaurant_id/nascimento", async (req, res) => {
   try {
     const cli = await clienteDoToken(req);
     if (!cli) return sendError(res, 401, "Entre na sua conta de novo");
-    if (!hasPlan(await getRestaurantPlan(req.params.restaurant_id), "executive")) return sendError(res, 403, "Indisponível");
     const m = String(req.body?.nascimento || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
     const d = m && new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
     const idade = d ? (Date.now() - d.getTime()) / (365.25 * 864e5) : 0;
