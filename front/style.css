@@ -3611,7 +3611,17 @@ input[type="number"] {
 #mesa-drawer-modal .md-total { position: sticky; bottom: 0; background: #0d0d0d; padding-bottom: 20px !important; }
 
 /* ===== Caixa: turno aberto (minimalista, com respiro) ===== */
-#caixa-modal .cxt { width: min(560px, 94vw); max-width: 560px; max-height: 92vh; overflow-y: auto; box-sizing: border-box; padding: 40px 44px 36px; display: flex; flex-direction: column; gap: 30px; background: #0d0d0f; border-radius: 22px; }
+#caixa-modal .cxt { width: min(900px, 94vw); max-width: 900px; max-height: 92vh; overflow-y: auto; box-sizing: border-box; padding: 40px 48px 36px; display: flex; flex-direction: column; gap: 30px; background: #0d0d0f; border-radius: 22px; }
+/* duas colunas: resumo à esquerda, formas de pagamento à direita */
+.cxt-corpo { display: grid; grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr); gap: 0 44px; align-items: center; }
+.cxt-esq { display: flex; flex-direction: column; gap: 30px; }
+.cxt-vsep { align-self: stretch; width: 0; border-left: 1px solid transparent; border-image: linear-gradient(180deg, transparent, rgba(249,115,115,.85) 18%, rgba(249,115,115,.85) 82%, transparent) 1; }
+/* barra de rolagem no tema: fina, vermelha, sem setas */
+#caixa-modal, #caixa-modal .cxt { scrollbar-width: thin; scrollbar-color: rgba(239,68,68,.65) transparent; }
+#caixa-modal::-webkit-scrollbar, #caixa-modal .cxt::-webkit-scrollbar { width: 6px; }
+#caixa-modal::-webkit-scrollbar-track, #caixa-modal .cxt::-webkit-scrollbar-track { background: transparent; margin: 20px 0; }
+#caixa-modal::-webkit-scrollbar-thumb, #caixa-modal .cxt::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(239,68,68,.15), rgba(239,68,68,.8), rgba(239,68,68,.15)); border-radius: 6px; }
+#caixa-modal::-webkit-scrollbar-button, #caixa-modal .cxt::-webkit-scrollbar-button { display: none; }
 .cxt-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .cxt-topo h3 { margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 800; color: #fff; }
 .cxt-quem { display: flex; align-items: center; gap: 10px; margin-top: 18px; font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; color: #fff; }
@@ -3642,6 +3652,7 @@ input[type="number"] {
 .cxt-acoes button { height: 48px; border-radius: 14px; font-family: inherit; font-size: 14px; font-weight: 800; background: transparent; cursor: pointer; }
 .cxt-min { border: 1px solid rgba(255,255,255,.1); color: rgba(252,228,228,.85); }
 .cxt-fechar { border: 1px solid rgba(239,68,68,.55); color: #f87171; }
+@media (max-width: 760px) { .cxt-corpo { grid-template-columns: 1fr; gap: 30px; } .cxt-vsep { display: none; } }
 @media (max-width: 520px) { #caixa-modal .cxt { padding: 28px 22px; } .cxt-heroi b { font-size: 42px; } }
 
 
