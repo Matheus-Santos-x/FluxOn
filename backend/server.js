@@ -1952,6 +1952,57 @@ app.patch("/api/v1/restaurante/:restaurant_id/reservas-mesa/:id", requireAuth, r
   }
 });
 
+// Cobrar da mesa: o sinal da reserva de quem já chegou (pago no Pix, desconta na conta)
+app.get("/api/v1/restaurante/:restaurant_id/reservas-mesa/credito", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const mesa = parseInt(req.query.mesa, 10);
+    if (!mesa) return res.json({ credito: null });
+    const { data } = await supabase.from("reservas_mesa")
+      .select("id, nome, valor_pago").eq("restaurant_id", req.params.restaurant_id).eq("mesa", mesa)
+      .eq("status", "chegou").is("credito_usado_em", null)
+      .gte("inicio", new Date(Date.now() - 12 * 3600e3).toISOString())
+      .order("inicio", { ascending: false }).limit(1).maybeSingle();
+    return res.json({ credito: data && Number(data.valor_pago) > 0 ? { id: data.id, nome: data.nome, valor: Number(data.valor_pago) } : null });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao buscar o sinal da reserva");
+  }
+});
+
+// conta finalizada: marca o sinal como usado; se sobrou, a sobra vira vale-presente no WhatsApp do cliente
+app.post("/api/v1/restaurante/:restaurant_id/reservas-mesa/:id/usar", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    const usado = Math.max(0, Math.round((Number(req.body?.valor) || 0) * 100) / 100);
+    const { data: r } = await supabase.from("reservas_mesa")
+      .update({ credito_usado: usado, credito_usado_em: new Date().toISOString() })
+      .eq("id", req.params.id).eq("restaurant_id", rid).is("credito_usado_em", null)
+      .select().maybeSingle();
+    if (!r) return res.json({ success: true, ja_usado: true }); // já usado antes: não gera vale de novo
+    const sobra = Math.round((Number(r.valor_pago) - usado) * 100) / 100;
+    if (sobra < 0.01) return res.json({ success: true, sobra: 0 });
+    const cfg = await voucherConfig(rid);
+    const agora = new Date(), expira = new Date(Date.now() + cfg.validade * 864e5);
+    let vale = null;
+    for (let i = 0; i < 5 && !vale; i++) {
+      const { data, error } = await supabase.from("vouchers").insert([{
+        restaurant_id: rid, codigo: voucherNovoCodigo(), valor: sobra, saldo: sobra, status: "ativo",
+        comprador_nome: r.nome, comprador_telefone: r.telefone, presente: false,
+        validade_dias: cfg.validade, pago_em: agora.toISOString(), expira_em: expira.toISOString()
+      }]).select().single();
+      if (!error) vale = data; else if (error.code !== "23505") throw error;
+    }
+    if (!vale) throw new Error("não deu pra gerar o vale da sobra");
+    await supabase.from("reservas_mesa").update({ vale_sobra: vale.codigo }).eq("id", r.id);
+    const { data: rest } = await supabase.from("restaurants").select("name").eq("id", rid).maybeSingle();
+    await voucherWhatsApp(rid, rest?.name || "", r.nome, r.telefone,
+      `🎁 ${String(r.nome || "").split(" ")[0] || "Olá"}, sobraram ${voucherMoeda(sobra)} do sinal da sua reserva e eles viraram um vale pra sua próxima visita!\n\nCódigo: *${vale.codigo}*\nVale até ${voucherData(vale.expira_em)}.`);
+    return res.json({ success: true, sobra, vale: vale.codigo });
+  } catch (err) {
+    console.error("❌ sinal da reserva:", err.message);
+    return sendError(res, 500, "Erro ao usar o sinal da reserva");
+  }
+});
+
 // página de reservas: regras e aparência
 app.get("/api/v1/reservas/:restaurant_id/info", async (req, res) => {
   try {
@@ -2392,7 +2443,8 @@ async function estornarSeloFidelidade(order) {
 // "pix R$30.00 + dinheiro R$20.00" → [{ metodo: "pix", valor: 30 }, { metodo: "dinheiro", valor: 20 }]
 // as partes são ajustadas ao total DESTE pedido (mesa paga junta antiga trazia a conta inteira em cada pedido)
 const tipoPagamento = (t) =>
-  t.includes("refeicao") || t.includes("refeição") || t.includes("alimentacao") || t.includes("alimentação") ? "vale_refeicao"
+  t.includes("reserva") ? "reserva"
+  : t.includes("refeicao") || t.includes("refeição") || t.includes("alimentacao") || t.includes("alimentação") ? "vale_refeicao"
   : t.includes("vale") || t.includes("voucher") ? "voucher"
   : t.includes("pix") ? "pix"
   : t.includes("credito") || t.includes("crédito") ? "credito"
@@ -7859,7 +7911,7 @@ const CAIXA_METODOS = ["dinheiro", "pix", "credito", "debito", "maquininha", "va
 async function totaisDoCaixa(caixa, ate) {
   const ini = new Date(caixa.created_at).toISOString();
   const fim = new Date(ate || Date.now());
-  const t = { total_pedidos: 0, valor_outros: 0, qtd_outros: 0 };
+  const t = { total_pedidos: 0, valor_outros: 0, qtd_outros: 0, valor_reserva: 0, qtd_reserva: 0 };
   CAIXA_METODOS.forEach(m => { t[`valor_${m}`] = 0; t[`qtd_${m}`] = 0; });
   for (let de = 0; ; de += 1000) {
     const { data, error } = await supabase.from("orders")
@@ -7872,7 +7924,7 @@ async function totaisDoCaixa(caixa, ate) {
       if (new Date(o.delivered_at || o.update_at) > fim) continue;
       t.total_pedidos++;
       for (const p of repartirPagamento(o.payment_method, parseFloat(o.total_price || 0))) {
-        const m = CAIXA_METODOS.includes(p.metodo) ? p.metodo : "outros";
+        const m = CAIXA_METODOS.includes(p.metodo) || p.metodo === "reserva" ? p.metodo : "outros"; // sinal da reserva: separado, não é dinheiro da gaveta
         if (m === "outros") console.warn(`⚠️ Caixa: pagamento "${o.payment_method || "(vazio)"}" do pedido #${o.order_number} sem forma reconhecida`);
         t[`valor_${m}`] = Math.round((t[`valor_${m}`] + p.valor) * 100) / 100;
         t[`qtd_${m}`]++;
