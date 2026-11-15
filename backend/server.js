@@ -2624,6 +2624,11 @@ app.post("/api/v1/pedidos", async (req, res) => {
         }
       }
     }
+
+        if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0) {
+      const pausado = await itemPausado(restaurant_id, normalizedItems);
+      if (pausado) return sendError(res, 400, `${pausado} acabou de esgotar. Tire do carrinho para continuar.`);
+    }
     // 🪑 mesa reservada: o cardápio da mesa não abre conta nela (a equipe leva o cliente pra outra mesa)
     if (publico && table_number && ["autoatendimento", "mesa"].includes(String(finalOrigin).toLowerCase())) {
       const reservada = (await mesasReservadasAgora(restaurant_id)).get(Number(table_number));
