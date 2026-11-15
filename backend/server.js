@@ -959,7 +959,6 @@ app.get("/orders/:restaurant_id", requireOwner, async (req, res) => {
       .select("*")
       .eq("restaurant_id", restaurant_id)
       .or(`status.in.(pending,preparing,mounting,delivering),created_at.gte.${cutoff.toISOString()}`)
-      .not("origin", "in", `(${ORIGINS_FORA_DO_KANBAN.join(",")})`)
        .not("status", "in", "(draft,scheduled)") // rascunho e agendado não aparecem no Kanban
       .order("created_at", { ascending: true });
 
