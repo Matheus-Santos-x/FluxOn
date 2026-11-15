@@ -3610,4 +3610,39 @@ input[type="number"] {
 #mesa-drawer-modal .md-itens::-webkit-scrollbar-thumb { background: rgba(249,115,115,.35); border-radius: 6px; }
 #mesa-drawer-modal .md-total { position: sticky; bottom: 0; background: #0d0d0d; padding-bottom: 20px !important; }
 
+/* ===== Caixa: turno aberto (minimalista, com respiro) ===== */
+#caixa-modal .cxt { width: min(560px, 94vw); max-width: 560px; max-height: 92vh; overflow-y: auto; box-sizing: border-box; padding: 40px 44px 36px; display: flex; flex-direction: column; gap: 30px; background: #0d0d0f; border-radius: 22px; }
+.cxt-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.cxt-topo h3 { margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 800; color: #fff; }
+.cxt-quem { display: flex; align-items: center; gap: 10px; margin-top: 18px; font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; color: #fff; }
+.cxt-quem i { width: 9px; height: 9px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,.18); }
+.cxt-quando { margin: 6px 0 0 19px; font-size: 14.5px; font-weight: 700; color: rgba(252,228,228,.8); }
+.cxt-quando b { color: #4ade80; }
+.cxt-x { width: 36px; height: 36px; margin: -6px -8px 0 0; border: 0; border-radius: 10px; background: transparent; color: rgba(252,228,228,.7); font-size: 22px; cursor: pointer; }
+.cxt-sep { display: block; height: 0; border-top: 1px solid transparent; border-image: linear-gradient(90deg, transparent, rgba(249,115,115,.85) 18%, rgba(249,115,115,.85) 82%, transparent) 1; }
+.cxt-heroi { text-align: center; display: flex; flex-direction: column; gap: 10px; }
+.cxt-heroi small { font-size: 13px; font-weight: 700; color: rgba(252,228,228,.45); }
+.cxt-heroi b { font-family: 'Space Grotesk', sans-serif; font-size: 56px; font-weight: 800; line-height: 1; color: #fff; letter-spacing: -.02em; }
+.cxt-fatos { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; }
+.cxt-fatos span { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; font-weight: 700; color: rgba(252,228,228,.45); }
+.cxt-fatos b { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; color: #fce4e4; }
+.cxt-fatos .canc { color: #f87171; }
+.cxt-gaveta { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.cxt-gaveta small { font-size: 14px; font-weight: 700; color: rgba(252,228,228,.6); }
+.cxt-gaveta em { display: block; margin-top: 6px; font-style: normal; font-size: 12.5px; font-weight: 600; color: rgba(252,228,228,.4); }
+.cxt-gaveta b { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 800; color: #fbbf24; white-space: nowrap; }
+.cxt-rot { display: block; margin-bottom: 18px; font-size: 13px; font-weight: 700; color: rgba(252,228,228,.45); }
+.cxt-formas { display: flex; flex-direction: column; gap: 14px; }
+.cxt-forma { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 14.5px; font-weight: 700; color: rgba(252,228,228,.85); }
+.cxt-forma + .cxt-forma { padding-top: 14px; border-top: 1px solid rgba(249,115,115,.22); }
+.cxt-forma em { font-style: normal; font-size: 12.5px; font-weight: 600; color: rgba(252,228,228,.35); margin-left: 8px; }
+.cxt-forma b { font-family: 'Space Grotesk', sans-serif; font-size: 15.5px; font-weight: 700; color: #fff; }
+.cxt-forma.fora, .cxt-forma.fora b { color: rgba(252,228,228,.4); }
+.cxt-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cxt-acoes button { height: 48px; border-radius: 14px; font-family: inherit; font-size: 14px; font-weight: 800; background: transparent; cursor: pointer; }
+.cxt-min { border: 1px solid rgba(255,255,255,.1); color: rgba(252,228,228,.85); }
+.cxt-fechar { border: 1px solid rgba(239,68,68,.55); color: #f87171; }
+@media (max-width: 520px) { #caixa-modal .cxt { padding: 28px 22px; } .cxt-heroi b { font-size: 42px; } }
+
+
 
