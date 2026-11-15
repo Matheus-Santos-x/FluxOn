@@ -8006,7 +8006,7 @@ async function showCaixa() {
   if (!rid) return;
 
   try {
-    const resp = await fetch(`${API_BASE}/api/v1/caixa/${rid}/aberto`);
+    const resp = await fetch(`${API_BASE}/api/v1/caixa/${rid}/aberto`, { headers: buildHeaders() });
     const data = await resp.json();
     if (!data.aberto || !data.caixa) {
       showAberturaCaixa();
@@ -8017,18 +8017,26 @@ async function showCaixa() {
     showAberturaCaixa();
     return;
   }
+  const c = _caixaAberto;
 
-  let d;
+  // cancelados do turno (desde que o caixa abriu); o resto vem do próprio caixa
+  let d = {};
   try {
-    const resp = await fetch(`${API_BASE}/api/v1/metrics/${rid}/resumo-dia`);
-    d = await resp.json();
-    if (!resp.ok) throw new Error();
-  } catch(e) {
-    console.error("Erro ao carregar caixa:", e);
-    return;
-  }
+    const resp = await fetch(`${API_BASE}/api/v1/metrics/${rid}/resumo-dia?desde=${encodeURIComponent(c.created_at)}`, { headers: buildHeaders() });
+    if (resp.ok) d = await resp.json();
+  } catch(e) {}
 
-  const hoje = new Date(d.data);
+  const FORMAS = [["dinheiro", "Dinheiro"], ["pix", "Pix"], ["credito", "Crédito"], ["debito", "Débito"], ["vale_refeicao", "Vale-refeição"], ["voucher", "Voucher"]];
+  const n = (v) => Number(v) || 0;
+  const vendido = FORMAS.reduce((s, [m]) => s + n(c[`valor_${m}`]), 0) + n(c.valor_reserva) + n(c.valor_outros);
+  const pedidos = n(c.total_pedidos);
+  const gaveta = n(c.fundo_inicial) + n(c.valor_dinheiro);
+  const turnoTxt = { manha: "Turno da manhã", "manhã": "Turno da manhã", tarde: "Turno da tarde", noite: "Turno da noite" }[String(c.turno || "").toLowerCase()] || (c.turno ? `Turno ${escapeHtml(c.turno)}` : "Turno");
+  const linha = (nome, qtd, valor, fora) =>
+    `<div class="cxt-forma${fora ? " fora" : ""}"><span>${nome}<em>${qtd}</em></span><b>${_fmtCurrency(valor)}</b></div>`;
+  const formas = FORMAS.map(([m, nome]) => linha(nome, n(c[`qtd_${m}`]), n(c[`valor_${m}`]))).join("")
+    + (n(c.valor_reserva) > 0 ? linha("Reserva (já paga)", n(c.qtd_reserva), n(c.valor_reserva), true) : "");
+
   const existing = document.getElementById("caixa-modal");
   if (existing) existing.remove();
 
@@ -8036,108 +8044,44 @@ async function showCaixa() {
   modal.id = "caixa-modal";
   modal.className = "modal-backdrop open";
   modal.innerHTML = `
-    <div class="modal confirm-modal" style="max-width:600px; max-height:92vh; overflow-y:auto;">
-      <div class="modal-header">
+    <div class="modal cxt" role="dialog" aria-label="Caixa">
+      <div class="cxt-topo">
         <div>
-          <h3 style="margin:0;">Caixa</h3>
-          <p style="color:var(--muted); font-size:12px; margin:4px 0 0 0;">
-            ${hoje.toLocaleDateString("pt-BR", { weekday:"long", day:"2-digit", month:"long", year:"numeric" })}
-          </p>
+          <h3>Caixa</h3>
+          <div class="cxt-quem"><i aria-hidden="true"></i>${escapeHtml(c.operador || "")}</div>
+          <div class="cxt-quando">${turnoTxt} · aberto há <b>${_fmtDuracao(c.created_at)}</b></div>
         </div>
-        <button class="icon-button" onclick="document.getElementById('caixa-modal').remove()">×</button>
+        <button class="cxt-x" aria-label="Fechar" onclick="document.getElementById('caixa-modal').remove()">×</button>
       </div>
 
-      <div class="modal-body" style="gap:14px;">
+      <span class="cxt-sep" aria-hidden="true"></span>
 
-        <!-- STATUS DO TURNO -->
-        <div style="${_sectionStyle()} display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-          <div>
-            <div style="font-size:10px; font-weight:700; color:rgba(34,197,94,0.8); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">Turno aberto</div>
-            <div style="font-size:15px; font-weight:700; color:rgba(252,228,228,0.95);">${_caixaAberto.operador}</div>
-            <div style="font-size:12px; color:rgba(252,228,228,0.4); margin-top:2px;">${_caixaAberto.turno} · ${_fmtDuracao(_caixaAberto.created_at)} em andamento</div>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-size:10px; color:rgba(252,228,228,0.4); margin-bottom:2px;">Fundo inicial</div>
-            <div style="font-size:18px; font-weight:900; color:rgba(251,191,36,1); font-family:'Space Grotesk',sans-serif;">${_fmtCurrency(_caixaAberto.fundo_inicial)}</div>
-          </div>
-        </div>
-
-        <!-- MÉTRICAS -->
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <div style="${_cardStyle(34,197,94)}">
-            <div style="${_labelStyle(34,197,94)}">Pedidos</div>
-            <div style="font-size:34px; font-weight:900; color:rgba(34,197,94,1); font-family:'Space Grotesk',sans-serif;">${d.total_pedidos}</div>
-          </div>
-          <div style="${_cardStyle(251,191,36)}">
-            <div style="${_labelStyle(251,191,36)}">Faturamento</div>
-            <div style="font-size:26px; font-weight:900; color:rgba(251,191,36,1); font-family:'Space Grotesk',sans-serif;">${_fmtCurrency(d.faturamento)}</div>
-          </div>
-          <div style="${_cardStyle(59,130,246)}">
-            <div style="${_labelStyle(59,130,246)}">Ticket Médio</div>
-            <div style="font-size:26px; font-weight:900; color:rgba(59,130,246,1); font-family:'Space Grotesk',sans-serif;">${_fmtCurrency(d.ticket_medio)}</div>
-          </div>
-          <div style="${_cardStyle(239,68,68)}">
-            <div style="${_labelStyle(239,68,68)}">Cancelados</div>
-            <div style="font-size:34px; font-weight:900; color:rgba(239,68,68,1); font-family:'Space Grotesk',sans-serif;">${d.cancelados}</div>
-          </div>
-        </div>
-
-        <!-- TIPO DE PEDIDO -->
-        <div style="${_sectionStyle()}">
-          ${_sectionTitle("🚚", "Tipo de Pedido")}
-          <div style="display:flex; gap:10px;">
-            <div style="flex:1; text-align:center; padding:10px; background:rgba(251,191,36,0.1); border-radius:10px; border:1px solid rgba(251,191,36,0.3);">
-              <div style="font-size:10px; color:rgba(251,191,36,0.8); font-weight:700; margin-bottom:4px;">DELIVERY</div>
-              <div style="font-size:24px; font-weight:900; color:rgba(251,191,36,1);">${d.delivery}</div>
-            </div>
-            <div style="flex:1; text-align:center; padding:10px; background:rgba(139,92,246,0.1); border-radius:10px; border:1px solid rgba(139,92,246,0.3);">
-              <div style="font-size:10px; color:rgba(139,92,246,0.8); font-weight:700; margin-bottom:4px;">LOCAL</div>
-              <div style="font-size:24px; font-weight:900; color:rgba(139,92,246,1);">${d.local}</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- PAGAMENTOS -->
-        <div style="${_sectionStyle()}">
-          ${_sectionTitle("💳", "Por Forma de Pagamento")}
-          ${Object.keys(d.por_pagamento).length === 0
-            ? `<p style="color:var(--muted); font-size:13px;">Nenhum pedido finalizado ainda.</p>`
-            : Object.entries(d.por_pagamento).map(([metodo, info]) => `
-              <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.07);">
-                <div>
-                  <span style="font-weight:700; font-size:14px; color:rgba(252,228,228,0.95); text-transform:capitalize;">${metodo}</span>
-                  <span style="color:var(--muted); font-size:12px; margin-left:8px;">${info.qtd} pedido(s)</span>
-                </div>
-                <span style="font-weight:800; font-size:15px; color:rgba(251,191,36,1);">${_fmtCurrency(info.valor)}</span>
-              </div>
-            `).join("") + `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0 0;">
-              <span style="font-weight:900; font-size:14px; color:rgba(252,228,228,0.95);">Total</span>
-              <span style="font-weight:900; font-size:16px; color:rgba(34,197,94,1);">${_fmtCurrency(d.faturamento)}</span>
-            </div>`
-          }
-        </div>
-
-        <!-- TOP ITENS -->
-        ${d.top_itens && d.top_itens.length > 0 ? `
-        <div style="${_sectionStyle()}">
-          ${_sectionTitle("🏆", "Itens Mais Vendidos")}
-          ${d.top_itens.map(({ nome, qty }, i) => `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
-              <div style="display:flex; align-items:center; gap:10px;">
-                <span style="font-size:11px; font-weight:900; color:rgba(252,228,228,0.3); width:16px;">${i + 1}</span>
-                <span style="font-weight:700; font-size:14px; color:rgba(252,228,228,0.9);">${nome}</span>
-              </div>
-              <span style="font-weight:800; font-size:13px; color:rgba(249,115,115,1);">${qty}x</span>
-            </div>
-          `).join("")}
-        </div>` : ""}
-
+      <div class="cxt-heroi"><small>Vendido no turno</small><b>${_fmtCurrency(vendido)}</b></div>
+      <div class="cxt-fatos">
+        <span>Pedidos<b>${pedidos}</b></span>
+        <span>Ticket médio<b>${_fmtCurrency(pedidos ? vendido / pedidos : 0)}</b></span>
+        <span>Cancelados<b class="canc">${n(d.cancelados)}</b></span>
       </div>
 
-      <div class="modal-actions" style="justify-content:space-between; flex-wrap:wrap; gap:8px;">
-        <button class="ghost-button" onclick="document.getElementById('caixa-modal').remove()">Minimizar</button>
-        <button class="ghost-button" onclick="_showFechamentoCaixa()" style="border-color:rgba(239,68,68,0.5); color:rgba(239,68,68,1);">Fechar Caixa</button>
+      <span class="cxt-sep" aria-hidden="true"></span>
+
+      <div class="cxt-gaveta">
+        <small>Na gaveta<em>Fundo ${_fmtCurrency(n(c.fundo_inicial))} + dinheiro ${_fmtCurrency(n(c.valor_dinheiro))}</em></small>
+        <b>${_fmtCurrency(gaveta)}</b>
+      </div>
+
+      <span class="cxt-sep" aria-hidden="true"></span>
+
+      <div>
+        <span class="cxt-rot">Formas de pagamento</span>
+        <div class="cxt-formas">${formas}</div>
+      </div>
+
+      <span class="cxt-sep" aria-hidden="true"></span>
+
+      <div class="cxt-acoes">
+        <button class="cxt-min" onclick="document.getElementById('caixa-modal').remove()">Minimizar</button>
+        <button class="cxt-fechar" onclick="_showFechamentoCaixa()">Fechar caixa</button>
       </div>
     </div>
   `;
@@ -8151,7 +8095,7 @@ async function _showFechamentoCaixa() {
 
   let d;
   try {
-    const resp = await fetch(`${API_BASE}/api/v1/metrics/${rid}/resumo-dia`);
+    const resp = await fetch(`${API_BASE}/api/v1/metrics/${rid}/resumo-dia${_caixaAberto?.created_at ? `?desde=${encodeURIComponent(_caixaAberto.created_at)}` : ""}`, { headers: buildHeaders() });
     d = await resp.json();
     if (!resp.ok) throw new Error();
   } catch(e) { return; }
