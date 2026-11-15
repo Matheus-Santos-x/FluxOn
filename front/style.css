@@ -3603,4 +3603,11 @@ input[type="number"] {
 #modal .pm-body::-webkit-scrollbar-track { background: transparent; }
 #modal .pm-body::-webkit-scrollbar-thumb { background: rgba(249,115,115,.35); border-radius: 6px; }
 
+/* janela da mesa: cabeçalho e botões fixos, só os itens rolam (o total fica grudado embaixo da lista) */
+#mesa-drawer-modal .modal { display: flex; flex-direction: column; max-height: calc(100vh - 32px); }
+#mesa-drawer-modal .md-itens { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(249,115,115,.35) transparent; }
+#mesa-drawer-modal .md-itens::-webkit-scrollbar { width: 6px; }
+#mesa-drawer-modal .md-itens::-webkit-scrollbar-thumb { background: rgba(249,115,115,.35); border-radius: 6px; }
+#mesa-drawer-modal .md-total { position: sticky; bottom: 0; background: #0d0d0d; padding-bottom: 20px !important; }
+
 
