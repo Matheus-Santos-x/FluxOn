@@ -998,6 +998,7 @@ for (let i = 1; i <= numMesas; i++) mesas.push({ tipo: "mesa", numero: i });
         );
         const ocupada = pedidosAtivos.length > 0;
         const totalMesa = pedidosAtivos.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
+     const impresso = pedidosAtivos.length > 0 && pedidosAtivos.every(o => o._frontStatus !== "recebido");
         const reserva = !ocupada && m.tipo === "mesa" ? window._mesasReservadas?.get(String(m.numero)) : null;
 
         return `
