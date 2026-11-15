@@ -131,7 +131,9 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 io.on("connection", (socket) => {
   console.log(`🔌 Cliente conectado: ${socket.id}`);
 
-  socket.on("join_restaurant", (restaurant_id) => {
+  // responde (ack) se entrou: assim a tela sabe quando foi recusada e renova o login
+  socket.on("join_restaurant", (restaurant_id, ack) => {
+    const responder = (v) => { if (typeof ack === "function") ack(v); };
     let ok = false;
     try {
       const p = jwt.verify(socket.handshake.auth?.token || "", process.env.JWT_SECRET, { algorithms: ["HS256"] });
@@ -139,10 +141,11 @@ io.on("connection", (socket) => {
     } catch {}
     if (!ok) {
       console.warn(`🔒 SOCKET[${AUTH_MODE}] join sem token válido: ${restaurant_id}`);
-      if (AUTH_MODE === "enforce") return;
+      if (AUTH_MODE === "enforce") return responder(false);
     }
     socket.join(restaurant_id);
     console.log(`🏠 Socket ${socket.id} entrou na sala: ${restaurant_id}`);
+    responder(true);
   });
 
   socket.on("disconnect", () => {
@@ -7794,11 +7797,44 @@ app.get("/api/v1/caixa/:restaurant_id/aberto", async (req, res) => {
       .eq("status", "aberto")
       .single();
     if (error || !data) return res.json({ aberto: false });
-    return res.json({ aberto: true, caixa: data });
+    const totais = await totaisDoCaixa(data);
+    return res.json({ aberto: true, caixa: { ...data, ...totais } });
   } catch (err) {
     return sendError(res, 500, err.message);
   }
 });
+
+/* ========================================
+   💰 TOTAIS DO CAIXA: sempre calculados dos pedidos finalizados desde que o caixa abriu.
+   Todo pedido finalizado entra, por qualquer caminho (Kanban, mesa, entregador, Pix...).
+======================================== */
+const CAIXA_METODOS = ["dinheiro", "pix", "credito", "debito", "maquininha", "vale_refeicao", "voucher"];
+async function totaisDoCaixa(caixa, ate) {
+  const ini = new Date(caixa.created_at).toISOString();
+  const fim = new Date(ate || Date.now());
+  const t = { total_pedidos: 0, valor_outros: 0, qtd_outros: 0 };
+  CAIXA_METODOS.forEach(m => { t[`valor_${m}`] = 0; t[`qtd_${m}`] = 0; });
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await supabase.from("orders")
+      .select("id, order_number, payment_method, total_price, delivered_at, update_at")
+      .eq("restaurant_id", caixa.restaurant_id).eq("status", "finished")
+      .or(`delivered_at.gte.${ini},and(delivered_at.is.null,update_at.gte.${ini})`)
+      .order("id").range(de, de + 999);
+    if (error) throw error;
+    for (const o of data || []) {
+      if (new Date(o.delivered_at || o.update_at) > fim) continue;
+      t.total_pedidos++;
+      for (const p of repartirPagamento(o.payment_method, parseFloat(o.total_price || 0))) {
+        const m = CAIXA_METODOS.includes(p.metodo) ? p.metodo : "outros";
+        if (m === "outros") console.warn(`⚠️ Caixa: pagamento "${o.payment_method || "(vazio)"}" do pedido #${o.order_number} sem forma reconhecida`);
+        t[`valor_${m}`] = Math.round((t[`valor_${m}`] + p.valor) * 100) / 100;
+        t[`qtd_${m}`]++;
+      }
+    }
+    if (!data || data.length < 1000) break;
+  }
+  return t;
+}
 
 // POST - Abre caixa
 app.post("/api/v1/caixa/:restaurant_id/abrir", async (req, res) => {
@@ -7844,9 +7880,16 @@ app.post("/api/v1/caixa/:restaurant_id/fechar", async (req, res) => {
 
     if (error || !caixa) return sendError(res, 404, "Nenhum caixa aberto");
 
+    // fecha com os números calculados dos pedidos (e grava, pro histórico e o Owner)
+    const fechadoEm = new Date().toISOString();
+    const totais = await totaisDoCaixa(caixa, fechadoEm);
+    const colunas = { total_pedidos: totais.total_pedidos };
+    CAIXA_METODOS.forEach(m => { colunas[`valor_${m}`] = totais[`valor_${m}`]; colunas[`qtd_${m}`] = totais[`qtd_${m}`]; });
+    Object.assign(caixa, colunas);
+
     const { error: updateError } = await supabase
       .from("caixa")
-      .update({ status: "fechado", fechado_at: new Date().toISOString(), valor_informado })
+      .update({ status: "fechado", fechado_at: fechadoEm, valor_informado, ...colunas })
       .eq("id", caixa.id);
 
    if (updateError) return sendError(res, 500, "Erro ao fechar caixa");
