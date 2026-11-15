@@ -1912,6 +1912,46 @@ PIX_TIPOS.reserva_mesa = {
   }
 };
 
+// mesas travadas agora por reserva: do (horário − bloqueio) até (horário + tolerância), enquanto o cliente não chegou
+async function mesasReservadasAgora(rid) {
+  const cfg = await reservaConfig(rid);
+  const agora = Date.now();
+  const { data } = await supabase.from("reservas_mesa")
+    .select("id, mesa, nome, telefone, pessoas, inicio, valor_pago, observacao")
+    .eq("restaurant_id", rid).eq("status", "confirmada")
+    .lte("inicio", new Date(agora + (Number(cfg.bloqueio) || 0) * 60000).toISOString())
+    .gte("inicio", new Date(agora - cfg.tolerancia * 60000).toISOString());
+  return new Map((data || []).map(r => [Number(r.mesa), { ...r, tolerancia: cfg.tolerancia }]));
+}
+
+// Operacional (Mesas): reservas que estão travando mesa agora
+app.get("/api/v1/restaurante/:restaurant_id/mesas-reservadas", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const mapa = await mesasReservadasAgora(req.params.restaurant_id);
+    return res.json({ reservas: [...mapa.values()] });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao buscar as reservas");
+  }
+});
+
+// Operacional: o cliente da reserva chegou (a mesa é dele) ou não veio (libera a mesa)
+app.patch("/api/v1/restaurante/:restaurant_id/reservas-mesa/:id", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const status = String(req.body?.status || "");
+    if (!["chegou", "nao_veio"].includes(status)) return sendError(res, 400, "Status inválido");
+    const { data: r, error } = await supabase.from("reservas_mesa").update({ status })
+      .eq("id", req.params.id).eq("restaurant_id", req.params.restaurant_id).eq("status", "confirmada")
+      .select().maybeSingle();
+    if (error) throw error;
+    if (!r) return sendError(res, 409, "Essa reserva já foi atualizada");
+    io.to(req.params.restaurant_id).emit("reserva_atualizada", r);
+    return res.json({ success: true, reserva: r });
+  } catch (err) {
+    console.error("❌ reserva chegou/não veio:", err.message);
+    return sendError(res, 500, "Erro ao atualizar a reserva");
+  }
+});
+
 // página de reservas: regras e aparência
 app.get("/api/v1/reservas/:restaurant_id/info", async (req, res) => {
   try {
@@ -2584,9 +2624,10 @@ app.post("/api/v1/pedidos", async (req, res) => {
         }
       }
     }
-        if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0) {
-      const pausado = await itemPausado(restaurant_id, normalizedItems);
-      if (pausado) return sendError(res, 400, `${pausado} acabou de esgotar. Tire do carrinho para continuar.`);
+    // 🪑 mesa reservada: o cardápio da mesa não abre conta nela (a equipe leva o cliente pra outra mesa)
+    if (publico && table_number && ["autoatendimento", "mesa"].includes(String(finalOrigin).toLowerCase())) {
+      const reservada = (await mesasReservadasAgora(restaurant_id)).get(Number(table_number));
+      if (reservada) return sendError(res, 409, `A mesa ${table_number} está reservada. Chame um atendente para escolher outra mesa.`);
     }
     if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0 && (ehDeliveryPublico || !order_id)) {
       const { total: totalServidor, naoEncontrados, divergentes } = await calcularTotalServidor(restaurant_id, normalizedItems);
