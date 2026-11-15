@@ -1144,7 +1144,7 @@ function abrirDrawerMesa(key) {
 
         <div style="height:1px; background:rgba(255,255,255,0.07); margin:0 24px;"></div>
 
-        <div style="padding:20px 24px 0;">
+        <div class="md-itens" style="padding:20px 24px 0;">
           <div style="font-size:10px; font-weight:700; color:rgba(252,228,228,0.3); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:16px;">Itens da mesa</div>
           <div style="display:flex; flex-direction:column;">
             ${todosItens.map((it, i) => `
@@ -1156,7 +1156,7 @@ function abrirDrawerMesa(key) {
                 ${it.price > 0 ? `<span style="font-size:14px; font-weight:700; color:rgba(251,191,36,0.9);">${formatCurrency(it.price * it.qty)}</span>` : ''}
               </div>
             `).join('')}
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 0 28px;">
+            <div class="md-total" style="display:flex; justify-content:space-between; align-items:center; padding:16px 0 28px;">
               <span style="font-size:13px; font-weight:600; color:rgba(252,228,228,0.4);">Total</span>
               <span style="font-size:20px; font-weight:900; color:rgba(251,191,36,1);">${formatCurrency(totalMesa)}</span>
             </div>
