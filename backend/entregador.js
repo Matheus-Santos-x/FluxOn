@@ -473,7 +473,9 @@ async function avisarClientes(rid, ent, pedidos) {
 
 // diariaTurnos = soma do valor dos turnos do período (a diária é por turno)
 function ganhosDe(ent, entregues, diariaTurnos) {
-  const taxas = r2(entregues.reduce((a, o) => a + (Number(o.taxa_entrega) || 0), 0));
+  // cada entrega vale a comissão gravada nela (fixo ou por km); sem ela, a taxa de entrega do pedido
+  const valorDe = (o) => o.valor_entregador != null ? Number(o.valor_entregador) || 0 : Number(o.taxa_entrega) || 0;
+  const taxas = r2(entregues.reduce((a, o) => a + valorDe(o), 0));
   const diaria = ent.tipo_pagamento === "entrega" ? 0 : r2(diariaTurnos);
   const porEntrega = ent.tipo_pagamento === "diaria" ? 0 : taxas;
   return { entregas: entregues.length, taxas, diaria, por_entrega: porEntrega, total: r2(diaria + porEntrega), tipo_pagamento: ent.tipo_pagamento, valor_diaria: r2(ent.valor_diaria) };
@@ -668,8 +670,18 @@ export function registrarEntregador(ctx) {
           .eq("id", id).eq("status", "delivering").select().maybeSingle();
         if (eFim || !fim) return erro(res, 500, "Não deu pra finalizar o pedido. Tente de novo.", eFim || new Error("o pedido mudou"));
         C.emitOrderUpdate(fim.restaurant_id, fim);
-        console.warn(`⚠️ entregador: pedido #${fim.order_number} finalizado direto (o caixa não somou por essa via)`);
+        console.warn(`⚠️ entregador: pedido #${fim.order_number} finalizado direto pela rota do entregador`);
       }
+      // comissão desta entrega: fica gravada no pedido (mudar o cadastro depois não mexe no que já passou)
+      try {
+        const { data: cad } = await supabase.from("entregadores").select("tipo_pagamento, valor_entrega, entrega_por_km").eq("id", req.ent.id).maybeSingle();
+        const km = Number(req.body?.km);
+        const kmOk = Number.isFinite(km) && km > 0 && km <= 80 ? r2(km) : null;
+        let valor = null; // null = ganha a taxa de entrega do pedido (sem valor no cadastro, ou sem km)
+        if (cad && cad.tipo_pagamento !== "diaria" && Number(cad.valor_entrega) > 0)
+          valor = cad.entrega_por_km ? (kmOk != null ? r2(kmOk * Number(cad.valor_entrega)) : null) : r2(cad.valor_entrega);
+        await supabase.from("orders").update({ km_entrega: kmOk, valor_entregador: valor }).eq("id", id);
+      } catch (e) { console.error("⚠️ comissão do entregador:", e.message); }
       _cacheAtivos.delete(req.ent.id);
       return res.json({ success: true });
     } catch (e) { return erro(res, 500, "Não deu pra finalizar o pedido. Tente de novo.", e); }
@@ -718,7 +730,7 @@ export function registrarEntregador(ctx) {
     if (!t) { const { data } = await supabase.from("entregador_turnos").select("id, inicio, fim, valor_turno").eq("entregador_id", e.id).gte("inicio", inicioDoDia()).order("inicio", { ascending: false }).limit(1); t = data?.[0] || null; }
     const desde = t ? t.inicio : inicioDoDia(), ate = t?.fim || new Date(Date.now() + 60000).toISOString();
     const [{ data: entregues, error }, { data: rodadas }] = await Promise.all([
-      supabase.from("orders").select("id, order_number, client_name, address, taxa_entrega, total_price, delivered_at").eq("entregador_id", e.id).eq("status", "finished").gte("delivered_at", desde).lte("delivered_at", ate).order("delivered_at", { ascending: false }),
+      supabase.from("orders").select("id, order_number, client_name, address, taxa_entrega, valor_entregador, km_entrega, total_price, delivered_at").eq("entregador_id", e.id).eq("status", "finished").gte("delivered_at", desde).lte("delivered_at", ate).order("delivered_at", { ascending: false }),
       supabase.from("entregador_rodadas").select("id, status, saiu_em, voltou_em, dinheiro, valor_recebido, acertada_em").eq("entregador_id", e.id).gte("saiu_em", desde).lte("saiu_em", ate).order("saiu_em", { ascending: false })
     ]);
     if (error) return erro(res, 500, "Não deu pra carregar o seu dia", error);
@@ -726,7 +738,7 @@ export function registrarEntregador(ctx) {
       desde,
       turno: t ? { aberto: !t.fim, inicio: t.inicio, fim: t.fim } : null,
       ganhos: ganhosDe(e, entregues || [], t ? Number(t.valor_turno) : 0),
-      entregas: (entregues || []).map((o) => ({ numero: o.order_number, cliente: primeiroNome(o.client_name), bairro: enderecoPartes(o.address).bairro, taxa: r2(o.taxa_entrega), em: o.delivered_at })),
+      entregas: (entregues || []).map((o) => ({ numero: o.order_number, cliente: primeiroNome(o.client_name), bairro: enderecoPartes(o.address).bairro, taxa: r2(o.valor_entregador ?? o.taxa_entrega), km: o.km_entrega, em: o.delivered_at })),
       rodadas: (rodadas || []).map((r) => ({ id: r.id, status: r.status, saiu_em: r.saiu_em, voltou_em: r.voltou_em, dinheiro: r2(r.dinheiro), recebido: r.valor_recebido == null ? null : r2(r.valor_recebido) }))
     });
   });
@@ -990,7 +1002,7 @@ supabase.from("entregadores").select("id, nome, telefone, tipo_pagamento, valor_
     const rid = req.params.restaurant_id, desde = inicioDoDia();
     const [{ data: ents, error }, { data: peds }, { data: rods }, { data: turnosHoje }, { data: abertos }] = await Promise.all([
       supabase.from("entregadores").select("id, nome, tipo_pagamento, valor_diaria, visto_em, ativo").eq("restaurant_id", rid),
-      supabase.from("orders").select("entregador_id, taxa_entrega").eq("restaurant_id", rid).eq("status", "finished").not("entregador_id", "is", null).gte("delivered_at", desde),
+      supabase.from("orders").select("entregador_id, taxa_entrega, valor_entregador").eq("restaurant_id", rid).eq("status", "finished").not("entregador_id", "is", null).gte("delivered_at", desde),
       supabase.from("entregador_rodadas").select("entregador_id, status, dinheiro, valor_recebido").eq("restaurant_id", rid).gte("saiu_em", desde),
       supabase.from("entregador_turnos").select("entregador_id, valor_turno").eq("restaurant_id", rid).gte("inicio", desde),
       supabase.from("entregador_turnos").select("entregador_id, inicio").eq("restaurant_id", rid).is("fim", null)
