@@ -6414,6 +6414,7 @@ const nextNumber = numData || 1;
       .select().single();
 
     if (orderError) return sendError(res, 500, "Erro ao criar pedido de resgate");
+        emitOrderUpdate(order.restaurant_id, order); // aparece no Kanban na hora, sem recarregar
 
     await supabase
       .from("base_clientes")
