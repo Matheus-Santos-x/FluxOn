@@ -2493,10 +2493,14 @@ async function updateOrderStatus(orderId, newFrontStatus) {
     });
     
     if (!resp.ok) throw new Error("Erro ao atualizar status");
+    const atualizado = await resp.json().catch(() => null);
 
     const idx = orders.findIndex((o) => o.id === orderId);
     if (idx !== -1) {
-      orders[idx] = { ...orders[idx], status: backStatus, _frontStatus: newFrontStatus };
+      // usa o pedido que o servidor devolveu (com a hora da etapa nova): o cronômetro dela começa do zero
+      const marca = { preparo: "preparing_at", pronto: "mounting_at", caminho: "delivering_at" }[newFrontStatus];
+      orders[idx] = { ...orders[idx], ...(atualizado && atualizado.id ? atualizado : {}), status: backStatus, _frontStatus: newFrontStatus };
+      if (marca && !orders[idx][marca]) orders[idx][marca] = new Date().toISOString();
     }
     renderBoard();
     
@@ -3718,11 +3722,11 @@ function startAutoTimer(orderId, createdAt) {
   let LIMIT_MS = tempoRecebido * 60 * 1000;
 
   if (order._frontStatus === "preparo") {
-    etapaInicio = order.preparing_at || createdAt;
+    etapaInicio = order.preparing_at || new Date().toISOString(); // sem a hora da etapa: conta de agora, nunca da criação
     LIMIT_MS = tempoPreparo * 60 * 1000;
     if (tempoPreparo <= 0) return;
   } else if (order._frontStatus === "pronto") {
-    etapaInicio = order.mounting_at || createdAt;
+    etapaInicio = order.mounting_at || new Date().toISOString(); // sem a hora da etapa: conta de agora, nunca da criação
     LIMIT_MS = tempoProto * 60 * 1000;
     if (tempoProto <= 0) return;
   }
