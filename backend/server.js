@@ -8040,7 +8040,22 @@ const totalMovimentado = ["dinheiro", "pix", "credito", "debito", "maquininha", 
           aberto_em: caixa.created_at,
           fechado_em: new Date().toISOString(),
           horario_abertura: new Date(caixa.created_at).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }),
-          horario_fechamento: new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })
+          horario_fechamento: new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }),
+          // ---- pro PDF completo ----
+          restaurant_name: metricas.restaurant_name || null,
+          data_turno: new Date(caixa.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "long", year: "numeric" }),
+          duracao_turno_min: Math.round((Date.now() - new Date(caixa.created_at).getTime()) / 60000),
+          vendido_total: Math.round((totalMovimentado + (totais.valor_reserva || 0) + (totais.valor_outros || 0)) * 100) / 100,
+          ticket_medio_turno: totais.total_pedidos ? Math.round((totalMovimentado + (totais.valor_reserva || 0) + (totais.valor_outros || 0)) / totais.total_pedidos * 100) / 100 : 0,
+          valor_reserva: totais.valor_reserva || 0,
+          qtd_reserva: totais.qtd_reserva || 0,
+          valor_outros: totais.valor_outros || 0,
+          qtd_outros: totais.qtd_outros || 0,
+          diferenca_caixa: valor_informado !== undefined && valor_informado !== null && valor_informado !== ""
+            ? Math.round((Number(valor_informado) - (Number(caixa.fundo_inicial) || 0) - (Number(caixa.valor_dinheiro) || 0)) * 100) / 100 : null,
+          formas_pagamento: [["dinheiro", "Dinheiro"], ["pix", "Pix"], ["credito", "Crédito"], ["debito", "Débito"], ["maquininha", "Maquininha"], ["vale_refeicao", "Vale-refeição"], ["voucher", "Voucher"], ["reserva", "Reserva (já paga)"]]
+            .map(([m, nome]) => ({ forma: nome, qtd: totais[`qtd_${m}`] || 0, valor: totais[`valor_${m}`] || 0 })),
+          top_itens: metricas.top_itens || []
         })
       }).catch(e => console.error("Erro webhook fechamento:", e));
     }
