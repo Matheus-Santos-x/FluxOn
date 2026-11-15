@@ -135,9 +135,10 @@ const rua = (() => {
       btn.disabled = true; btn.textContent = "Salvando…";
       try {
         _entreguesAgora.add(p.id);
-        const gps = mapa.posicao; // na porta do cliente: vira o ponto da casa pros próximos pedidos
-        await api("/api/v1/entregador/entregue", { method: "POST", body: { id: p.id, ...(gps ? { lat: gps.lat, lng: gps.lng, precisao: gps.precisao } : {}) } });
-        fecharFolha();
+                const gps = mapa.posicao; // na porta do cliente: vira o ponto da casa pros próximos pedidos
+        const km = await mapa.kmDaLoja(p, gps); // pra quem recebe por km
+        await api("/api/v1/entregador/entregue", { method: "POST", body: { id: p.id, ...(km != null ? { km } : {}), ...(gps ? { lat: gps.lat, lng: gps.lng, precisao: gps.precisao } : {}) } });
+         fecharFolha();
         vibrar(80);
         S.naRua = S.naRua.filter((x) => x.id !== p.id);
         aviso(S.naRua.length ? `#${p.numero} entregue ✓ Faltam ${S.naRua.length}` : `#${p.numero} entregue ✓ Todas feitas, pode voltar!`, "bom");
