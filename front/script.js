@@ -900,6 +900,77 @@ async function _toggleEmissaoNF(el) {
   }
 }
 
+/* ========================================
+   🪑 RESERVA DE MESA NO SALÃO: a mesa trava do (horário − bloqueio) até (horário + tolerância).
+   Mesas mostra "Reservada"; tocar nela abre a reserva (cliente chegou / não veio).
+======================================== */
+window._mesasReservadas = new Map();
+const horaReserva = (iso) => new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+async function carregarReservasMesas() {
+  const rid = getRestaurantId();
+  if (!rid) return;
+  try {
+    const r = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/mesas-reservadas`, { headers: buildHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    window._mesasReservadas = new Map((d.reservas || []).map(x => [String(x.mesa), x]));
+    if (!document.getElementById("mesas-view")?.classList.contains("hidden")) renderMesas();
+  } catch {}
+}
+setTimeout(carregarReservasMesas, 1500);
+setInterval(carregarReservasMesas, 60000); // a trava começa sozinha no horário, sem recarregar
+
+function abrirReservaMesa(key) {
+  const r = window._mesasReservadas.get(String(key));
+  if (!r) return abrirDrawerMesa(key);
+  document.getElementById("reserva-mesa-modal")?.remove();
+  const segura = new Date(new Date(r.inicio).getTime() + (Number(r.tolerancia) || 15) * 60000).toISOString();
+  const m = document.createElement("div");
+  m.id = "reserva-mesa-modal";
+  m.style.cssText = "position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.7); display:grid; place-items:center; padding:16px;";
+  m.innerHTML = `
+    <div style="width:100%; max-width:380px; background:#111113; border:1px solid rgba(255,255,255,.1); border-radius:18px; padding:20px 22px; display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+        <div>
+          <div style="font:800 21px 'Space Grotesk',sans-serif; color:#fff;">Mesa ${escapeHtml(String(key).padStart(2, "0"))} reservada</div>
+          <div style="font-size:13px; font-weight:600; color:rgba(252,228,228,.55); margin-top:2px;">Horário ${horaReserva(r.inicio)} · segura até ${horaReserva(segura)}</div>
+        </div>
+        <button type="button" data-x aria-label="Fechar" style="background:none; border:0; color:#fce4e4; font-size:22px; cursor:pointer;">×</button>
+      </div>
+      <div style="display:grid; gap:6px; font-size:14px; color:rgba(252,228,228,.9);">
+        <div><b>${escapeHtml(r.nome || "Cliente")}</b> · ${Number(r.pessoas) || 1} ${Number(r.pessoas) === 1 ? "pessoa" : "pessoas"}</div>
+        ${r.telefone ? `<div style="color:rgba(252,228,228,.55);">${escapeHtml(crmTelefone(r.telefone))}</div>` : ""}
+        ${r.observacao ? `<div style="color:rgba(252,228,228,.55);">“${escapeHtml(r.observacao)}”</div>` : ""}
+        ${Number(r.valor_pago) > 0 ? `<div style="color:#fbbf24; font-weight:700;">Já pagou ${formatCurrency(r.valor_pago)} na reserva: desconte na conta.</div>` : ""}
+      </div>
+      <p data-erro style="margin:0; min-height:16px; font-size:12.5px; color:#f87171;"></p>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <button type="button" data-st="nao_veio" style="height:44px; border-radius:12px; border:1px solid rgba(255,255,255,.14); background:transparent; color:#fce4e4; font-weight:800; cursor:pointer;">Não veio</button>
+        <button type="button" data-st="chegou" style="height:44px; border-radius:12px; border:1px solid rgba(34,197,94,.55); background:rgba(34,197,94,.1); color:#22c55e; font-weight:800; cursor:pointer;">Cliente chegou</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  m.querySelector("[data-x]").onclick = () => m.remove();
+  m.querySelectorAll("[data-st]").forEach(b => b.onclick = async () => {
+    const st = b.dataset.st;
+    m.querySelectorAll("[data-st]").forEach(x => { x.disabled = true; });
+    try {
+      const resp = await fetch(`${API_BASE}/api/v1/restaurante/${getRestaurantId()}/reservas-mesa/${r.id}`, {
+        method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ status: st })
+      });
+      const d = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(d.error || "Não deu para atualizar a reserva");
+      window._mesasReservadas.delete(String(key));
+      m.remove();
+      renderMesas();
+      if (st === "chegou") abrirDrawerMesa(key); // já abre a mesa pra lançar o pedido
+    } catch (e) {
+      m.querySelector("[data-erro]").textContent = e.message;
+      m.querySelectorAll("[data-st]").forEach(x => { x.disabled = false; });
+    }
+  });
+}
+
 function renderMesas() {
   const content = document.getElementById("mesas-content");
   if (!content) return;
@@ -927,10 +998,10 @@ for (let i = 1; i <= numMesas; i++) mesas.push({ tipo: "mesa", numero: i });
         );
         const ocupada = pedidosAtivos.length > 0;
         const totalMesa = pedidosAtivos.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
-        const impresso = pedidosAtivos.length > 0 && pedidosAtivos.every(o => o._frontStatus !== "recebido");
+        const reserva = !ocupada && m.tipo === "mesa" ? window._mesasReservadas?.get(String(m.numero)) : null;
 
         return `
-          <div onclick="abrirDrawerMesa('${key}')" style="
+          <div onclick="${reserva ? `abrirReservaMesa('${key}')` : `abrirDrawerMesa('${key}')`}" style="
             background:${ocupada ? 'rgba(255,255,255,0.04)' : '#0d0d0d'};
             border:1.5px solid rgba(249,115,115,0.3);
             border-radius:14px; padding:16px 18px;
@@ -951,9 +1022,9 @@ for (let i = 1; i <= numMesas; i++) mesas.push({ tipo: "mesa", numero: i });
                 ? (impresso
                     ? `<span style="font-size:11px; color:rgba(34,197,94,1); font-weight:700;">✅</span>`
                     : `<span id="mesa-timer-${key}" style="font-size:11px; color:rgba(34,197,94,1); font-weight:700;">⏱ ...</span>`)
-                : `<span></span>`}
-              <div style="display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:${ocupada ? 'rgba(249,115,115,0.9)' : 'rgba(252,228,228,0.3)'};">
-                ${ocupada ? `<span style="width:7px;height:7px;border-radius:50%;background:rgba(249,115,115,1);animation:pulse 1.5s infinite;"></span>Ocupada` : 'Livre'}
+                : (reserva ? `<span style="font-size:11px; color:rgba(96,165,250,1); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${horaReserva(reserva.inicio)} · ${escapeHtml(String(reserva.nome || "").split(" ")[0])}</span>` : `<span></span>`)}
+              <div style="display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:${ocupada ? 'rgba(249,115,115,0.9)' : reserva ? 'rgba(96,165,250,1)' : 'rgba(252,228,228,0.3)'};">
+                ${ocupada ? `<span style="width:7px;height:7px;border-radius:50%;background:rgba(249,115,115,1);animation:pulse 1.5s infinite;"></span>Ocupada` : reserva ? `<span style="width:7px;height:7px;border-radius:50%;background:rgba(96,165,250,1);"></span>Reservada` : 'Livre'}
               </div>
             </div>
           </div>
@@ -5397,7 +5468,7 @@ socket.on("caixa_atualizado", (data) => {
   
 let _renderDebounce = null;
 // o Painel Admin desativou o restaurante: sai do FluxON na hora
-socket.on("restaurante_desativado", () => { alert("Este restaurante foi desativado. Fale com a Evorise."); logout(); });
+socket.on("reserva_atualizada", () => carregarReservasMesas());
 
 socket.on("order_updated", (order) => {
   if (!order || !order.id) return;
