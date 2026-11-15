@@ -8056,25 +8056,25 @@ async function showCaixa() {
 
       <span class="cxt-sep" aria-hidden="true"></span>
 
-      <div class="cxt-heroi"><small>Vendido no turno</small><b>${_fmtCurrency(vendido)}</b></div>
-      <div class="cxt-fatos">
-        <span>Pedidos<b>${pedidos}</b></span>
-        <span>Ticket médio<b>${_fmtCurrency(pedidos ? vendido / pedidos : 0)}</b></span>
-        <span>Cancelados<b class="canc">${n(d.cancelados)}</b></span>
-      </div>
-
-      <span class="cxt-sep" aria-hidden="true"></span>
-
-      <div class="cxt-gaveta">
-        <small>Na gaveta<em>Fundo ${_fmtCurrency(n(c.fundo_inicial))} + dinheiro ${_fmtCurrency(n(c.valor_dinheiro))}</em></small>
-        <b>${_fmtCurrency(gaveta)}</b>
-      </div>
-
-      <span class="cxt-sep" aria-hidden="true"></span>
-
-      <div>
-        <span class="cxt-rot">Formas de pagamento</span>
-        <div class="cxt-formas">${formas}</div>
+      <div class="cxt-corpo">
+        <div class="cxt-esq">
+          <div class="cxt-heroi"><small>Vendido no turno</small><b>${_fmtCurrency(vendido)}</b></div>
+          <div class="cxt-fatos">
+            <span>Pedidos<b>${pedidos}</b></span>
+            <span>Ticket médio<b>${_fmtCurrency(pedidos ? vendido / pedidos : 0)}</b></span>
+            <span>Cancelados<b class="canc">${n(d.cancelados)}</b></span>
+          </div>
+          <span class="cxt-sep" aria-hidden="true"></span>
+          <div class="cxt-gaveta">
+            <small>Na gaveta<em>Fundo ${_fmtCurrency(n(c.fundo_inicial))} + dinheiro ${_fmtCurrency(n(c.valor_dinheiro))}</em></small>
+            <b>${_fmtCurrency(gaveta)}</b>
+          </div>
+        </div>
+        <span class="cxt-vsep" aria-hidden="true"></span>
+        <div class="cxt-dir">
+          <span class="cxt-rot">Formas de pagamento</span>
+          <div class="cxt-formas">${formas}</div>
+        </div>
       </div>
 
       <span class="cxt-sep" aria-hidden="true"></span>
