@@ -5351,14 +5351,25 @@ document.getElementById("search-order")?.addEventListener("input", function() {
   if (header && abas) header.insertBefore(abas, header.querySelector(".brand"));
 })();
   
-socket = io(API_BASE, { transports: ["websocket"], auth: { token: localStorage.getItem("fluxon_token") } });
+// o login é lido a cada (re)conexão: se foi renovado, o tempo real usa o novo
+socket = io(API_BASE, { transports: ["websocket"], auth: (cb) => cb({ token: localStorage.getItem("fluxon_token") }) });
+window._naSala = false;
+let _tentativasSala = 0;
 
 socket.on("connect", () => {
   const rid = getRestaurantId();
-  if (rid) {
-    socket.emit("join_restaurant", rid);
-    console.log("🔌 WebSocket conectado");
-  }
+  if (!rid) return;
+  socket.emit("join_restaurant", rid, async (ok) => {
+    window._naSala = ok !== false;
+    if (window._naSala) { _tentativasSala = 0; return; }
+    // servidor recusou (login vencido): renova o login e conecta de novo
+    console.warn("🔒 Tempo real recusado: renovando o login");
+    if (_tentativasSala++ >= 3) return; // não fica em loop; a conferência periódica segura a tela
+    try { await checkAndRefreshToken(); } catch {}
+    setTimeout(() => { socket.disconnect(); socket.connect(); }, 2000);
+  });
+  fetchOrders(); // (re)conectou: busca o que chegou enquanto estava fora
+  console.log("🔌 WebSocket conectado");
 });
 
 socket.on("caixa_atualizado", (data) => {
@@ -5453,12 +5464,20 @@ setInterval(() => {
 showHome();
 fetchOrders();
 
-// Polling de segurança — fallback se WebSocket cair
+// Conferência de segurança: sem tempo real, a cada 30 s; com tempo real, a cada 2 min
+let _ultimaConferencia = Date.now();
 setInterval(() => {
-  if (!socket?.connected) {
+  const semTempoReal = !socket?.connected || !window._naSala;
+  if (document.hidden && !semTempoReal) return;
+  if (semTempoReal || Date.now() - _ultimaConferencia > 120000) {
+    _ultimaConferencia = Date.now();
     fetchOrders();
   }
 }, 30000);
+// voltou pra aba (PC dormiu, trocou de janela): confere na hora
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) { _ultimaConferencia = Date.now(); fetchOrders(); }
+});
 
 renderBoard();
 }
