@@ -3180,7 +3180,7 @@ const COB_METODOS = [
   ["vale_refeicao", "Vale-refeição", '<path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M16 3c-2 0-3 2-3 5s1 4 3 4v9"/>'],
   ["voucher", "Voucher", '<rect x="3" y="8" width="18" height="12" rx="1.5"/><path d="M12 8v12M3 12h18M12 8c-2-4-6-3-5 0M12 8c2-4 6-3 5 0"/>']
 ];
-const cobNome = (m) => (COB_METODOS.find(x => x[0] === m) || [m, m])[1];
+const cobNome = (m) => m === "reserva" ? "Reserva (já paga)" : (COB_METODOS.find(x => x[0] === m) || [m, m])[1];
 const cobSvg = (d, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const cobR = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const cobTxtPag = (p) => p.metodo === "vale_refeicao" ? "vale-refeição" : vpTextoPagamento(p);
@@ -3269,7 +3269,7 @@ function abrirCobranca(pedidos, juntos) {
 
   function render() {
     salvarParcial();
-    const f = falta(), tr = troco(), travado = pags.length > 0 || !!aguard;
+    const f = falta(), tr = troco(), travado = pags.some(p => p.metodo !== "reserva") || !!aguard;
     const pode = f <= 0.009 && pags.length > 0 && !finalizando && !aguard;
     const p0 = pedidos[0];
     modal.innerHTML = `
@@ -3353,7 +3353,7 @@ function abrirCobranca(pedidos, juntos) {
   }
 
   const acoes = {
-    fechar() { if (!pags.length) modal.remove(); },
+    fechar() { if (!pags.some(p => p.metodo !== "reserva")) modal.remove(); },
     m(id) { metodo = id; digitado = falta(); vp = null; vpErro = ""; maqErro = ""; render(); },
     chip(v) { digitado = cobR(v); render(); },
     add() {
@@ -3417,6 +3417,10 @@ function abrirCobranca(pedidos, juntos) {
       })();
       try {
         await vpDescontar(pags, pedidos[0].id);
+                const pr = pags.find(p => p.metodo === "reserva" && p.reservaId);
+        if (pr) fetch(`${API_BASE}/api/v1/restaurante/${getRestaurantId()}/reservas-mesa/${pr.reservaId}/usar`, {
+          method: "POST", headers: buildHeaders(), body: JSON.stringify({ valor: pr.valor })
+        }).catch(() => {});
                 const impressoes = [];
         await Promise.all(pedidos.map(async (o) => {
           await fetch(`${API_BASE}/api/v1/pedidos/${o.id}/payment`, {
@@ -3513,6 +3517,18 @@ function abrirCobranca(pedidos, juntos) {
 
   render();
   if (aguard) esperarMaq(aguard);
+
+  // mesa com reserva: o sinal pago no Pix já entra abatido na conta
+  const mesaNum = pedidos[0]?.table_number;
+  if (mesaNum && !pags.some(p => p.metodo === "reserva")) {
+    fetch(`${API_BASE}/api/v1/restaurante/${getRestaurantId()}/reservas-mesa/credito?mesa=${encodeURIComponent(mesaNum)}`, { headers: buildHeaders() })
+      .then(r => r.json()).then(d => {
+        const c = d?.credito;
+        if (!c || finalizando || pags.some(p => p.metodo === "reserva") || !document.body.contains(modal)) return;
+        pags.unshift({ metodo: "reserva", valor: cobR(Math.min(c.valor, falta())), reservaId: c.id, credito: c.valor, codigo: `Sinal de ${c.nome || "reserva"}` });
+        render();
+      }).catch(() => {});
+  }
 }
 
 function showPaymentModal(orderId) {
