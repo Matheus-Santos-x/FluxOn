@@ -2544,7 +2544,7 @@ function renderBoard() {
 
 const filtered = orders.filter((o) => {
     if (!visibleStatuses.includes(o._frontStatus)) return false;
-    if (o.destino === "mesas") return false;
+    if (o.destino === "mesas" || ["autoatendimento", "mesa"].includes(String(o.origin || "").toLowerCase())) return false; // pedido de mesa: só na tela de Mesas
     if (!searchTerm) return true;
     const num = String(o.order_number || "").toLowerCase();
     const name = String(o.client_name || "").toLowerCase();
