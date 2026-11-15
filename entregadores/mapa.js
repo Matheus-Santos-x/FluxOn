@@ -245,5 +245,18 @@ const mapa = (() => {
   }
   function limparRota() { pinos.forEach((p) => p.remove()); pinos = []; linha?.remove(); linha = null; rotaChave = ""; S.rotaOrdem = []; enquadrar(); }
 
-  return { mostrar, atualizar, pararLocalizacao: parar, desenharEntregas, limparRota, ligar, enviar, mostrarLoja, get posicao() { return pos; } };
+  // km de carro pelo caminho, do restaurante até a casa do cliente (só a ida): é o que vale pra quem recebe por km
+  async function kmDaLoja(p, gps) {
+    try {
+      const destino = p.destino || (gps && (gps.precisao ?? 999) <= 60 ? gps : null) || await geocodificar(p.endereco);
+      const end = S.conta?.restaurante?.endereco;
+      const origem = lojaPos || (end ? await geocodificar({ completo: end, rua: end, resto: "" }) : null);
+      if (!destino || !origem) return null;
+      const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${origem.lng.toFixed(6)},${origem.lat.toFixed(6)};${destino.lng.toFixed(6)},${destino.lat.toFixed(6)}?overview=false`, { signal: AbortSignal.timeout(6000) });
+      const j = await r.json();
+      return j.code === "Ok" && j.routes?.[0] ? Math.round(j.routes[0].distance / 10) / 100 : null;
+    } catch { return null; }
+  }
+
+  return { mostrar, atualizar, pararLocalizacao: parar, desenharEntregas, limparRota, ligar, enviar, mostrarLoja, kmDaLoja, get posicao() { return pos; } };
 })();
