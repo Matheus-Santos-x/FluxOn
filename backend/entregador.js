@@ -424,11 +424,11 @@ const _jaAvisados = new Set();
 async function linkRastreio(rid, o) {
   const { data: r } = await C.supabase.from("restaurants").select("cardapio_delivery_url").eq("id", rid).maybeSingle();
   const dominio = String(r?.cardapio_delivery_url || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
-  const base = String(process.env.ENTREGADOR_APP_URL || "").replace(/\/+$/, "");
+  if (!dominio) return ""; // sem o app de pedidos com domínio, não manda link de rastreio
   if (!dominio && !base) return "";
   let tk = o.tracking_token;
   if (!tk) { tk = crypto.randomBytes(10).toString("hex"); await C.supabase.from("orders").update({ tracking_token: tk }).eq("id", o.id); }
-  return dominio ? `https://${dominio}/?acompanhar=${tk}` : `${base}/acompanhar.html?c=${tk}`;
+  return `https://${dominio}/?acompanhar=${tk}`;
 }
 
 // entregou um pedido: o próximo da rota recebe "você é o próximo"
