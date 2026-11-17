@@ -8240,6 +8240,7 @@ app.post("/api/v1/caixa/:restaurant_id/fechar", async (req, res) => {
 
     // fecha com os números calculados dos pedidos (e grava, pro histórico e o Owner)
     const fechadoEm = new Date().toISOString();
+    const totais = await totaisDoCaixa(caixa, fechadoEm);
     const comEntregador = await caixaComEntregador(caixa);
     const colunas = { total_pedidos: totais.total_pedidos };
     CAIXA_METODOS.forEach(m => { colunas[`valor_${m}`] = totais[`valor_${m}`]; colunas[`qtd_${m}`] = totais[`qtd_${m}`]; });
