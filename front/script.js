@@ -3457,18 +3457,17 @@ function abrirCobranca(pedidos, juntos) {
       })();
       try {
         await vpDescontar(pags, pedidos[0].id);
-                const pr = pags.find(p => p.metodo === "reserva" && p.reservaId);
-        if (pr) fetch(`${API_BASE}/api/v1/restaurante/${getRestaurantId()}/reservas-mesa/${pr.reservaId}/usar`, {
-          method: "POST", headers: buildHeaders(), body: JSON.stringify({ valor: pr.valor })
-        }).catch(() => {});
-                const impressoes = [];
+        const impressoes = [];
         await Promise.all(pedidos.map(async (o) => {
-          await fetch(`${API_BASE}/api/v1/pedidos/${o.id}/payment`, {
+          // confere a resposta do servidor: se não salvou, a tela não mostra "finalizado" e dá pra tentar de novo
+          const rp = await fetch(`${API_BASE}/api/v1/pedidos/${o.id}/payment`, {
             method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ payment_method: textoDoPedido(o) })
           });
-          await fetch(`${API_URL}/${o.id}/status`, {
+          if (!rp.ok) throw new Error(`Não deu para salvar o pagamento do pedido #${o.order_number}. Confira a internet e toque em Finalizar de novo.`);
+          const rs = await fetch(`${API_URL}/${o.id}/status`, {
             method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ status: "finished" })
           });
+          if (!rs.ok) throw new Error(`Não deu para finalizar o pedido #${o.order_number}. Confira a internet e toque em Finalizar de novo.`);
           const idx = orders.findIndex(x => x.id === o.id);
           if (idx !== -1) orders[idx]._frontStatus = "finalizado";
           // mesa/juntos: sempre imprime o resumo; pedido único: só com a nota ligada
@@ -3477,6 +3476,12 @@ function abrirCobranca(pedidos, juntos) {
           if (juntos || document.getElementById("home-nf-toggle")?.checked) impressoes.push(imprimirResumo(o.id, emDinheiro).catch(() => {}));
           else if (emDinheiro) impressoes.push(abrirGaveta(o.id).catch(() => {}));
         }));
+
+                // sinal da reserva: só marca como usado depois que a conta fechou de verdade
+        const pr = pags.find(p => p.metodo === "reserva" && p.reservaId);
+        if (pr) fetch(`${API_BASE}/api/v1/restaurante/${getRestaurantId()}/reservas-mesa/${pr.reservaId}/usar`, {
+          method: "POST", headers: buildHeaders(), body: JSON.stringify({ valor: pr.valor })
+        }).catch(() => {});
         // mostra "finalizado" e espera a impressão sair: no mínimo 1 s (dá pra ver) e no máximo 5 s (não trava)
         const bf = modal.querySelector('[data-a="fin"]');
         if (bf) { bf.textContent = impressoes.length ? "✓ Finalizado · imprimindo..." : "✓ Finalizado"; bf.classList.add("on"); }
