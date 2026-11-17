@@ -469,7 +469,7 @@ function normalizePhone(input) {
 }
 
 const pick = (obj = {}, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
-const CONFIG_CAMPOS = ["nome_exibicao","logo_url","logo_fisico_url","banner_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega","google_avaliacao_url","agendamento_ativo","agendamento_antecedencia_min"];
+const CONFIG_CAMPOS = ["nome_exibicao","logo_url","logo_fisico_url","banner_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega","google_avaliacao_url","agendamento_ativo","agendamento_antecedencia_min","cores_apps"];
 
 
 /* ========================================
@@ -1579,6 +1579,19 @@ function voucherSituacao(v) {
 function voucherAutorizado(req, rid) {
   const a = readAuth(req);
   return !!a && (a.kind === "service" || a.restaurant_id === rid);
+}
+
+// cores próprias de cada app (Admin → aba do app): só guarda o que é cor válida
+function limparCoresApps(v) {
+  const hex = (c) => /^#[0-9a-f]{6}$/i.test(c || "") ? c : null;
+  const out = {};
+  for (const app of ["central", "vale", "reservas", "avaliacao", "entregador"]) {
+    const c = v?.[app];
+    if (!c || typeof c !== "object") continue;
+    out[app] = { ativo: !!c.ativo, tema: c.tema === "light" ? "light" : "dark",
+      cor_primaria: hex(c.cor_primaria), cor_secundaria: hex(c.cor_secundaria), cor_fundo: hex(c.cor_fundo) };
+  }
+  return out;
 }
 
 // ===== PALETA DO RESTAURANTE: todo app do cliente puxa daqui (ou das cores próprias do app, se ligadas) =====
@@ -3193,7 +3206,7 @@ app.post("/admin/restaurants/:id/excluir", requireAdmin, async (req, res) => {
 app.patch("/admin/restaurants/:id/config", requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const fields = pick(req.body, CONFIG_CAMPOS); // reaproveita a constante que já existe
+    if ("cores_apps" in fields) fields.cores_apps = limparCoresApps(fields.cores_apps);
 
     const { error } = await supabase
       .from("restaurante_config")
@@ -5041,6 +5054,7 @@ app.get("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
       instagram: config?.instagram || null,
       descricao: config?.descricao || null,
       tema: config?.tema || "dark",
+      cores_apps: config?.cores_apps || {},
       num_mesas: config?.num_mesas || 10,
       tempo_recebido: config?.tempo_recebido ?? 1.5,
       tempo_preparo: config?.tempo_preparo ?? 20,
@@ -5069,6 +5083,7 @@ app.patch("/api/v1/restaurante/:restaurant_id/config", async (req, res) => {
   try {
     const { restaurant_id } = req.params;
     const fields = pick(req.body, CONFIG_CAMPOS);
+    if ("cores_apps" in fields) fields.cores_apps = limparCoresApps(fields.cores_apps);
 
     const { error } = await supabase
       .from("restaurante_config")
@@ -7152,7 +7167,7 @@ async function avaliacaoLink(order) {
 
 async function avaliacaoRestaurante(rid) {
   const [{ data: cfg }, { data: rest }] = await Promise.all([
-    supabase.from("restaurante_config").select("nome_exibicao, logo_url, cor_primaria, google_avaliacao_url").eq("restaurant_id", rid).maybeSingle(),
+    supabase.from("restaurante_config").select(`nome_exibicao, logo_url, google_avaliacao_url, ${PALETA_CAMPOS}`).eq("restaurant_id", rid).maybeSingle(),
     supabase.from("restaurants").select("name").eq("id", rid).maybeSingle()
   ]);
   if (!rest) return null;
@@ -7160,6 +7175,7 @@ async function avaliacaoRestaurante(rid) {
     nome: cfg?.nome_exibicao || rest.name || "",
     logo_url: cfg?.logo_url || null,
     cor: cfg?.cor_primaria || "#d62828",
+    paleta: paletaDe(cfg, "avaliacao"),
     google: centralLinkHttps(String(cfg?.google_avaliacao_url || "").trim().replace(/^(?!https?:\/\/)(?=.)/i, "https://"))
   };
 }
@@ -7213,7 +7229,7 @@ app.get("/api/v1/avaliacao/:restaurant_id", async (req, res) => {
   try {
     const r = await avaliacaoRestaurante(req.params.restaurant_id);
     if (!r) return sendError(res, 404, "Restaurante não encontrado");
-    return res.json({ nome: r.nome, logo_url: r.logo_url, cor: r.cor });
+    return res.json({ nome: r.nome, logo_url: r.logo_url, cor: r.cor, paleta: r.paleta });
   } catch (err) {
     return sendError(res, 500, "Erro ao abrir a avaliação");
   }
