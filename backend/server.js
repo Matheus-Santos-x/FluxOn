@@ -1815,6 +1815,7 @@ async function reservaConfig(rid) {
     bloqueio: c?.reserva_bloqueio_min ?? 90,
     tolerancia: Number(c?.reserva_tolerancia_min) || 15,
     antecedencia: Number(c?.reserva_antecedencia_min) || 120,
+    dias: Number(c?.reserva_dias) || 30,
     devolucao: c?.reserva_devolucao_pct ?? 80,
     mesas
   };
