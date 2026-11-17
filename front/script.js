@@ -1582,7 +1582,7 @@ function rodEditarPessoas(x) {
       <label>Adultos <input id="re-ad" type="number" min="0" value="${x.adultos}"></label>
       <label>Crianças <input id="re-cr" type="number" min="0" value="${x.criancas}"></label>
       <div id="re-total" style="font-weight:900;font-size:18px;color:#fbbf24;"></div>
-      <p class="muted" style="font-size:12px;">Hoje a reserva está em ${formatCurrency(x.valor_pago)}. O valor é recalculado pelo preço do rodízio. Se for devolver dinheiro ao cliente, o estorno é por sua conta.</p>
+      <p class="muted" style="font-size:12px;">Hoje a reserva está em ${formatCurrency(x.valor_pago)}. Mais pessoas: a diferença vai para o Balcão, pra cobrar no caixa. Menos pessoas: devolvemos a diferença no Pix do cliente.</p>
     </div>
     <div class="modal-actions"><button class="primary-button" id="re-ok">Salvar</button></div>`);
   const calc = () => {
@@ -1596,10 +1596,11 @@ function rodEditarPessoas(x) {
   ok.onclick = async () => {
     ok.disabled = true;
     try {
-      await rodizioApi(`/reservas/${x.id}/pessoas`, { method: "PATCH", body: JSON.stringify({
+      const d = await rodizioApi(`/reservas/${x.id}/pessoas`, { method: "PATCH", body: JSON.stringify({
         adultos: m.querySelector("#re-ad").value, criancas: m.querySelector("#re-cr").value
       }) });
       m.remove(); rodRecarregar();
+      if (d?.aviso) alert(d.aviso);
     } catch (e) { alert(e.message); ok.disabled = false; }
   };
 }
@@ -8074,7 +8075,8 @@ async function showCaixa() {
   const n = (v) => Number(v) || 0;
   const vendido = FORMAS.reduce((s, [m]) => s + n(c[`valor_${m}`]), 0) + n(c.valor_reserva) + n(c.valor_outros);
   const pedidos = n(c.total_pedidos);
-  const gaveta = n(c.fundo_inicial) + n(c.valor_dinheiro);
+  const comEnt = n(c.com_entregador); // dinheiro de entrega que ainda está com o entregador (sem acerto)
+  const gaveta = n(c.fundo_inicial) + n(c.valor_dinheiro) - comEnt;
   const turnoTxt = { manha: "Turno da manhã", "manhã": "Turno da manhã", tarde: "Turno da tarde", noite: "Turno da noite" }[String(c.turno || "").toLowerCase()] || (c.turno ? `Turno ${escapeHtml(c.turno)}` : "Turno");
   const linha = (nome, qtd, valor, fora) =>
     `<div class="cxt-forma${fora ? " fora" : ""}"><span>${nome}<em>${qtd}</em></span><b>${_fmtCurrency(valor)}</b></div>`;
@@ -8110,7 +8112,7 @@ async function showCaixa() {
           </div>
           <span class="cxt-sep" aria-hidden="true"></span>
           <div class="cxt-gaveta">
-            <small>Na gaveta<em>Fundo ${_fmtCurrency(n(c.fundo_inicial))} + dinheiro ${_fmtCurrency(n(c.valor_dinheiro))}</em></small>
+            <small>Na gaveta<em>Fundo ${_fmtCurrency(n(c.fundo_inicial))} + dinheiro ${_fmtCurrency(n(c.valor_dinheiro))}${comEnt > 0 ? ` − ${_fmtCurrency(comEnt)} ainda com entregador` : ""}</em></small>
             <b>${_fmtCurrency(gaveta)}</b>
           </div>
         </div>
