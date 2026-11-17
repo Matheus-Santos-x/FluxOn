@@ -2368,9 +2368,14 @@ async function pixConfirmar(cobranca) {
     await PIX_TIPOS[ok.tipo]?.aoPagar({ cobranca: ok });
     console.log(`💳 Pix pago: ${ok.tipo} ${ok.referencia_id} (R$ ${ok.valor})`);
   } catch (e) {
-    // pagou, mas a ação falhou: fica registrado para resolver na mão
+    // pagou, mas não deu pra confirmar (ex.: o pedido mudou depois do Pix): devolve na hora, ninguém fica pagando sem levar
     console.error(`❌ Pix ${ok.id} pago mas aoPagar falhou:`, e.message);
-    await supabase.from("cobrancas_pix").update({ pendencia: String(e.message).slice(0, 300) }).eq("id", ok.id);
+    const est = await pixEstornar(ok.restaurant_id, ok.tipo, ok.referencia_id).catch(err => ({ ok: false, motivo: err.message }));
+    await supabase.from("cobrancas_pix").update({
+      pendencia: `${e.message}${est.ok ? " | devolvido automaticamente" : " | DEVOLVER NA MÃO: " + est.motivo}`.slice(0, 300)
+    }).eq("id", ok.id);
+    if (est.ok) voucherWhatsApp(ok.restaurant_id, null, ok.pagador_nome, ok.pagador_telefone,
+      `Não conseguimos confirmar o seu pagamento de ${voucherMoeda(ok.valor)}, então ele foi devolvido no seu Pix. Por favor, faça de novo.`).catch(() => {});
   }
   return ok;
 }
@@ -2465,13 +2470,10 @@ app.patch("/api/v1/pedidos/:id/adicionar-itens", requireRowOwner("orders"), asyn
       return sendError(res, 400, "itens_novos é obrigatório");
 
     // Busca pedido atual
-    const { data: pedidoAtual, error: fetchError } = await supabase
+    let { data: pedidoAtual, error: fetchError } = await supabase
       .from("orders").select("*").eq("id", id).single();
     if (fetchError || !pedidoAtual) return sendError(res, 404, "Pedido não encontrado");
 
-    // Monta itens combinados
-    const itensAntigos = Array.isArray(pedidoAtual.itens) ? pedidoAtual.itens : [];
-    const itensCombinados = [...itensAntigos, ...itens_novos];
     // cliente pela mesa (QR, sem login): o servidor confere conta aberta, item pausado e preço
     let adicional = parseFloat(total_adicional || 0);
     if (!readAuth(req)) {
@@ -2489,28 +2491,29 @@ app.patch("/api/v1/pedidos/:id/adicionar-itens", requireRowOwner("orders"), asyn
         }
       }
     }
-    const novoTotal = parseFloat(pedidoAtual.total_price || 0) + adicional;
 
-    // Atualiza o pedido
-    const updatePayload = {
-      itens: itensCombinados,
-      total_price: novoTotal,
-      update_at: new Date().toISOString()
-    };
-    if (client_name && !pedidoAtual.client_name) updatePayload.client_name = client_name;
-    if (client_phone && !pedidoAtual.client_phone) updatePayload.client_phone = client_phone;
-    if (notes) {
-  updatePayload.notes = notes;
-}
-
-    const { data: pedidoAtualizado, error: updateError } = await supabase
-      .from("orders")
-      .update(updatePayload)
-      .eq("id", id)
-      .select()
-      .single();
-
-    if (updateError || !pedidoAtualizado) return sendError(res, 500, "Erro ao atualizar pedido");
+    // grava sem perder itens: se outra pessoa da mesa (ou o garçom) mandou ao mesmo tempo, lê de novo e soma por cima
+    let pedidoAtualizado = null;
+    for (let tentativa = 0; tentativa < 4 && !pedidoAtualizado; tentativa++) {
+      if (tentativa > 0) {
+        ({ data: pedidoAtual } = await supabase.from("orders").select("*").eq("id", id).single());
+        if (!pedidoAtual) return sendError(res, 404, "Pedido não encontrado");
+      }
+      const itensAntigos = Array.isArray(pedidoAtual.itens) ? pedidoAtual.itens : [];
+      const updatePayload = {
+        itens: [...itensAntigos, ...itens_novos],
+        total_price: Math.round((parseFloat(pedidoAtual.total_price || 0) + adicional) * 100) / 100,
+        update_at: new Date().toISOString()
+      };
+      if (client_name && !pedidoAtual.client_name) updatePayload.client_name = client_name;
+      if (client_phone && !pedidoAtual.client_phone) updatePayload.client_phone = client_phone;
+      if (notes) updatePayload.notes = notes;
+      let q = supabase.from("orders").update(updatePayload).eq("id", id);
+      q = pedidoAtual.update_at ? q.eq("update_at", pedidoAtual.update_at) : q.is("update_at", null);
+      const { data } = await q.select().maybeSingle();
+      pedidoAtualizado = data;
+    }
+    if (!pedidoAtualizado) return sendError(res, 500, "Erro ao atualizar pedido");
 
     emitOrderUpdate(pedidoAtualizado.restaurant_id, pedidoAtualizado);
     console.log(`➕ Itens adicionados ao pedido #${pedidoAtualizado.order_number} — ${itens_novos.length} novo(s)`);
@@ -2675,19 +2678,24 @@ const { data: orderAntes } = await supabase
     if ((status === "cancelled" || status === "canceled") && orderAntes && orderAntes.status !== "cancelled" && orderAntes.status !== "canceled") {
       estornarSeloFidelidade({ ...orderAntes, restaurant_id: data.restaurant_id });
     }
-        // 📅 agendado cancelado pelo restaurante: devolve o Pix e avisa o cliente no WhatsApp
-    if ((status === "cancelled" || status === "canceled") && orderAntes?.status === "scheduled") {
+    // 💸 pedido pago no Pix online (agendado ou não) cancelado pelo restaurante: devolve o Pix e avisa no WhatsApp
+    let estornoPix = null;
+    if ((status === "cancelled" || status === "canceled") && orderAntes && !["cancelled", "canceled"].includes(orderAntes.status)) {
       const est = await pixEstornarPedido(data.restaurant_id, id);
       if (est.ok) {
+        estornoPix = "ok";
         const { data: rest } = await supabase.from("restaurants").select("name").eq("id", data.restaurant_id).maybeSingle();
         const primeiro = String(data.client_name || "").trim().split(" ")[0];
         voucherWhatsApp(data.restaurant_id, rest?.name || null, data.client_name, data.client_phone,
-          `Olá${primeiro ? ", " + primeiro : ""}! Seu pedido agendado #${data.order_number}${rest?.name ? " no " + rest.name : ""} foi cancelado pelo restaurante e o Pix de ${voucherMoeda(est.valor)} foi devolvido. O valor volta para a sua conta em instantes.`);
-      } else {
+          `Olá${primeiro ? ", " + primeiro : ""}! Seu pedido${orderAntes.status === "scheduled" ? " agendado" : ""} #${data.order_number}${rest?.name ? " no " + rest.name : ""} foi cancelado pelo restaurante e o Pix de ${voucherMoeda(est.valor)} foi devolvido. O valor volta para a sua conta em instantes.`);
+      } else if (est.motivo !== "Pix pago não encontrado ou já devolvido") {
+        estornoPix = est.motivo; // pago no Pix, mas a devolução falhou: o restaurante devolve na mão
         console.error(`❌ estorno Pix do pedido ${id}: ${est.motivo}`);
       }
-      io.to(data.restaurant_id).emit("agendamentos_atualizados");
-      return res.json({ ...data, estorno: est.ok ? "ok" : est.motivo });
+      if (orderAntes.status === "scheduled") {
+        io.to(data.restaurant_id).emit("agendamentos_atualizados");
+        return res.json({ ...data, estorno: estornoPix || "sem Pix" });
+      }
     }
     emitOrderUpdate(data.restaurant_id, data);
     
@@ -2790,7 +2798,7 @@ app.post("/api/v1/pedidos", async (req, res) => {
     const normalizedItems = Array.isArray(items) ? items : Array.isArray(itens) ? itens : [];
     const phone = normalizePhone(client_phone);
  const finalOrigin = origin || "outros";
-    const finalStatus = status || "pending";
+    let finalStatus = status || "pending";
 
     if (!restaurant_id || !client_name) {
       return sendError(res, 400, "restaurant_id e client_name são obrigatórios");
@@ -2806,6 +2814,10 @@ app.post("/api/v1/pedidos", async (req, res) => {
     const publico = !readAuth(req);
     const ehDeliveryPublico = publico && finalOrigin !== "fidelidade"
       && (finalOrigin === "cardapio_delivery" || String(service_type || "").toLowerCase() === "delivery");
+        // resgate da fidelidade só nasce dentro do servidor: de fora, essa origem não passa (seria pedido de graça)
+    if (publico && finalOrigin === "fidelidade") return sendError(res, 403, "Origem inválida");
+    // pedido da mesa/QR sem login entra sempre como novo: quem finaliza e recebe é o caixa
+    if (publico && !ehDeliveryPublico) finalStatus = "pending";
 
     if (ehDeliveryPublico) {
       // o cardápio delivery só cria rascunho (draft) ou confirma (pending)
@@ -2815,6 +2827,11 @@ app.post("/api/v1/pedidos", async (req, res) => {
         const { data: atual } = await supabase.from("orders").select("id, status")
           .eq("id", order_id).eq("restaurant_id", restaurant_id).maybeSingle();
         if (!atual || atual.status !== "draft") return sendError(res, 403, "Este pedido não pode mais ser alterado");
+                // com Pix aberto o carrinho fica travado: mudar depois de gerar o Pix faria o pagamento não bater com o pedido
+        const { count: pixAberto } = await supabase.from("cobrancas_pix").select("id", { count: "exact", head: true })
+          .eq("restaurant_id", restaurant_id).eq("tipo", "pedido").eq("referencia_id", String(order_id))
+          .eq("status", "aguardando").gt("expira_em", new Date().toISOString());
+        if (pixAberto > 0) return sendError(res, 409, "Já existe um Pix aberto para este pedido. Pague esse Pix ou espere ele expirar para mudar o pedido.");
         eraRascunho = true;
       }
     }
@@ -4619,7 +4636,10 @@ async function calcularTotalServidor(restaurant_id, itens) {
   resultados.forEach((r, idx) => {
     const e = entrada[idx];
     // item simples que veio com o id do cardápio: o preço é o do cadastro (sem adivinhar pelo nome)
-    const doCadastro = e.cardapio_id && !/\s—\s/.test(e.nome) ? porId.get(e.cardapio_id) : null;
+    // o id só vale se o nome bater com o cadastro (id de item barato com nome de item caro não passa)
+    const nn = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const cad = e.cardapio_id && !/\s—\s/.test(e.nome) ? porId.get(e.cardapio_id) : null;
+    const doCadastro = cad && nn(cad.nome) === nn(e.nome) ? cad : null;
     const preco = doCadastro ? (parseFloat(doCadastro.preco) || 0) : r.encontrado ? r.preco_correto : null;
     if (preco === null) { naoEncontrados.push(r.nome_cliente); return; }
     if (Math.abs(preco - (parseFloat(e.preco) || 0)) > 0.01) divergentes.push(`${e.nome}: carrinho ${e.preco} / cardápio ${preco}`);
