@@ -116,9 +116,35 @@ function mostrarMesas(){
   });
 }
 
+/* ---------- paleta do restaurante (vem do servidor) ---------- */
+function corClara(hex){
+  const n = parseInt(String(hex || "").replace("#", ""), 16);
+  if(isNaN(n)) return false;
+  return (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) > 150;
+}
+function aplicarPaleta(p){
+  p = p || {};
+  const fundo = p.fundo || "#0b0a09", raiz = document.documentElement;
+  raiz.style.setProperty("--cor", p.primaria || "#d62828");
+  raiz.style.setProperty("--cor2", p.secundaria || "#7f1d1d");
+  raiz.style.setProperty("--fundo", fundo);
+  raiz.style.setProperty("--cor-texto", corClara(p.primaria) ? "#1f1610" : "#ffffff");
+  raiz.classList.toggle("claro", corClara(fundo)); // fundo claro: textos e ícones escuros
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", fundo);
+}
+// brasinhas do fundo: cada uma com seu tamanho e seu ritmo, subindo e descendo devagar
+function criarBrasas(){
+  const box = document.getElementById("brasas");
+  if(!box || box.childElementCount) return;
+  const lugares = [[8,6,12],[72,4,8],[40,14,6],[88,22,14],[14,30,7],[60,34,10],[30,46,5],[82,50,9],[6,58,13],[50,62,6],[70,72,11],[22,76,8],[90,82,5],[40,88,14],[60,94,7],[12,92,6]];
+  box.innerHTML = lugares.map(([x, y, s], i) =>
+    `<span style="left:${x}%;top:${y}%;--s:${s};--k:${(1 - (i % 4) * .14).toFixed(2)};animation-duration:${14 + (i * 7) % 13}s;animation-delay:-${(i * 5) % 17}s"></span>`).join("");
+}
+
 function montarTela(){
   const l = RS.info;
-  document.documentElement.style.setProperty("--cor", l.cor || "#d62828");
+  aplicarPaleta(l.paleta || { primaria: l.cor });
+  criarBrasas();
   document.title = `Reservar mesa · ${l.nome}`;
   $("nome").textContent = l.nome;
   if(l.logo_url){ $("logo").innerHTML = `<img src="${esc(l.logo_url)}" alt="">`; $("favicon").href = l.logo_url; }
