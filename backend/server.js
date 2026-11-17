@@ -2028,6 +2028,7 @@ app.post("/api/v1/restaurante/:restaurant_id/reservas-mesa/:id/usar", requireAut
       .update({ credito_usado: usado, credito_usado_em: new Date().toISOString() })
       .eq("id", req.params.id).eq("restaurant_id", rid).is("credito_usado_em", null)
       .select().maybeSingle();
+    if (!r) return res.json({ success: true, ja_usado: true }); // já usado antes: não gera vale de novo
     io.to(rid).emit("reserva_atualizada", r); // a mesa da reserva sai de ocupada no Operacional
     const sobra = Math.round((Number(r.valor_pago) - usado) * 100) / 100;
     if (sobra < 0.01) return res.json({ success: true, sobra: 0 });
