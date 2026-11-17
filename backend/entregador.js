@@ -984,7 +984,7 @@ supabase.from("entregadores").select("id, nome, telefone, tipo_pagamento, valor_
 
   app.post(`${OP}/acertos/:rodada_id`, async (req, res) => {
     const rid = req.params.restaurant_id;
-    const valor = r2(String(req.body?.valor_recebido ?? "").replace(",", "."));
+    const valor = r2(numeroTexto(req.body?.valor_recebido)); // "1.234,56", "100,50" e "100.5" viram número certo
     const quem = req.auth?.email || "caixa";
     const { data, error } = await supabase.from("entregador_rodadas")
       .update({ status: "acertada", valor_recebido: valor, acertada_em: new Date().toISOString(), acertada_por: quem })
