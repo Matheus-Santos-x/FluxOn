@@ -52,8 +52,24 @@ async function descobrirRestaurante(){
 
 function atualizarBotao(){
   const b = $("pagar");
-  b.disabled = !RS.mesa;
-  b.textContent = RS.mesa ? `Reservar e pagar ${moeda(RS.info.valor)} no Pix` : "Escolha a mesa";
+  b.disabled = !RS.mesa || !$("aceite").checked;
+  b.textContent = !RS.mesa ? "Escolha a mesa" : !$("aceite").checked ? "Aceite as regras de cancelamento" : `Reservar e pagar ${moeda(RS.info.valor)} no Pix`;
+  mostrarRegras();
+}
+
+// regras de cancelamento em destaque, antes de pagar: o prazo sai do horário escolhido
+function mostrarRegras(){
+  const l = RS.info, h = RS.horarios.find(x => x.hora === RS.hora);
+  const fmt = (d) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " às");
+  const prazo = h ? `até ${fmt(new Date(new Date(h.inicio).getTime() - l.bloqueio_min * 60000))}`
+    : l.bloqueio_min ? `até ${l.bloqueio_min >= 60 ? `${l.bloqueio_min / 60}h`.replace(".5h", "h30") : `${l.bloqueio_min} min`} antes do horário` : "até o horário da reserva";
+  const devolve = l.devolucao_pct >= 100 ? "devolvemos o sinal inteiro"
+    : l.devolucao_pct > 0 ? `devolvemos <b>${l.devolucao_pct}% do sinal</b> (${moeda(Math.floor(l.valor * l.devolucao_pct) / 100)})` : "<b>o sinal não é devolvido</b>";
+  $("regras").innerHTML = `
+    <strong>Cancelamento grátis ${prazo}</strong>
+    <span>Depois disso não dá mais para cancelar.</span>
+    <span>Se não comparecer até ${l.tolerancia_min} minutos depois do horário, ${devolve}.</span>
+    <span>Para cancelar, responda a mensagem de confirmação que vamos te mandar no WhatsApp.</span>`;
 }
 
 function mostrarPessoas(){
@@ -159,6 +175,8 @@ function montarTela(){
   $("telCliente").addEventListener("input", e => { e.target.value = mascaraTel(e.target.value); });
   $("info").textContent = `Para garantir a mesa você paga ${moeda(l.valor)} no Pix, e esse valor é descontado da sua conta no dia. Seguramos a mesa por ${l.tolerancia_min} minutos depois do horário.`;
   $("pagar").onclick = pagar;
+     $("aceite").onchange = atualizarBotao;
+  mostrarRegras();
   atualizarBotao();
   $("vp").hidden = false;
 }
@@ -177,7 +195,7 @@ async function pagar(){
   const erro = $("erro"); erro.textContent = "";
   const nome = $("nomeCliente").value.trim();
   const tel = soNumeros($("telCliente").value);
-  if(!RS.mesa) return;
+  if(!RS.mesa || !$("aceite").checked) return;
   if(nome.split(/\s+/).filter(p => p.length >= 2).length < 2) return erro.textContent = "Escreva o nome e o sobrenome para a reserva.";
   if(tel.length < 10) return erro.textContent = "Digite seu WhatsApp com DDD.";
 
