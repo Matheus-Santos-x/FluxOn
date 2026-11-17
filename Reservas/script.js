@@ -152,7 +152,7 @@ async function pagar(){
   const nome = $("nomeCliente").value.trim();
   const tel = soNumeros($("telCliente").value);
   if(!RS.mesa) return;
-  if(!nome) return erro.textContent = "Escreva o nome para a reserva.";
+  if(nome.split(/\s+/).filter(p => p.length >= 2).length < 2) return erro.textContent = "Escreva o nome e o sobrenome para a reserva.";
   if(tel.length < 10) return erro.textContent = "Digite seu WhatsApp com DDD.";
 
   const b = $("pagar");
