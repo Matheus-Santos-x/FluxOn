@@ -11,7 +11,7 @@ const ICONES = {
   delivery:  '<path d="M3 7h10v8H3z"/><path d="M13 10h4l3 3v2h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/>',
   fidelidade:'<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.6l1-5.8L3.5 9.7l5.9-.9z"/>',
   mapa:      '<path d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-5h-6v5H5a1 1 0 0 1-1-1z"/>',
-  whatsapp:  '<path d="M20 11.6a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6z"/><path d="M9 8.6c.2-.4.5-.5.8-.5h.5c.2 0 .4.1.5.4l.7 1.6c.1.2 0 .5-.1.6l-.5.6c-.1.1-.1.3 0 .5a6 6 0 0 0 2.5 2.4c.2.1.4.1.5 0l.6-.6c.2-.2.4-.2.6-.1l1.6.7c.2.1.4.3.4.5v.5c0 .3-.1.6-.5.8-.6.4-1.5.6-2.4.3a9 9 0 0 1-5-4.9c-.4-1-.2-2 .3-2.7z"/>',
+  whatsapp:  '<path d="M7.9 20A9 9 0 1 0 4 16.1L2.5 21.5z"/><path d="M9.3 8.4c.3-.3.7-.3 1 0l.9 1.3c.2.3.2.6-.1.9l-.5.5a5.2 5.2 0 0 0 2.4 2.4l.5-.5c.3-.3.6-.3.9-.1l1.3.9c.3.3.3.7 0 1l-.5.5c-.6.6-1.5.7-2.3.4a8.3 8.3 0 0 1-4.2-4.2c-.3-.8-.2-1.7.4-2.3z"/>',a8 8 0 0 1-11.8 7L4 20l1.4-4.1A8 8 0 1 1 20 11.6z"/><path d="M9 8.6c.2-.4.5-.5.8-.5h.5c.2 0 .4.1.5.4l.7 1.6c.1.2 0 .5-.1.6l-.5.6c-.1.1-.1.3 0 .5a6 6 0 0 0 2.5 2.4c.2.1.4.1.5 0l.6-.6c.2-.2.4-.2.6-.1l1.6.7c.2.1.4.3.4.5v.5c0 .3-.1.6-.5.8-.6.4-1.5.6-2.4.3a9 9 0 0 1-5-4.9c-.4-1-.2-2 .3-2.7z"/>',
   instagram: '<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r=".9" fill="currentColor" stroke="none"/>',
   avaliar:   '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.6l1-5.8L3.5 9.7l5.9-.9z"/><path d="M12 8.5v4"/><circle cx="12" cy="14.8" r=".6" fill="currentColor"/>',
   reserva:   '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4M9 14.5l2 2 4-4"/>',
@@ -44,8 +44,33 @@ function mostrarAviso(msg){
   a.hidden = false;
 }
 
+/* ---------- paleta do restaurante (vem do servidor) ---------- */
+function corClara(hex){
+  const n = parseInt(String(hex || "").replace("#", ""), 16);
+  if(isNaN(n)) return false;
+  return (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) > 150;
+}
+function aplicarPaleta(p){
+  p = p || {};
+  const fundo = p.fundo || "#0b0a09", raiz = document.documentElement;
+  raiz.style.setProperty("--cor", p.primaria || "#d62828");
+  raiz.style.setProperty("--cor2", p.secundaria || "#7f1d1d");
+  raiz.style.setProperty("--fundo", fundo);
+  raiz.style.setProperty("--cor-texto", corClara(p.primaria) ? "#1f1610" : "#ffffff");
+  raiz.classList.toggle("claro", corClara(fundo)); // fundo claro: textos e ícones escuros
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", fundo);
+}
+// brasinhas do fundo: cada uma com seu tamanho e seu ritmo, subindo e descendo devagar
+function criarBrasas(){
+  const box = document.getElementById("brasas");
+  if(!box || box.childElementCount) return;
+  const lugares = [[8,6,12],[72,4,8],[40,14,6],[88,22,14],[14,30,7],[60,34,10],[30,46,5],[82,50,9],[6,58,13],[50,62,6],[70,72,11],[22,76,8],[90,82,5],[40,88,14],[60,94,7],[12,92,6]];
+  box.innerHTML = lugares.map(([x, y, s], i) =>
+    `<span style="left:${x}%;top:${y}%;--s:${s};--k:${(1 - (i % 4) * .14).toFixed(2)};animation-duration:${14 + (i * 7) % 13}s;animation-delay:-${(i * 5) % 17}s"></span>`).join("");
+}
+
 function render(d){
-  document.documentElement.style.setProperty("--cor", d.cor || "#d62828");
+  aplicarPaleta(d.paleta || { primaria: d.cor });
   document.title = d.nome || "Central";
 
   // logo redondinho (ou a inicial do nome)
@@ -90,10 +115,12 @@ function render(d){
     img.onload = () => {
       const f = document.getElementById("fundo");
       f.style.backgroundImage = `url("${fundoUrl.replace(/"/g, "%22")}")`;
+             f.classList.add("foto");
       requestAnimationFrame(() => f.classList.add("on"));
     };
     img.src = fundoUrl;
   }else{
+    criarBrasas(); // sem foto: brasinhas na cor do restaurante
     document.getElementById("fundo").classList.add("on");
   }
 
