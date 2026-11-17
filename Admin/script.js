@@ -1814,7 +1814,9 @@ async function secReservas(el) {
             <label class="campo"><span>Tolerância de atraso</span>${sel("rs-tolerancia", d.opcoes.tolerancia, d.tolerancia, tempo)}</label>
             <label class="campo"><span>Antecedência mínima</span>${sel("rs-antecedencia", d.opcoes.antecedencia, d.antecedencia, tempo)}</label>
             <label class="campo"><span>Reservar com até</span>${sel("rs-dias", d.opcoes.dias, d.dias, n => `${n} dias antes`)}</label>
+            <label class="campo"><span>Se não comparecer, devolve</span>${sel("rs-devolucao", d.opcoes.devolucao, d.devolucao, n => n ? `${n}% do sinal` : "Nada (fica com o sinal)")}</label>
           </div>
+          <p class="dica">Cancelamento grátis (100% de volta) até a mesa travar, pela IA do WhatsApp. Depois do horário + tolerância, a reserva vira "não veio" sozinha e devolve a % escolhida. A devolução automática só funciona com Pix do Mercado Pago.</p>
           <p class="dica">Os horários saem dos Horários do restaurante, de 30 em 30 minutos, até 1h antes de fechar. O número de mesas vem de Operação.</p>
         </div>
         <div class="bloco">
@@ -1839,7 +1841,7 @@ async function secReservas(el) {
       try {
         await api(`/restaurants/${rid}/reservas`, { metodo: "PATCH", corpo: {
           ativo: $("rs-ativo").checked, valor: v("rs-valor"), duracao: v("rs-duracao"), bloqueio: v("rs-bloqueio"),
-          tolerancia: v("rs-tolerancia"), antecedencia: v("rs-antecedencia"), dias: v("rs-dias"),
+          tolerancia: v("rs-tolerancia"), antecedencia: v("rs-antecedencia"), dias: v("rs-dias"), devolucao: v("rs-devolucao"),
           mesas: d.mesas.map(m => ({
             numero: m.numero,
             lugares: Number(document.querySelector(`[data-rs-lugares="${m.numero}"]`).value) || 4,
