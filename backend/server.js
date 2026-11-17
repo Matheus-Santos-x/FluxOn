@@ -1926,8 +1926,14 @@ async function mesasReservadasAgora(rid) {
 // Operacional (Mesas): reservas que estão travando mesa agora
 app.get("/api/v1/restaurante/:restaurant_id/mesas-reservadas", requireAuth, requireOwner, async (req, res) => {
   try {
-    const mapa = await mesasReservadasAgora(req.params.restaurant_id);
-    return res.json({ reservas: [...mapa.values()] });
+    const rid = req.params.restaurant_id;
+    const mapa = await mesasReservadasAgora(rid);
+    // quem já chegou e ainda não fechou a conta: a mesa aparece ocupada, com o sinal
+    const { data: chegaram } = await supabase.from("reservas_mesa")
+      .select("id, mesa, nome, telefone, pessoas, inicio, valor_pago")
+      .eq("restaurant_id", rid).eq("status", "chegou").is("credito_usado_em", null)
+      .gte("inicio", new Date(Date.now() - 12 * 3600e3).toISOString());
+    return res.json({ reservas: [...mapa.values()], chegaram: chegaram || [] });
   } catch (err) {
     return sendError(res, 500, "Erro ao buscar as reservas");
   }
@@ -1976,7 +1982,7 @@ app.post("/api/v1/restaurante/:restaurant_id/reservas-mesa/:id/usar", requireAut
       .update({ credito_usado: usado, credito_usado_em: new Date().toISOString() })
       .eq("id", req.params.id).eq("restaurant_id", rid).is("credito_usado_em", null)
       .select().maybeSingle();
-    if (!r) return res.json({ success: true, ja_usado: true }); // já usado antes: não gera vale de novo
+    io.to(rid).emit("reserva_atualizada", r); // a mesa da reserva sai de ocupada no Operacional
     const sobra = Math.round((Number(r.valor_pago) - usado) * 100) / 100;
     if (sobra < 0.01) return res.json({ success: true, sobra: 0 });
     const cfg = await voucherConfig(rid);
