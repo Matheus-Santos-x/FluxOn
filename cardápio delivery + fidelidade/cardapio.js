@@ -853,6 +853,10 @@ document.getElementById("submitOrderBtn").onclick = async () => {
     if(TROCO_NECESSARIO){
       const valorTroco = document.getElementById("inpTrocoValor").value.trim();
       if(!valorTroco){ shake("inpTrocoValor"); return alert("Informa o valor pro troco."); }
+             const txtTroco = valorTroco.replace(/[^\d.,]/g, "");
+      const notaTroco = parseFloat(txtTroco.includes(",") ? txtTroco.replace(/\./g, "").replace(",", ".") : /^\d{1,3}(\.\d{3})+$/.test(txtTroco) ? txtTroco.replace(/\./g, "") : txtTroco) || 0;
+      const totalTroco = cartTotal() + taxaEntrega();
+      if(notaTroco <= totalTroco){ shake("inpTrocoValor"); return alert(`O troco tem que ser para um valor maior que o total do pedido (${money(totalTroco)}).`); }
       paymentMethodFinal = `Dinheiro (troco para R$ ${valorTroco})`;
     }else{
       paymentMethodFinal = "Dinheiro (sem troco)";
