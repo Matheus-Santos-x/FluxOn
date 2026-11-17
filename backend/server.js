@@ -348,7 +348,8 @@ app.use("/api/v1/pedidos", (req, res, next) => {
 // ===== RATE LIMITING =====
 const limiter = rateLimit({
   windowMs: 60 * 1000, // 1 minuto
-  max: 200, // máximo 200 requisições por minuto por IP
+  max: 300, // por IP: o Wi-Fi do restaurante é um IP só pra todos os clientes do QR
+  skip: (req) => !!readAuth(req), // caixa, Owner e n8n logados não entram na conta do IP
   message: { error: "Muitas requisições. Tente novamente em 1 minuto." },
   standardHeaders: true,
   legacyHeaders: false,
