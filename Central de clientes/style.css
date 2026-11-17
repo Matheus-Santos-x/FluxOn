@@ -1,14 +1,38 @@
-
+/* ============================================================
+   CENTRAL DO CLIENTE
+   Cores: paleta do restaurante, que vem do servidor.
+   Primária = vidro dos ícones · secundária = brasas do fundo (sem foto)
+   Fundo claro → classe .claro no <html> (textos e ícones escuros)
+   ============================================================ */
 :root{
-  --cor:#d62828;          /* cor do restaurante (vem do servidor) */
+  --cor:#d62828;
+  --cor2:#7f1d1d;
+  --fundo:#0b0a09;
   --texto:#ffffff;
-  --vidro:rgba(18,14,12,.52);
+  --suave:rgba(255,255,255,.88);
+  --fraco:rgba(255,255,255,.5);
   --linha:rgba(255,255,255,.10);
+  --vidro:color-mix(in srgb, var(--fundo) 50%, transparent);
+  --sombra:rgba(0,0,0,.8);
+  --sombra-texto:0 2px 18px rgba(0,0,0,.6);
+  --brasa:color-mix(in srgb, var(--cor2) 70%, var(--cor));
+  --brasa-forca:.75;
+}
+:root.claro{
+  --texto:#1f1610;
+  --suave:rgba(31,22,16,.78);
+  --fraco:rgba(31,22,16,.55);
+  --linha:rgba(31,22,16,.13);
+  --vidro:color-mix(in srgb, #ffffff 45%, transparent);
+  --sombra:rgba(70,45,20,.22);
+  --sombra-texto:none;
+  --brasa:color-mix(in srgb, var(--cor2) 65%, var(--fundo));
+  --brasa-forca:1;
 }
 *{ box-sizing:border-box; margin:0; padding:0; }
 html,body{ height:100%; }
 body{
-  background:#0b0a09;
+  background:var(--fundo);
   color:var(--texto);
   font-family:"Poppins", system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing:antialiased;
@@ -16,20 +40,38 @@ body{
 }
 a{ color:inherit; text-decoration:none; -webkit-tap-highlight-color:transparent; }
 
-/* ---------- foto de fundo ---------- */
+/* ---------- fundo: foto do restaurante ou brasinhas na cor dele ---------- */
 .fundo{
-  position:fixed; inset:0;
-  background:#0b0a09 center/cover no-repeat;
-  /* sem foto: um brilho suave na cor do restaurante */
-  background-image:radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--cor) 38%, #0b0a09), #0b0a09 72%);
+  position:fixed; inset:0; overflow:hidden;
+  background:var(--fundo) center/cover no-repeat;
   opacity:0; transform:scale(1.08);
   transition:opacity 1s ease, transform 6s ease-out;
 }
 .fundo.on{ opacity:1; transform:scale(1); }
-.fundo::after{
+/* com foto: um véu na cor do fundo, pra ler o nome e os botões */
+.fundo.foto::after{
   content:""; position:absolute; inset:0;
-  background:
-    linear-gradient(180deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.18) 30%, rgba(0,0,0,.18) 52%, rgba(0,0,0,.72) 82%, rgba(0,0,0,.9) 100%);
+  background:linear-gradient(180deg,
+    color-mix(in srgb, var(--fundo) 55%, transparent) 0%,
+    color-mix(in srgb, var(--fundo) 18%, transparent) 30%,
+    color-mix(in srgb, var(--fundo) 18%, transparent) 52%,
+    color-mix(in srgb, var(--fundo) 72%, transparent) 82%,
+    color-mix(in srgb, var(--fundo) 90%, transparent) 100%);
+}
+.brasas{ position:absolute; inset:0; pointer-events:none; }
+.brasas span{
+  position:absolute; border-radius:50%;
+  width:calc(var(--s) * 1vmin); height:calc(var(--s) * 1vmin);
+  background:radial-gradient(circle, var(--brasa) 0%, transparent 70%);
+  filter:blur(12px);
+  opacity:calc(var(--brasa-forca) * var(--k, 1));
+  animation:flutua ease-in-out infinite alternate;
+  will-change:transform;
+}
+@keyframes flutua{
+  0%  { transform:translate(0, 0); }
+  50% { transform:translate(8px, -38px); }
+  100%{ transform:translate(-6px, 26px); }
 }
 
 /* ---------- coluna central ---------- */
@@ -46,9 +88,9 @@ a{ color:inherit; text-decoration:none; -webkit-tap-highlight-color:transparent;
 .topo{ text-align:center; display:flex; flex-direction:column; align-items:center; padding:0 18px; }
 .logo{
   width:88px; height:88px; border-radius:50%;
-  background:#141110;
-  border:2px solid rgba(255,255,255,.14);
-  box-shadow:0 10px 30px -8px rgba(0,0,0,.7);
+  background:var(--fundo);
+  border:2px solid var(--linha);
+  box-shadow:0 10px 30px -8px var(--sombra);
   overflow:hidden;
   display:flex; align-items:center; justify-content:center;
   font-size:34px; font-weight:500;
@@ -57,13 +99,13 @@ a{ color:inherit; text-decoration:none; -webkit-tap-highlight-color:transparent;
 .nome{
   margin-top:16px;
   font-size:31px; font-weight:300; letter-spacing:.01em; line-height:1.15;
-  text-shadow:0 2px 18px rgba(0,0,0,.6);
+  text-shadow:var(--sombra-texto);
 }
 .frase{
   margin-top:8px; max-width:320px;
   font-size:13px; line-height:1.5; font-weight:400;
-  color:rgba(255,255,255,.88);
-  text-shadow:0 1px 10px rgba(0,0,0,.7);
+  color:var(--suave);
+  text-shadow:var(--sombra-texto);
 }
 
 /* ---------- aberto / fechado ---------- */
@@ -71,10 +113,10 @@ a{ color:inherit; text-decoration:none; -webkit-tap-highlight-color:transparent;
   margin-top:14px;
   display:inline-flex; align-items:center; gap:7px;
   padding:5px 12px 5px 10px; border-radius:100px;
-  background:rgba(0,0,0,.45);
+  background:var(--vidro);
   backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-  border:1px solid rgba(255,255,255,.12);
-  font-size:11px; font-weight:500; color:rgba(255,255,255,.9);
+  border:1px solid var(--linha);
+  font-size:11px; font-weight:500; color:var(--texto);
 }
 .status[hidden]{ display:none; }
 .status::before{ content:""; width:7px; height:7px; border-radius:50%; background:#9ca3af; }
@@ -86,10 +128,10 @@ a{ color:inherit; text-decoration:none; -webkit-tap-highlight-color:transparent;
   padding:20px 10px 12px;
   border-radius:28px;
   background:var(--vidro);
-  backdrop-filter:blur(18px) saturate(140%);
-  -webkit-backdrop-filter:blur(18px) saturate(140%);
+  backdrop-filter:blur(22px) saturate(150%);
+  -webkit-backdrop-filter:blur(22px) saturate(150%);
   border:1px solid var(--linha);
-  box-shadow:0 20px 50px -20px rgba(0,0,0,.8);
+  box-shadow:0 20px 50px -20px var(--sombra);
 }
 .botoes{ display:flex; flex-wrap:wrap; justify-content:center; row-gap:18px; }
 .botao{
@@ -98,26 +140,28 @@ a{ color:inherit; text-decoration:none; -webkit-tap-highlight-color:transparent;
   padding:0 3px;
   text-align:center;
   font-size:11px; line-height:1.25; font-weight:400;
-  color:rgba(255,255,255,.92);
+  color:var(--texto);
 }
 .botoes.poucos .botao{ flex-basis:calc(100% / var(--qtd)); }
+/* ícone: vidro translúcido na cor primária; o desenho segue o tema (branco ou escuro) */
 .ico{
   width:52px; height:52px; border-radius:16px;
   display:flex; align-items:center; justify-content:center;
-  background:color-mix(in srgb, var(--cor) 34%, rgba(255,255,255,.06));
-  border:1px solid rgba(255,255,255,.14);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.10), 0 6px 16px -8px rgba(0,0,0,.6);
+  background:color-mix(in srgb, var(--cor) 22%, transparent);
+  border:1px solid color-mix(in srgb, var(--cor) 55%, transparent);
+  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10), 0 6px 16px -8px var(--sombra);
   transition:transform .15s ease, background .2s ease;
 }
-.ico svg{ width:23px; height:23px; color:#fff; }
+.ico svg{ width:23px; height:23px; color:var(--texto); }
 .botao:active .ico{ transform:scale(.9); }
-@media (hover:hover){ .botao:hover .ico{ background:color-mix(in srgb, var(--cor) 50%, rgba(255,255,255,.08)); } }
+@media (hover:hover){ .botao:hover .ico{ background:color-mix(in srgb, var(--cor) 36%, transparent); } }
 
 .assinatura{
   margin-top:18px;
-  text-align:center; font-size:10.5px; color:rgba(255,255,255,.5);
+  text-align:center; font-size:10.5px; color:var(--fraco);
 }
-.assinatura b{ font-weight:600; color:rgba(255,255,255,.75); }
+.assinatura b{ font-weight:600; color:var(--suave); }
 
 /* ---------- entrada animada ---------- */
 .central.pronto .topo > *, .central.pronto .painel{
@@ -134,7 +178,7 @@ a{ color:inherit; text-decoration:none; -webkit-tap-highlight-color:transparent;
   position:fixed; inset:0; z-index:5;
   display:flex; align-items:center; justify-content:center;
   padding:24px; text-align:center;
-  font-size:14px; color:rgba(255,255,255,.7);
+  font-size:14px; color:var(--suave);
 }
 .aviso[hidden]{ display:none; }
 
