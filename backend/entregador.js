@@ -425,7 +425,6 @@ async function linkRastreio(rid, o) {
   const { data: r } = await C.supabase.from("restaurants").select("cardapio_delivery_url").eq("id", rid).maybeSingle();
   const dominio = String(r?.cardapio_delivery_url || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
   if (!dominio) return ""; // sem o app de pedidos com domínio, não manda link de rastreio
-  if (!dominio && !base) return "";
   let tk = o.tracking_token;
   if (!tk) { tk = crypto.randomBytes(10).toString("hex"); await C.supabase.from("orders").update({ tracking_token: tk }).eq("id", o.id); }
   return `https://${dominio}/?acompanhar=${tk}`;
