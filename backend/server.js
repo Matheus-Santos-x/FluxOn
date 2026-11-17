@@ -1581,6 +1581,21 @@ function voucherAutorizado(req, rid) {
   return !!a && (a.kind === "service" || a.restaurant_id === rid);
 }
 
+// ===== PALETA DO RESTAURANTE: todo app do cliente puxa daqui (ou das cores próprias do app, se ligadas) =====
+const PALETA_CAMPOS = "tema, cor_primaria, cor_secundaria, cor_fundo, cores_apps";
+function paletaDe(cfg, app) {
+  const hex = (v) => /^#[0-9a-f]{6}$/i.test(v || "") ? v : null;
+  const propria = app ? cfg?.cores_apps?.[app] : null;
+  const base = propria?.ativo ? propria : (cfg || {});
+  const claro = (base.tema || cfg?.tema) === "light";
+  return {
+    tema: claro ? "light" : "dark",
+    primaria: hex(base.cor_primaria) || hex(cfg?.cor_primaria) || "#d62828",
+    secundaria: hex(base.cor_secundaria) || hex(cfg?.cor_secundaria) || "#7f1d1d",
+    fundo: hex(base.cor_fundo) || (claro ? "#ffffff" : "#0b0a09")
+  };
+}
+
 // página de compra: valores, validade e se dá pra comprar
 app.get("/api/v1/vouchers/:restaurant_id/loja", async (req, res) => {
   try {
@@ -1589,7 +1604,7 @@ app.get("/api/v1/vouchers/:restaurant_id/loja", async (req, res) => {
     if (!rest) return sendError(res, 404, "Restaurante não encontrado");
     const [cfg, { data: visual }, pix] = await Promise.all([
       voucherConfig(rid),
-      supabase.from("restaurante_config").select("nome_exibicao, logo_url, cor_primaria").eq("restaurant_id", rid).maybeSingle(),
+      supabase.from("restaurante_config").select(`nome_exibicao, logo_url, ${PALETA_CAMPOS}`).eq("restaurant_id", rid).maybeSingle(),
       pixConfig(rid)
     ]);
     return res.json({
@@ -1597,6 +1612,7 @@ app.get("/api/v1/vouchers/:restaurant_id/loja", async (req, res) => {
       nome: visual?.nome_exibicao || rest.name || "",
       logo_url: visual?.logo_url || null,
       cor: visual?.cor_primaria || "#d62828",
+      paleta: paletaDe(visual, "vale"),
       valores: VOUCHER_VALORES,
       validade_dias: cfg.validade,
       central_url: rest.central_url ? `https://${rest.central_url}` : null
@@ -2018,7 +2034,7 @@ app.get("/api/v1/reservas/:restaurant_id/info", async (req, res) => {
     if (!rest) return sendError(res, 404, "Restaurante não encontrado");
     const [cfg, { data: visual }, pix] = await Promise.all([
       reservaConfig(rid),
-      supabase.from("restaurante_config").select("nome_exibicao, logo_url, cor_primaria").eq("restaurant_id", rid).maybeSingle(),
+      supabase.from("restaurante_config").select(`nome_exibicao, logo_url, ${PALETA_CAMPOS}`).eq("restaurant_id", rid).maybeSingle(),
       pixConfig(rid)
     ]);
     const reservaveis = cfg.mesas.filter(m => m.reservavel);
@@ -2027,6 +2043,7 @@ app.get("/api/v1/reservas/:restaurant_id/info", async (req, res) => {
       nome: visual?.nome_exibicao || rest.name || "",
       logo_url: visual?.logo_url || null,
       cor: visual?.cor_primaria || "#d62828",
+      paleta: paletaDe(visual, "reservas"),
       valor: cfg.valor, duracao_min: cfg.duracao, tolerancia_min: cfg.tolerancia, dias: cfg.dias,
       max_pessoas: Math.max(0, ...reservaveis.map(m => m.lugares)),
       hoje: reservaHoje(),
@@ -4837,7 +4854,7 @@ async function centralDados(rid) {
   if (!rest) return null;
   const [{ data: cfg }, { count: premios }, { data: central }] = await Promise.all([
     supabase.from("restaurante_config")
-      .select("nome_exibicao, logo_url, banner_url, subtitulo, telefone, instagram, endereco, cor_primaria, voucher_ativo")
+      .select(`nome_exibicao, logo_url, banner_url, subtitulo, telefone, instagram, endereco, voucher_ativo, ${PALETA_CAMPOS}`)
       .eq("restaurant_id", rid).maybeSingle(),
     supabase.from("premios_fidelidade")
       .select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("ativo", true),
@@ -4897,6 +4914,7 @@ app.get("/api/v1/central/:restaurant_id", async (req, res) => {
       fundo_url: central?.fundo_url || cfg.banner_url || null,
       frase: central ? (central.frase || "") : (cfg.subtitulo || ""),
       cor: cfg.cor_primaria || "#d62828",
+      paleta: paletaDe(cfg, "central"),
       status: central?.mostrar_aberto ? await centralStatus(rest.id) : null,
       botoes: centralBotoes(dados).map(b => ({ tipo: b.icone, rotulo: b.rotulo, url: b.url }))
     });
