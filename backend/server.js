@@ -1862,7 +1862,8 @@ PIX_TIPOS.reserva_mesa = {
   publico: true,
   async preparar({ restaurant_id, dados, pagador, expira }) {
     const cfg = await reservaConfig(restaurant_id);
-    if (!cfg.ativo) throw new PixErro(400, "Este restaurante não está aceitando reservas");
+    if (String(pagador.nome || "").trim().split(/\s+/).filter(p => p.length >= 2).length < 2)
+      throw new PixErro(400, "Escreva o nome e o sobrenome para a reserva.");
     const pessoas = parseInt(dados.pessoas) || 0;
     const mesa = parseInt(dados.mesa) || 0;
     const slot = (await reservaHorarios(restaurant_id, cfg, String(dados.data || ""))).find(s => s.hora === dados.hora);
@@ -2689,7 +2690,7 @@ app.post("/api/v1/pedidos", async (req, res) => {
     // 🪑 mesa reservada: o cardápio da mesa não abre conta nela (a equipe leva o cliente pra outra mesa)
     if (publico && table_number && ["autoatendimento", "mesa"].includes(String(finalOrigin).toLowerCase())) {
       const reservada = (await mesasReservadasAgora(restaurant_id)).get(Number(table_number));
-      if (reservada) return sendError(res, 409, `A mesa ${table_number} está reservada. Chame um atendente para escolher outra mesa.`);
+      if (reservada) return sendError(res, 409, `A mesa ${table_number} está reservada. Por favor, dirija-se a outra mesa. Se foi você quem reservou, vá até o caixa para liberarmos a sua mesa.`);
     }
     if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0 && (ehDeliveryPublico || !order_id)) {
       const { total: totalServidor, naoEncontrados, divergentes } = await calcularTotalServidor(restaurant_id, normalizedItems);
