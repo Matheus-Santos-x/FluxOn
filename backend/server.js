@@ -1292,11 +1292,11 @@ const PIX_PROVEDORES = {
       return { pago: p.status === "approved", valor: Number(p.transaction_amount) || 0 };
     },
     // devolve o valor inteiro do Pix
-    async estornar({ cred, ref, referencia }) {
+    async estornar({ cred, ref, referencia, valor }) {
       const r = await fetch(`https://api.mercadopago.com/v1/payments/${ref}/refunds`, {
         method: "POST",
         headers: { Authorization: `Bearer ${cred.mp_access_token}`, "Content-Type": "application/json", "X-Idempotency-Key": `estorno-${referencia}` },
-        body: "{}"
+        body: valor ? JSON.stringify({ amount: valor }) : "{}" // com valor: devolve só essa parte
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d?.message || `Mercado Pago respondeu ${r.status}`);
@@ -1788,7 +1788,8 @@ const RESERVA_OPCOES = {
   bloqueio: [0, 30, 60, 90, 120, 180],
   tolerancia: [10, 15, 20, 30, 45],
   antecedencia: [30, 60, 120, 180, 360, 720, 1440],
-  dias: [7, 15, 30, 60, 90]
+  dias: [7, 15, 30, 60, 90],
+  devolucao: [0, 20, 30, 40, 50, 60, 70, 80, 90, 100] // % do sinal devolvido a quem não aparece
 };
 const reservaMoeda = (v) => `R$ ${Number(v).toFixed(2).replace(".", ",")}`;
 const reservaMin = (h) => { const [a, b] = String(h).slice(0, 5).split(":").map(Number); return a * 60 + b; };
@@ -1798,7 +1799,7 @@ const reservaQuando = (iso) => new Date(iso).toLocaleString("pt-BR", { timeZone:
 
 async function reservaConfig(rid) {
   const { data: c } = await supabase.from("restaurante_config")
-    .select("num_mesas, reserva_ativo, reserva_valor, reserva_duracao_min, reserva_bloqueio_min, reserva_tolerancia_min, reserva_antecedencia_min, reserva_dias, reserva_mesas")
+    .select("num_mesas, reserva_ativo, reserva_valor, reserva_duracao_min, reserva_bloqueio_min, reserva_tolerancia_min, reserva_antecedencia_min, reserva_dias, reserva_mesas, reserva_devolucao_pct")
     .eq("restaurant_id", rid).maybeSingle();
   const total = Math.max(0, Math.min(200, Number(c?.num_mesas) || 10));
   const salvas = Array.isArray(c?.reserva_mesas) ? c.reserva_mesas : [];
@@ -1814,7 +1815,7 @@ async function reservaConfig(rid) {
     bloqueio: c?.reserva_bloqueio_min ?? 90,
     tolerancia: Number(c?.reserva_tolerancia_min) || 15,
     antecedencia: Number(c?.reserva_antecedencia_min) || 120,
-    dias: Number(c?.reserva_dias) || 30,
+    devolucao: c?.reserva_devolucao_pct ?? 80,
     mesas
   };
 }
@@ -1934,7 +1935,8 @@ PIX_TIPOS.reserva_mesa = {
     io.to(r.restaurant_id).emit("reserva_atualizada", r); // o Operacional fica sabendo na hora
     await reservaWhatsApp(r.restaurant_id, r.nome, r.telefone,
       `✅ Reserva confirmada, ${r.nome}!\n\n📅 ${reservaQuando(r.inicio)}\n🪑 Mesa ${r.mesa} · ${r.pessoas} ${r.pessoas === 1 ? "pessoa" : "pessoas"}\n\n` +
-      `Os ${reservaMoeda(r.valor_pago)} que você pagou viram crédito na sua conta. Seguramos a mesa por ${cfg.tolerancia} minutos depois do horário.`);
+      `Os ${reservaMoeda(r.valor_pago)} que você pagou viram crédito na sua conta. Seguramos a mesa por ${cfg.tolerancia} minutos depois do horário.\n\n` +
+      reservaRegrasTexto(r.inicio, cfg));
   },
   async aoFalhar({ restaurant_id, referencia_id }) {
     await supabase.from("reservas_mesa").delete()
@@ -1981,6 +1983,7 @@ app.patch("/api/v1/restaurante/:restaurant_id/reservas-mesa/:id", requireAuth, r
     if (error) throw error;
     if (!r) return sendError(res, 409, "Essa reserva já foi atualizada");
     io.to(req.params.restaurant_id).emit("reserva_atualizada", r);
+    if (status === "nao_veio") reservaNaoVeio(r).catch(e => console.error("❌ reserva não veio:", e.message));
     return res.json({ success: true, reserva: r });
   } catch (err) {
     console.error("❌ reserva chegou/não veio:", err.message);
@@ -2058,6 +2061,7 @@ app.get("/api/v1/reservas/:restaurant_id/info", async (req, res) => {
       cor: visual?.cor_primaria || "#d62828",
       paleta: paletaDe(visual, "reservas"),
       valor: cfg.valor, duracao_min: cfg.duracao, tolerancia_min: cfg.tolerancia, dias: cfg.dias,
+            bloqueio_min: Number(cfg.bloqueio) || 0, devolucao_pct: cfg.devolucao,
       max_pessoas: Math.max(0, ...reservaveis.map(m => m.lugares)),
       hoje: reservaHoje(),
       central_url: rest.central_url ? `https://${rest.central_url}` : null
@@ -2116,7 +2120,7 @@ app.patch("/admin/restaurants/:id/reservas", requireAdmin, async (req, res) => {
     const num = (v) => Number(v);
     const valor = Math.round(num(b.valor) * 100) / 100;
     if (!(valor >= 1 && valor <= 1000)) return sendError(res, 400, "Valor da reserva entre R$ 1 e R$ 1.000");
-    for (const k of ["duracao", "bloqueio", "tolerancia", "antecedencia", "dias"])
+    for (const k of ["duracao", "bloqueio", "tolerancia", "antecedencia", "dias", "devolucao"])
       if (!RESERVA_OPCOES[k].includes(num(b[k]))) return sendError(res, 400, `Valor inválido em ${k}`);
     const mesas = (Array.isArray(b.mesas) ? b.mesas : []).slice(0, 200).map(m => ({
       numero: parseInt(m.numero) || 0, lugares: Math.max(1, Math.min(30, parseInt(m.lugares) || 4)), reservavel: m.reservavel !== false
@@ -2124,7 +2128,8 @@ app.patch("/admin/restaurants/:id/reservas", requireAdmin, async (req, res) => {
     const { error } = await supabase.from("restaurante_config").upsert({
       restaurant_id: req.params.id, reserva_ativo: !!b.ativo, reserva_valor: valor,
       reserva_duracao_min: num(b.duracao), reserva_bloqueio_min: num(b.bloqueio), reserva_tolerancia_min: num(b.tolerancia),
-      reserva_antecedencia_min: num(b.antecedencia), reserva_dias: num(b.dias), reserva_mesas: mesas
+      reserva_antecedencia_min: num(b.antecedencia), reserva_dias: num(b.dias), reserva_mesas: mesas,
+      reserva_devolucao_pct: num(b.devolucao)
     }, { onConflict: "restaurant_id" });
     if (error) return sendError(res, 500, "Erro ao salvar: " + error.message);
     await logAdminAction(req.auth.email, "editar_reservas", { restaurant_id: req.params.id, ativo: !!b.ativo });
@@ -2146,10 +2151,16 @@ app.get("/api/v1/dominio/:servico/:dominio", async (req, res) => {
 
 // devolve o Pix de um pedido (agendado cancelado pelo restaurante) direto no banco
 async function pixEstornarPedido(restaurant_id, order_id) {
+  return pixEstornar(restaurant_id, "pedido", order_id);
+}
+
+// devolve um Pix direto no banco: inteiro, ou só uma parte quando vem o valor (reserva de quem não veio)
+async function pixEstornar(restaurant_id, tipo, referencia_id, valor = null) {
   const { data: cob } = await supabase.from("cobrancas_pix").select("*")
-    .eq("restaurant_id", restaurant_id).eq("tipo", "pedido").eq("referencia_id", String(order_id))
+    .eq("restaurant_id", restaurant_id).eq("tipo", tipo).eq("referencia_id", String(referencia_id))
     .eq("status", "pago").is("estornado_em", null).maybeSingle();
   if (!cob) return { ok: false, motivo: "Pix pago não encontrado ou já devolvido" };
+  const parte = valor && valor < Number(cob.valor) ? Math.round(valor * 100) / 100 : null;
   const cfg = await pixConfig(restaurant_id);
   const prov = cfg && cfg.tipo === cob.provedor ? PIX_PROVEDORES[cfg.tipo] : null;
   if (!prov?.estornar) return { ok: false, motivo: "este banco não tem devolução automática" };
@@ -2158,14 +2169,125 @@ async function pixEstornarPedido(restaurant_id, order_id) {
     .eq("id", cob.id).is("estornado_em", null).select("id").maybeSingle();
   if (!marcado) return { ok: false, motivo: "a devolução já está em andamento" };
   try {
-    await prov.estornar({ cred: cfg.cred, ref: cob.pagamento_ref, referencia: cob.id });
-    console.log(`↩️ Pix devolvido: pedido ${order_id} (R$ ${cob.valor})`);
-    return { ok: true, valor: cob.valor };
+    await prov.estornar({ cred: cfg.cred, ref: cob.pagamento_ref, referencia: cob.id, valor: parte });
+    console.log(`↩️ Pix devolvido: ${tipo} ${referencia_id} (R$ ${parte ?? cob.valor})`);
+    return { ok: true, valor: parte ?? Number(cob.valor) };
   } catch (e) {
     await supabase.from("cobrancas_pix").update({ estornado_em: null, pendencia: `devolução falhou: ${e.message}`.slice(0, 300) }).eq("id", cob.id);
     return { ok: false, motivo: e.message };
   }
 }
+
+/* ========================================
+   🪑 CANCELAMENTO E NÃO COMPARECIMENTO DA RESERVA
+   - Cancelar: grátis até a mesa travar (horário − bloqueio), devolve 100%. Pela IA do WhatsApp.
+   - Não veio: passou do horário + tolerância (ou o caixa clicou "Não veio"): devolve a % do Admin.
+======================================== */
+const reservaPrazo = (inicio, cfg) => new Date(new Date(inicio).getTime() - (Number(cfg.bloqueio) || 0) * 60000);
+const reservaTelFim = (t) => String(t || "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+
+function reservaRegrasTexto(inicio, cfg) {
+  const prazo = reservaQuando(reservaPrazo(inicio, cfg));
+  const naoVeio = cfg.devolucao >= 100 ? "devolvemos o sinal inteiro"
+    : cfg.devolucao > 0 ? `devolvemos ${cfg.devolucao}% do sinal` : "o sinal não é devolvido";
+  return `❌ Cancelamento grátis até ${prazo}: é só responder esta mensagem pedindo para cancelar.\n` +
+    `Depois disso não dá mais para cancelar. Se não comparecer até ${cfg.tolerancia} minutos depois do horário, ${naoVeio}.`;
+}
+
+// devolve a parte do sinal (pct de 0 a 100) e guarda quanto voltou
+async function reservaDevolver(r, pct) {
+  const pago = Number(r.valor_pago) || 0;
+  const valor = Math.floor(pago * pct) / 100;
+  if (valor < 0.01) return { ok: true, valor: 0 };
+  const est = await pixEstornar(r.restaurant_id, "reserva_mesa", r.id, valor);
+  await supabase.from("reservas_mesa").update({ devolvido: est.ok ? valor : 0 }).eq("id", r.id);
+  if (!est.ok) console.error(`❌ devolução da reserva ${r.id}: ${est.motivo}`);
+  return { ...est, valor };
+}
+
+async function reservaNaoVeio(r) {
+  const cfg = await reservaConfig(r.restaurant_id);
+  const d = await reservaDevolver(r, cfg.devolucao);
+  const primeiro = String(r.nome || "").trim().split(" ")[0];
+  const sobre = d.valor <= 0 ? "Como combinado na reserva, o sinal não é devolvido."
+    : d.ok ? `Como combinado na reserva, devolvemos ${reservaMoeda(d.valor)} (${cfg.devolucao}% do sinal) no seu Pix.`
+    : `O restaurante vai devolver ${reservaMoeda(d.valor)} (${cfg.devolucao}% do sinal) para você.`;
+  await reservaWhatsApp(r.restaurant_id, r.nome, r.telefone,
+    `Olá${primeiro ? ", " + primeiro : ""}! Sua reserva de ${reservaQuando(r.inicio)} na mesa ${r.mesa} passou do horário de tolerância e foi encerrada.\n\n${sobre}`);
+}
+
+// a cada 5 min: quem não chegou até o horário + tolerância vira "não veio"
+let naoVeioRodando = false;
+async function processarNaoVeio() {
+  if (naoVeioRodando) return;
+  naoVeioRodando = true;
+  try {
+    const { data } = await supabase.from("reservas_mesa").select("*").eq("status", "confirmada")
+      .lt("inicio", new Date(Date.now() - 10 * 60000).toISOString())
+      .gt("inicio", new Date(Date.now() - 24 * 3600e3).toISOString()).limit(200);
+    for (const r of data || []) {
+      const cfg = await reservaConfig(r.restaurant_id);
+      if (Date.now() < new Date(r.inicio).getTime() + cfg.tolerancia * 60000) continue;
+      const { data: ok } = await supabase.from("reservas_mesa").update({ status: "nao_veio" })
+        .eq("id", r.id).eq("status", "confirmada").select().maybeSingle();
+      if (!ok) continue; // o caixa mexeu agora
+      io.to(r.restaurant_id).emit("reserva_atualizada", ok);
+      await reservaNaoVeio(ok);
+    }
+  } catch (e) {
+    console.error("❌ reservas não veio:", e.message);
+  } finally {
+    naoVeioRodando = false;
+  }
+}
+setInterval(processarNaoVeio, 5 * 60 * 1000).unref();
+
+// IA do WhatsApp (chave do servidor): as reservas desse telefone que ainda vão acontecer
+app.get("/api/v1/reservas/:restaurant_id/do-cliente", async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    if (!voucherAutorizado(req, rid)) return sendError(res, 401, "Não autorizado");
+    const tel = reservaTelFim(req.query.telefone);
+    if (tel.length < 10) return sendError(res, 400, "Telefone inválido");
+    const cfg = await reservaConfig(rid);
+    const { data } = await supabase.from("reservas_mesa").select("id, mesa, pessoas, inicio, nome, telefone, valor_pago")
+      .eq("restaurant_id", rid).eq("status", "confirmada").gt("inicio", new Date().toISOString()).order("inicio");
+    const minhas = (data || []).filter(r => reservaTelFim(r.telefone) === tel).map(r => {
+      const prazo = reservaPrazo(r.inicio, cfg);
+      return { id: r.id, quando: reservaQuando(r.inicio), mesa: r.mesa, pessoas: r.pessoas, nome: r.nome,
+        valor_pago: Number(r.valor_pago) || 0, pode_cancelar: Date.now() < prazo.getTime(), cancelar_ate: reservaQuando(prazo) };
+    });
+    return res.json({ reservas: minhas });
+  } catch (err) {
+    return sendError(res, 500, "Erro ao buscar as reservas");
+  }
+});
+
+// IA do WhatsApp (chave do servidor): cancela a reserva. O servidor confere telefone e prazo; a IA só pede.
+app.post("/api/v1/reservas/:restaurant_id/cancelar", async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    if (!voucherAutorizado(req, rid)) return sendError(res, 401, "Não autorizado");
+    const tel = reservaTelFim(req.body?.telefone);
+    const { data: r } = await supabase.from("reservas_mesa").select("*")
+      .eq("id", String(req.body?.reserva_id || "")).eq("restaurant_id", rid).maybeSingle();
+    if (!r || tel.length < 10 || reservaTelFim(r.telefone) !== tel) return sendError(res, 404, "Reserva não encontrada para esse telefone");
+    if (r.status !== "confirmada") return sendError(res, 409, "Essa reserva não está mais ativa");
+    const cfg = await reservaConfig(rid);
+    const prazo = reservaPrazo(r.inicio, cfg);
+    if (Date.now() >= prazo.getTime()) return sendError(res, 409, `O prazo para cancelar terminou em ${reservaQuando(prazo)}. A mesa já está guardada para você.`);
+    const { data: ok } = await supabase.from("reservas_mesa").update({ status: "cancelada", cancelada_em: new Date().toISOString() })
+      .eq("id", r.id).eq("status", "confirmada").select().maybeSingle();
+    if (!ok) return sendError(res, 409, "Essa reserva já foi atualizada");
+    io.to(rid).emit("reserva_atualizada", ok);
+    const d = await reservaDevolver(ok, 100);
+    return res.json({ success: true, devolvido: d.ok ? d.valor : 0, devolucao_automatica: d.ok,
+      mensagem: d.ok ? `Reserva cancelada. Devolvemos ${reservaMoeda(d.valor)} no seu Pix.` : `Reserva cancelada. O restaurante vai devolver ${reservaMoeda(d.valor)} para você.` });
+  } catch (err) {
+    console.error("❌ cancelar reserva:", err.message);
+    return sendError(res, 500, "Erro ao cancelar a reserva");
+  }
+});
 
 /* ---- motor ---- */
 async function pixCriarCobranca({ restaurant_id, tipo, dados, pagador }) {
@@ -2721,7 +2843,7 @@ app.post("/api/v1/pedidos", async (req, res) => {
     // 🪑 mesa reservada: o cardápio da mesa não abre conta nela (a equipe leva o cliente pra outra mesa)
     if (publico && table_number && ["autoatendimento", "mesa"].includes(String(finalOrigin).toLowerCase())) {
       const reservada = (await mesasReservadasAgora(restaurant_id)).get(Number(table_number));
-      if (reservada) return sendError(res, 409, `A mesa ${table_number} está reservada. Por favor, dirija-se a outra mesa. Se foi você quem reservou, vá até o caixa para liberarmos a sua mesa.`);
+      if (reservada) return sendError(res, 409, `A mesa ${table_number} está reservada. Se foi você quem reservou, vá até o caixa para abrirmos a sua mesa. Se não, por favor, escolha outra mesa.`);
     }
     if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0 && (ehDeliveryPublico || !order_id)) {
       const { total: totalServidor, naoEncontrados, divergentes } = await calcularTotalServidor(restaurant_id, normalizedItems);
