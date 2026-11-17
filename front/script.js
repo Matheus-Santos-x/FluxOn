@@ -905,6 +905,7 @@ async function _toggleEmissaoNF(el) {
    Mesas mostra "Reservada"; tocar nela abre a reserva (cliente chegou / não veio).
 ======================================== */
 window._mesasReservadas = new Map();
+window._mesasChegou = new Map(); // reservas em que o cliente já sentou (mesa ocupada até fechar a conta)
 const horaReserva = (iso) => new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
 async function carregarReservasMesas() {
   const rid = getRestaurantId();
@@ -914,6 +915,7 @@ async function carregarReservasMesas() {
     if (!r.ok) return;
     const d = await r.json();
     window._mesasReservadas = new Map((d.reservas || []).map(x => [String(x.mesa), x]));
+        window._mesasChegou = new Map((d.chegaram || []).map(x => [String(x.mesa), x]));
     if (!document.getElementById("mesas-view")?.classList.contains("hidden")) renderMesas();
   } catch {}
 }
@@ -961,14 +963,34 @@ function abrirReservaMesa(key) {
       const d = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(d.error || "Não deu para atualizar a reserva");
       window._mesasReservadas.delete(String(key));
+      if (st === "chegou") window._mesasChegou.set(String(key), { ...r, status: "chegou" });
       m.remove();
       renderMesas();
-      if (st === "chegou") abrirDrawerMesa(key); // já abre a mesa pra lançar o pedido
+      if (st === "chegou") abrirDrawerMesa(key); // a mesa já fica ocupada com o nome e o sinal
     } catch (e) {
       m.querySelector("[data-erro]").textContent = e.message;
       m.querySelectorAll("[data-st]").forEach(x => { x.disabled = false; });
     }
   });
+}
+
+// cliente da reserva foi embora sem consumir: libera a mesa e o sinal vira vale no WhatsApp dele
+async function liberarMesaReserva(key, btn) {
+  const r = window._mesasChegou.get(String(key));
+  if (!r) return;
+  if (btn.dataset.ok !== "1") { btn.dataset.ok = "1"; btn.textContent = "Confirmar"; return; }
+  btn.disabled = true;
+  try {
+    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${getRestaurantId()}/reservas-mesa/${r.id}/usar`, {
+      method: "POST", headers: buildHeaders(), body: JSON.stringify({ valor: 0 })
+    });
+    if (!resp.ok) throw new Error();
+    window._mesasChegou.delete(String(key));
+    document.getElementById("mesa-drawer-modal")?.remove();
+    renderMesas();
+  } catch {
+    btn.disabled = false; btn.dataset.ok = ""; btn.textContent = "Tente de novo";
+  }
 }
 
 function renderMesas() {
@@ -996,7 +1018,8 @@ for (let i = 1; i <= numMesas; i++) mesas.push({ tipo: "mesa", numero: i });
             ? (!o.table_number && o.service_type !== "delivery")
             : String(o.table_number) === String(m.numero))
         );
-        const ocupada = pedidosAtivos.length > 0;
+        const chegou = m.tipo === "mesa" ? window._mesasChegou?.get(String(m.numero)) : null; // cliente da reserva já sentou
+        const ocupada = pedidosAtivos.length > 0 || !!chegou;
         const totalMesa = pedidosAtivos.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
      const impresso = pedidosAtivos.length > 0 && pedidosAtivos.every(o => o._frontStatus !== "recebido");
         const reserva = !ocupada && m.tipo === "mesa" ? window._mesasReservadas?.get(String(m.numero)) : null;
@@ -1016,10 +1039,12 @@ for (let i = 1; i <= numMesas; i++) mesas.push({ tipo: "mesa", numero: i });
               ${m.tipo === "balcao"
                 ? `<div style="font-size:20px; font-weight:900; letter-spacing:-0.02em; color:${ocupada ? 'rgba(252,228,228,1)' : 'rgba(252,228,228,0.55)'};">Balcão</div>`
                 : `<div style="font-family:'Space Grotesk',sans-serif; font-size:32px; font-weight:800; line-height:1; letter-spacing:-0.02em; color:${ocupada ? 'rgba(252,228,228,1)' : 'rgba(252,228,228,0.55)'};">${String(m.numero).padStart(2, "0")}</div>`}
-              ${ocupada ? `<span style="padding-top:4px; font-size:15px; font-weight:900; color:rgba(251,191,36,1); white-space:nowrap;">${formatCurrency(totalMesa)}</span>` : ''}
+            ${totalMesa > 0 ? `<span style="padding-top:4px; font-size:15px; font-weight:900; color:rgba(251,191,36,1); white-space:nowrap;">${formatCurrency(totalMesa)}</span>` : ''}
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; min-height:20px;">
-              ${ocupada
+              ${chegou && !pedidosAtivos.length
+                ? `<span style="font-size:11px; color:rgba(34,197,94,1); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(String(chegou.nome || "").split(" ")[0])}${Number(chegou.valor_pago) > 0 ? ` · sinal ${formatCurrency(chegou.valor_pago)}` : ""}</span>`
+                : ocupada
                 ? (impresso
                     ? `<span style="font-size:11px; color:rgba(34,197,94,1); font-weight:700;">✅</span>`
                     : `<span id="mesa-timer-${key}" style="font-size:11px; color:rgba(34,197,94,1); font-weight:700;">⏱ ...</span>`)
@@ -1097,6 +1122,8 @@ function abrirDrawerMesa(key) {
   );
 
   const ocupada = pedidosAtivos.length > 0;
+  const chegou = !isBalcao ? window._mesasChegou?.get(String(key)) : null;
+  const sinal = Number(chegou?.valor_pago) || 0;
 
   const todosItens = [];
   pedidosAtivos.forEach(o => {
@@ -1111,8 +1138,8 @@ function abrirDrawerMesa(key) {
   });
 
   const totalMesa = pedidosAtivos.reduce((s, o) => s + parseFloat(o.total_price || 0), 0);
-  const clienteNome = pedidosAtivos[0]?.client_name || "";
-  const clienteTel = pedidosAtivos[0]?.client_phone || "";
+  const clienteNome = pedidosAtivos[0]?.client_name || chegou?.nome || "";
+  const clienteTel = pedidosAtivos[0]?.client_phone || (chegou?.telefone ? crmTelefone(chegou.telefone) : "");
 
   const modal = document.createElement("div");
   modal.id = "mesa-drawer-modal";
@@ -1156,9 +1183,16 @@ function abrirDrawerMesa(key) {
                 ${it.price > 0 ? `<span style="font-size:14px; font-weight:700; color:rgba(251,191,36,0.9);">${formatCurrency(it.price * it.qty)}</span>` : ''}
               </div>
             `).join('')}
+            ${sinal > 0 ? `
+            <div style="display:flex; justify-content:space-between; padding:14px 0 0; font-size:13px; font-weight:600; color:rgba(252,228,228,0.55);">
+              <span>Total dos itens</span><span>${formatCurrency(totalMesa)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:8px 0 0; font-size:13px; font-weight:700; color:rgba(96,165,250,1);">
+              <span>Sinal da reserva</span><span>− ${formatCurrency(Math.min(sinal, totalMesa))}</span>
+            </div>` : ""}
             <div class="md-total" style="display:flex; justify-content:space-between; align-items:center; padding:16px 0 28px;">
-              <span style="font-size:13px; font-weight:600; color:rgba(252,228,228,0.4);">Total</span>
-              <span style="font-size:20px; font-weight:900; color:rgba(251,191,36,1);">${formatCurrency(totalMesa)}</span>
+              <span style="font-size:13px; font-weight:600; color:rgba(252,228,228,0.4);">${sinal > 0 ? "Falta pagar" : "Total"}</span>
+              <span style="font-size:20px; font-weight:900; color:rgba(251,191,36,1);">${formatCurrency(Math.max(0, totalMesa - sinal))}</span>
             </div>
           </div>
         </div>
@@ -1182,11 +1216,16 @@ function abrirDrawerMesa(key) {
 
       ` : `
         <div style="padding:32px 24px; text-align:center; color:rgba(252,228,228,0.4); font-size:14px;">
-          ${label} está livre
+          ${chegou ? `
+            <div style="font-size:18px; font-weight:700; color:rgba(252,228,228,0.95);">${escapeHtml(chegou.nome || "Cliente")}</div>
+            <div style="margin-top:6px;">${Number(chegou.pessoas) || 1} ${Number(chegou.pessoas) === 1 ? "pessoa" : "pessoas"} · reserva das ${horaReserva(chegou.inicio)}</div>
+            ${sinal > 0 ? `<div style="margin-top:12px; color:rgba(96,165,250,1); font-weight:700;">Sinal de ${formatCurrency(sinal)} já pago: sai da conta</div>` : ""}
+          ` : `${label} está livre`}
         </div>
-                <div style="padding:0 24px 24px;">
-          <button class="primary-button" style="width:100%;" onclick="document.getElementById('mesa-drawer-modal').remove(); abrirCriarPedidoMesa('${key}')">
-            Abrir Mesa
+        <div style="padding:0 24px 24px; display:flex; gap:10px;">
+          ${chegou ? `<button class="ghost-button" style="flex:1; font-size:12px;" onclick="liberarMesaReserva('${key}', this)">Liberar mesa</button>` : ""}
+          <button class="primary-button" style="flex:2;" onclick="document.getElementById('mesa-drawer-modal').remove(); abrirCriarPedidoMesa('${key}')">
+            ${chegou ? "Lançar pedido" : "Abrir Mesa"}
           </button>
         </div>
       `}
