@@ -103,6 +103,22 @@ async function enviar(){
   }
 }
 
+/* ---------- paleta do restaurante (vem do servidor) ---------- */
+function corClara(hex){
+  const n = parseInt(String(hex || "").replace("#", ""), 16);
+  if(isNaN(n)) return false;
+  return (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) > 150;
+}
+function aplicarPaleta(p){
+  p = p || {};
+  const fundo = p.fundo || "#0b0a09", raiz = document.documentElement;
+  raiz.style.setProperty("--cor", p.primaria || "#d62828");
+  raiz.style.setProperty("--fundo", fundo);
+  raiz.style.setProperty("--cor-texto", corClara(p.primaria) ? "#1f1610" : "#ffffff");
+  raiz.classList.toggle("claro", corClara(fundo)); // fundo claro: textos escuros
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", fundo);
+}
+
 (async function iniciar(){
   try{
     AV.rid = await descobrirRestaurante();
@@ -110,7 +126,7 @@ async function enviar(){
     const r = await fetch(`${API_BASE}/api/v1/avaliacao/${encodeURIComponent(AV.rid)}`);
     const d = await r.json().catch(() => ({}));
     if(!r.ok) return aviso(d.error || "Não foi possível abrir esta avaliação.");
-    document.documentElement.style.setProperty("--cor", d.cor || "#d62828");
+    aplicarPaleta(d.paleta || { primaria: d.cor });
     document.title = `Avalie · ${d.nome}`;
     $("nome").textContent = d.nome;
     if(d.logo_url){ $("logo").innerHTML = `<img src="${esc(d.logo_url)}" alt="">`; $("favicon").href = d.logo_url; }
