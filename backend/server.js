@@ -1230,10 +1230,31 @@ app.patch("/api/v1/rodizio/:restaurant_id/reservas/:res_id/pessoas", async (req,
     const precoCr = rod.preco_crianca == null ? precoAd : Number(rod.preco_crianca) || 0;
     const valor = Math.round((ad * precoAd + cr * precoCr) * 100) / 100;
 
-    const { data, error } = await supabase.from("rodizio_reservas")
-      .update({ adultos: ad, criancas: cr, valor_pago: valor }).eq("id", res_id).select().single();
+    // o que foi pago continua pago: mais gente vira um pedido no Balcão pra cobrar; menos gente devolve no Pix
+    const pago = Number(reserva.valor_pago) || 0;
+    const diferenca = Math.round((valor - pago) * 100) / 100;
+    const mudar = { adultos: ad, criancas: cr };
+    let aviso = null;
+    if (diferenca < 0) {
+      const est = await pixEstornar(restaurant_id, "rodizio", res_id, -diferenca);
+      mudar.valor_pago = valor;
+      aviso = est.ok ? `Devolvemos ${voucherMoeda(-diferenca)} no Pix do cliente.` : `Devolva ${voucherMoeda(-diferenca)} ao cliente.`;
+    } else if (diferenca > 0) {
+      const { data: num } = await supabase.rpc("get_next_order_number", { rid: restaurant_id });
+      const agora = new Date().toISOString();
+      const antes = (reserva.adultos || 0) + (reserva.criancas || 0);
+      const { data: ped } = await supabase.from("orders").insert([{
+        restaurant_id, client_name: reserva.nome, client_phone: reserva.telefone, order_number: num || 1,
+        itens: [{ name: `${rod.nome} — diferença da reserva`, qty: 1, price: diferenca }],
+        notes: `Reserva de rodízio: de ${antes} para ${ad + cr} pessoas`, status: "pending", service_type: "local",
+        total_price: diferenca, origin: "balcao", destino: "mesas", created_at: agora, update_at: agora
+      }]).select().single();
+      if (ped) emitOrderUpdate(restaurant_id, ped);
+      aviso = `Cobre ${voucherMoeda(diferenca)} no caixa: o pedido #${ped?.order_number} já está no Balcão.`;
+    }
+    const { data, error } = await supabase.from("rodizio_reservas").update(mudar).eq("id", res_id).select().single();
     if (error) throw error;
-    return res.json(data);
+    return res.json({ ...data, aviso });
   } catch (err) {
     return sendError(res, 500, "Erro ao alterar a reserva");
   }
@@ -2611,7 +2632,8 @@ async function estornarSeloFidelidade(order) {
     const phone = normalizePhone(order.client_phone);
     if (!phone) return;
     const cfg = await configFidelidade(order.restaurant_id);
-    const { coluna, qtd } = fidelidadeGanho(cfg, order.total_price);
+    // igual ao que ele ganhou: só os itens, sem a taxa de entrega
+    const { coluna, qtd } = fidelidadeGanho(cfg, (parseFloat(order.total_price) || 0) - (Number(order.taxa_entrega) || 0));
     if (qtd <= 0) return;
 
     const { data: perfil } = await supabase
@@ -2667,7 +2689,7 @@ app.patch("/orders/:id/status", requireRowOwner("orders"), async (req, res) => {
 
 // ✅ Busca ANTES do update para saber o estado original
 const { data: orderAntes } = await supabase
-  .from("orders").select("preparing_at, restaurant_id, status, origin, client_phone, total_price, notes").eq("id", id).single();
+  .from("orders").select("preparing_at, restaurant_id, status, origin, client_phone, total_price, notes, taxa_entrega").eq("id", id).single();
     
     const now = new Date().toISOString();
     
@@ -8110,8 +8132,8 @@ app.get("/api/v1/caixa/:restaurant_id/aberto", async (req, res) => {
       .eq("status", "aberto")
       .single();
     if (error || !data) return res.json({ aberto: false });
-    const totais = await totaisDoCaixa(data);
-    return res.json({ aberto: true, caixa: { ...data, ...totais } });
+    const [totais, comEntregador] = await Promise.all([totaisDoCaixa(data), caixaComEntregador(data)]);
+    return res.json({ aberto: true, caixa: { ...data, ...totais, com_entregador: comEntregador } });
   } catch (err) {
     return sendError(res, 500, err.message);
   }
@@ -8122,8 +8144,31 @@ app.get("/api/v1/caixa/:restaurant_id/aberto", async (req, res) => {
    Todo pedido finalizado entra, por qualquer caminho (Kanban, mesa, entregador, Pix...).
 ======================================== */
 const CAIXA_METODOS = ["dinheiro", "pix", "credito", "debito", "maquininha", "vale_refeicao", "voucher"];
+// o caixa começa onde o anterior fechou (até 24h antes): entrega finalizada com o caixa fechado entra no próximo
+async function inicioDoCaixa(caixa) {
+  const { data: ant } = await supabase.from("caixa").select("fechado_at")
+    .eq("restaurant_id", caixa.restaurant_id).eq("status", "fechado").lt("fechado_at", caixa.created_at)
+    .order("fechado_at", { ascending: false }).limit(1).maybeSingle();
+  const abriu = new Date(caixa.created_at).getTime(), fechou = ant?.fechado_at ? new Date(ant.fechado_at).getTime() + 1 : 0;
+  return new Date(fechou && abriu - fechou < 24 * 3600e3 ? fechou : abriu);
+}
+// dinheiro de entrega que ainda está com o entregador (sem acerto): foi vendido, mas ainda não está na gaveta
+async function caixaComEntregador(caixa) {
+  let total = 0;
+  const { data: rods } = await supabase.from("entregador_rodadas").select("id, status, dinheiro")
+    .eq("restaurant_id", caixa.restaurant_id).in("status", ["na_rua", "a_acertar"]).gte("saiu_em", caixa.created_at);
+  for (const r of rods || []) {
+    if (r.status === "a_acertar") { total += Number(r.dinheiro) || 0; continue; }
+    const { data: ps } = await supabase.from("orders").select("payment_method, total_price, notes").eq("rodada_id", r.id).eq("status", "finished");
+    for (const p of ps || []) {
+      if (/pago online/i.test(p.notes || "")) continue;
+      for (const x of repartirPagamento(p.payment_method, parseFloat(p.total_price || 0))) if (x.metodo === "dinheiro") total += x.valor;
+    }
+  }
+  return Math.round(total * 100) / 100;
+}
 async function totaisDoCaixa(caixa, ate) {
-  const ini = new Date(caixa.created_at).toISOString();
+  const ini = (await inicioDoCaixa(caixa)).toISOString();
   const fim = new Date(ate || Date.now());
   const t = { total_pedidos: 0, valor_outros: 0, qtd_outros: 0, valor_reserva: 0, qtd_reserva: 0 };
   CAIXA_METODOS.forEach(m => { t[`valor_${m}`] = 0; t[`qtd_${m}`] = 0; });
@@ -8195,7 +8240,7 @@ app.post("/api/v1/caixa/:restaurant_id/fechar", async (req, res) => {
 
     // fecha com os números calculados dos pedidos (e grava, pro histórico e o Owner)
     const fechadoEm = new Date().toISOString();
-    const totais = await totaisDoCaixa(caixa, fechadoEm);
+    const comEntregador = await caixaComEntregador(caixa);
     const colunas = { total_pedidos: totais.total_pedidos };
     CAIXA_METODOS.forEach(m => { colunas[`valor_${m}`] = totais[`valor_${m}`]; colunas[`qtd_${m}`] = totais[`qtd_${m}`]; });
     Object.assign(caixa, colunas);
@@ -8245,7 +8290,8 @@ const totalMovimentado = ["dinheiro", "pix", "credito", "debito", "maquininha", 
           qtd_voucher: caixa.qtd_voucher || 0,
           total_movimentado: totalMovimentado,
           total_pedidos: caixa.total_pedidos || 0,
-          total_esperado_caixa: caixa.fundo_inicial + (caixa.valor_dinheiro || 0),
+          total_esperado_caixa: Math.round(((Number(caixa.fundo_inicial) || 0) + (Number(caixa.valor_dinheiro) || 0) - comEntregador) * 100) / 100,
+          com_entregador: comEntregador,
           valor_informado: valor_informado || null,
           obs: obs || null,
           ticket_medio: metricas.ticket_medio || 0,
@@ -8267,7 +8313,7 @@ const totalMovimentado = ["dinheiro", "pix", "credito", "debito", "maquininha", 
           valor_outros: totais.valor_outros || 0,
           qtd_outros: totais.qtd_outros || 0,
           diferenca_caixa: valor_informado !== undefined && valor_informado !== null && valor_informado !== ""
-            ? Math.round((Number(valor_informado) - (Number(caixa.fundo_inicial) || 0) - (Number(caixa.valor_dinheiro) || 0)) * 100) / 100 : null,
+            ? Math.round((Number(valor_informado) - (Number(caixa.fundo_inicial) || 0) - (Number(caixa.valor_dinheiro) || 0) + comEntregador) * 100) / 100 : null,
           formas_pagamento: [["dinheiro", "Dinheiro"], ["pix", "Pix"], ["credito", "Crédito"], ["debito", "Débito"], ["maquininha", "Maquininha"], ["vale_refeicao", "Vale-refeição"], ["voucher", "Voucher"], ["reserva", "Reserva (já paga)"]]
             .map(([m, nome]) => ({ forma: nome, qtd: totais[`qtd_${m}`] || 0, valor: totais[`valor_${m}`] || 0 })),
           top_itens: metricas.top_itens || []
