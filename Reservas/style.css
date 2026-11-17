@@ -208,3 +208,20 @@ a{ color:inherit; text-decoration:none; -webkit-tap-highlight-color:transparent;
   font-size:14px;
 }
 .rs-resumo b{ font-weight:600; }
+
+
+
+/* regras de cancelamento: em destaque, antes de pagar */
+.rs-regras{
+  display:flex; flex-direction:column; gap:6px;
+  padding:14px 16px; border-radius:16px;
+  background:color-mix(in srgb, #f59e0b 14%, transparent);
+  border:1.5px solid color-mix(in srgb, #f59e0b 60%, transparent);
+  font-size:13px; line-height:1.45; color:var(--texto);
+}
+.rs-regras strong{ font-size:15px; font-weight:600; }
+.rs-regras b{ font-weight:600; }
+.rs-aceite{ display:flex; align-items:center; gap:10px; font-size:13px; color:var(--texto); cursor:pointer; }
+.rs-aceite input{ width:20px; height:20px; accent-color:var(--cor); flex-shrink:0; }
+
+
