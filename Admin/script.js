@@ -44,6 +44,7 @@ const ICONES = {
   casa: '<path d="M4 10.5L12 4l8 6.5V20h-5v-5.5h-6V20H4z"/>',
   presente: '<rect x="3.5" y="8.5" width="17" height="12" rx="1.5"/><path d="M2.5 8.5h19v4h-19zM12 8.5v12"/><path d="M12 8.5c-1.8 0-4.5-.7-4.5-2.6S10 3.6 12 8.5zm0 0c1.8 0 4.5-.7 4.5-2.6S14 3.6 12 8.5z"/>',
   calendario: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>',
+  estrela: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.6l1-5.8L3.5 9.7l5.9-.9z"/>',
   brilho: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
   enviar: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
@@ -415,6 +416,7 @@ const SECOES = [
   ["central", "Central do cliente", "casa"],
   ["vale", "Vale-presente", "presente"],
    ["reservas", "Reservas", "calendario"],
+    ["avaliacao", "Avaliação", "estrela"],
   ["mapa", "Mapa (TomTom)", "globo"]
 ];
 
@@ -486,8 +488,9 @@ function desenharSecao() {
   velho.replaceWith(el);
   S.salvar = null; S.descartar = null;
   limparSujo();
-  const fn = { conta: secConta, donos: secDonos, aparencia: secAparencia, cardapio: secCardapio, horarios: secHorarios, operacao: secOperacao, enderecos: secEnderecos, central: secCentral, vale: secVale, reservas: secReservas, mapa: secMapa }[S.secao];
+  const fn = { conta: secConta, donos: secDonos, aparencia: secAparencia, cardapio: secCardapio, horarios: secHorarios, operacao: secOperacao, enderecos: secEnderecos, central: secCentral, vale: secVale, reservas: secReservas, avaliacao: secAvaliacao, mapa: secMapa }[S.secao];
   fn(el);
+  if (CORES_APPS[S.secao]) el.appendChild(blocoCoresApp(S.secao)); // cores do app (ou a paleta do restaurante)
   pintarIcones(el);
   // qualquer mudança nos campos de uma seção com "salvar" mostra a barra
   el.oninput = el.onchange = (e) => { if (e.target.closest("[data-sem-barra]")) return; marcarSujo(); };
@@ -597,7 +600,7 @@ function secAparencia(el) {
     <label class="cor"><input type="color" id="${id}" value="${esc(corValida(v) || "#000000")}">
       <div><b>${nome}</b><input type="text" data-hex="${id}" value="${esc((corValida(v) || "").toUpperCase())}" maxlength="7" spellcheck="false"></div></label>`;
   el.innerHTML = `
-    ${cabecaSecao("Aparência", "Como o restaurante aparece no cardápio digital e no cardápio de mesa.")}
+    ${cabecaSecao("Aparência", "A paleta do restaurante vale para todos os apps: cardápios, Central, Vale-presente, Reservas, Avaliação e app do entregador. Cada app pode ter cores próprias na aba dele.")}
     <div class="aparencia">
       <div style="display:flex; flex-direction:column; gap:18px; min-width:0">
         <div class="bloco">
@@ -605,7 +608,7 @@ function secAparencia(el) {
             <label class="campo"><span>Nome que o cliente vê</span><input id="f-nome-exibicao" value="${esc(c.nome_exibicao || "")}" placeholder="${esc(S.atual.name)}"></label>
             <label class="campo"><span>Frase de baixo</span><input id="f-subtitulo" value="${esc(c.subtitulo || "")}" placeholder="Ex.: Pizzas artesanais desde 1998"></label>
           </div>
-          <div class="campo"><span>Cores</span>
+          <div class="campo"><span>Paleta do restaurante</span>
             <div class="cores">
               ${corCampo("f-cor-primaria", "Principal", c.cor_primaria || "#f97373")}
               ${corCampo("f-cor-secundaria", "Secundária", c.cor_secundaria || "#b91c1c")}
@@ -639,8 +642,8 @@ function secAparencia(el) {
     const pri = $("f-cor-primaria").value, sec = $("f-cor-secundaria").value, fundo = $("f-cor-fundo").value;
     const p = $("previa");
     p.style.setProperty("--pv-pri", pri); p.style.setProperty("--pv-sec", sec);
-    p.style.setProperty("--pv-fundo", tema === "light" ? "#f7f3ef" : fundo);
-    p.style.setProperty("--pv-texto", tema === "light" ? "#1c1414" : "#ffffff");
+    p.style.setProperty("--pv-fundo", fundo);
+    p.style.setProperty("--pv-texto", corEhClara(fundo) ? "#1c1414" : "#ffffff");
     const nome = val("f-nome-exibicao") || S.atual.name;
     p.innerHTML = `
       <div class="previa-banner" ${httpsOk(img.banner) ? `style="background-image:url('${esc(img.banner)}')"` : ""}></div>
@@ -666,6 +669,7 @@ function secAparencia(el) {
     const b = e.target.closest("[data-v]"); if (!b) return;
     tema = b.dataset.v;
     $("f-tema").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    acertarFundo(tema, $("f-cor-fundo"), el.querySelector('[data-hex="f-cor-fundo"]'));
     previa(); marcarSujo();
   };
   ligarSoltas(el, img, () => { previa(); marcarSujo(); });
@@ -684,6 +688,82 @@ function secAparencia(el) {
   };
 }
 
+
+// tema claro com fundo escuro (ou o contrário) não combina: troca o fundo por um do tema
+function corEhClara(hex) {
+  const n = parseInt(String(hex || "").replace("#", ""), 16);
+  return !isNaN(n) && (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) > 150;
+}
+function acertarFundo(tema, inpCor, inpHex) {
+  const claro = corEhClara(inpCor.value);
+  if (tema === "light" && !claro) inpCor.value = "#ffffff";
+  else if (tema === "dark" && claro) inpCor.value = "#0b0a09";
+  else return;
+  if (inpHex) inpHex.value = inpCor.value.toUpperCase();
+}
+
+// --- Cores de cada app: por padrão seguem a paleta do restaurante (Aparência)
+const CORES_APPS = { central: "a Central", vale: "o Vale-presente", reservas: "as Reservas", avaliacao: "a Avaliação" };
+function blocoCoresApp(app) {
+  const base = S.cfg || {};
+  const salvo = (base.cores_apps || {})[app] || {};
+  const cor = (k, padrao) => corValida(salvo[k]) || corValida(base[k]) || padrao;
+  let tema = salvo.tema || base.tema || "dark";
+  const campo = (k, nome, padrao) => {
+    const v = cor(k, padrao);
+    return `<label class="cor"><input type="color" data-ca="${k}" value="${esc(v)}">
+      <div><b>${nome}</b><input type="text" data-ca-hex="${k}" value="${esc(v.toUpperCase())}" maxlength="7" spellcheck="false"></div></label>`;
+  };
+  const box = document.createElement("div");
+  box.className = "bloco";
+  box.setAttribute("data-sem-barra", ""); // salva sozinho: não liga a barra de salvar da seção
+  box.innerHTML = `
+    <h3>Cores</h3>
+    <label class="chave"><input type="checkbox" data-ca-paleta ${salvo.ativo ? "" : "checked"}><i></i>
+      <span>Usar a paleta do restaurante<small>As cores de Aparência. Desligue para dar cores próprias para ${CORES_APPS[app]}.</small></span></label>
+    <div data-ca-proprias style="display:${salvo.ativo ? "flex" : "none"}; flex-direction:column; gap:14px">
+      <div class="cores">${campo("cor_primaria", "Principal", "#d62828")}${campo("cor_secundaria", "Secundária", "#7f1d1d")}${campo("cor_fundo", "Fundo", "#0b0a09")}</div>
+      <div class="seg" data-ca-tema style="align-self:flex-start">${[["dark", "Escuro"], ["light", "Claro"]].map(([v, n]) => `<button type="button" data-v="${v}" class="${tema === v ? "on" : ""}">${n}</button>`).join("")}</div>
+    </div>
+    <div><button type="button" class="btn btn-pri" data-ca-salvar>Salvar cores</button></div>`;
+  const q = (s) => box.querySelector(s);
+  q("[data-ca-paleta]").onchange = (e) => { q("[data-ca-proprias]").style.display = e.target.checked ? "none" : "flex"; };
+  box.querySelectorAll("[data-ca]").forEach(inp => inp.addEventListener("input", () => { q(`[data-ca-hex="${inp.dataset.ca}"]`).value = inp.value.toUpperCase(); }));
+  box.querySelectorAll("[data-ca-hex]").forEach(t => t.addEventListener("input", () => {
+    let v = t.value.trim(); if (!v.startsWith("#")) v = "#" + v;
+    if (corValida(v)) q(`[data-ca="${t.dataset.caHex}"]`).value = v.toLowerCase();
+  }));
+  q("[data-ca-tema]").onclick = (e) => {
+    const b = e.target.closest("[data-v]"); if (!b) return;
+    tema = b.dataset.v;
+    q("[data-ca-tema]").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    acertarFundo(tema, q('[data-ca="cor_fundo"]'), q('[data-ca-hex="cor_fundo"]'));
+  };
+  q("[data-ca-salvar]").onclick = async (e) => {
+    const b = e.currentTarget;
+    b.disabled = true;
+    try {
+      const cores = { ...((S.cfg || {}).cores_apps || {}) };
+      cores[app] = {
+        ativo: !q("[data-ca-paleta]").checked, tema,
+        cor_primaria: q('[data-ca="cor_primaria"]').value, cor_secundaria: q('[data-ca="cor_secundaria"]').value, cor_fundo: q('[data-ca="cor_fundo"]').value
+      };
+      await api(`/restaurants/${S.atual.id}/config`, { metodo: "PATCH", corpo: { cores_apps: cores } });
+      S.cfg.cores_apps = cores;
+      toast(cores[app].ativo ? "Cores próprias salvas" : "Usando a paleta do restaurante");
+    } catch (err) {
+      toast(err.message, "erro");
+    } finally {
+      b.disabled = false;
+    }
+  };
+  return box;
+}
+
+// --- Avaliação (pesquisa de satisfação)
+function secAvaliacao(el) {
+  el.innerHTML = cabecaSecao("Avaliação", "A pesquisa de satisfação que o cliente recebe depois do pedido. Quem dá nota alta vai para o Google (o link fica em Operação); nota baixa vira alerta para o restaurante.");
+}
 function soltaImagem(tipo, rotulo, url, extra = "") {
   const ok = httpsOk(url);
   return `
