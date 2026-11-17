@@ -1862,6 +1862,7 @@ PIX_TIPOS.reserva_mesa = {
   publico: true,
   async preparar({ restaurant_id, dados, pagador, expira }) {
     const cfg = await reservaConfig(restaurant_id);
+    if (!cfg.ativo) throw new PixErro(400, "Este restaurante não está aceitando reservas");
     if (String(pagador.nome || "").trim().split(/\s+/).filter(p => p.length >= 2).length < 2)
       throw new PixErro(400, "Escreva o nome e o sobrenome para a reserva.");
     const pessoas = parseInt(dados.pessoas) || 0;
