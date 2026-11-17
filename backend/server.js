@@ -1187,11 +1187,21 @@ app.patch("/api/v1/rodizio/:restaurant_id/reservas/:res_id", async (req, res) =>
   try {
     const { status } = req.body || {};
     if (!["pago", "resgatado", "cancelado"].includes(status)) return sendError(res, 400, "Status inválido");
+    const { data: antes } = await supabase.from("rodizio_reservas").select("status")
+      .eq("id", req.params.res_id).eq("restaurant_id", req.params.restaurant_id).maybeSingle();
+    if (!antes) return sendError(res, 404, "Reserva não encontrada");
+    if (antes.status === "cancelado" && status !== "cancelado") return sendError(res, 409, "Reserva cancelada não volta. Faça uma reserva nova.");
     const { data, error } = await supabase.from("rodizio_reservas")
       .update({ status, resgatado_at: status === "resgatado" ? new Date().toISOString() : null })
       .eq("id", req.params.res_id).eq("restaurant_id", req.params.restaurant_id).select().single();
     if (error || !data) return sendError(res, 404, "Reserva não encontrada");
-    return res.json(data);
+    // reserva paga no Pix e cancelada: devolve o Pix pro cliente (sem Pix, ex.: reserva manual, não faz nada)
+    let estorno = null;
+    if (status === "cancelado" && antes.status !== "cancelado") {
+      const est = await pixEstornar(req.params.restaurant_id, "rodizio", req.params.res_id);
+      estorno = est.ok ? "ok" : est.motivo;
+    }
+    return res.json({ ...data, estorno });
   } catch (err) {
     return sendError(res, 500, "Erro ao atualizar a reserva");
   }
@@ -2583,7 +2593,20 @@ function fidelidadeGanho(cfg, total) {
 
 async function estornarSeloFidelidade(order) {
   try {
-    if (!order || order.origin === "fidelidade") return;
+    if (!order) return;
+    if (order.origin === "fidelidade") { // resgate cancelado: os pontos/selos que ele gastou voltam
+      const m = String(order.notes || "").match(/Resgate de fidelidade — (\d+) (pontos|selos)/);
+      const tel = normalizePhone(order.client_phone);
+      if (!m || !tel) return;
+      const col = m[2], qtd = Number(m[1]);
+      const { data: p } = await supabase.from("base_clientes").select(`id, ${col}, pontos_resgatados`)
+        .eq("restaurant_id", order.restaurant_id).eq("numero", tel).maybeSingle();
+      if (!p) return;
+      await supabase.from("base_clientes").update({ [col]: (p[col] || 0) + qtd,
+        ...(col === "pontos" ? { pontos_resgatados: Math.max(0, (p.pontos_resgatados || 0) - qtd) } : {}) }).eq("id", p.id);
+      console.log(`⭐ resgate cancelado: ${qtd} ${col} devolvidos para ${tel}`);
+      return;
+    }
     const phone = normalizePhone(order.client_phone);
     if (!phone) return;
     const cfg = await configFidelidade(order.restaurant_id);
@@ -2643,7 +2666,7 @@ app.patch("/orders/:id/status", requireRowOwner("orders"), async (req, res) => {
 
 // ✅ Busca ANTES do update para saber o estado original
 const { data: orderAntes } = await supabase
-  .from("orders").select("preparing_at, restaurant_id, status, origin, client_phone, total_price").eq("id", id).single();
+  .from("orders").select("preparing_at, restaurant_id, status, origin, client_phone, total_price, notes").eq("id", id).single();
     
     const now = new Date().toISOString();
     
@@ -6623,6 +6646,18 @@ app.post("/api/v1/fidelidade/resgatar", async (req, res) => {
     if (saldoAtual < totalPontos)
       return sendError(res, 400, colunaSaldo === "selos" ? "Selos insuficientes" : "Pontos insuficientes");
 
+    // desconta ANTES de criar o pedido, e só se o saldo ainda for o mesmo: dois toques juntos não resgatam duas vezes
+    const novoSaldo = {
+      [colunaSaldo]: saldoAtual - totalPontos,
+      ...(colunaSaldo === "pontos" ? { pontos_resgatados: (cliente.pontos_resgatados || 0) + totalPontos } : {})
+    };
+    const { data: descontou } = await supabase.from("base_clientes").update(novoSaldo)
+      .eq("id", cliente.id).eq(colunaSaldo, saldoAtual).select("id").maybeSingle();
+    if (!descontou) return sendError(res, 409, "Seu saldo acabou de mudar. Abra a fidelidade de novo e confira.");
+    const devolverSaldo = () => supabase.from("base_clientes").update({
+      [colunaSaldo]: saldoAtual, ...(colunaSaldo === "pontos" ? { pontos_resgatados: cliente.pontos_resgatados || 0 } : {})
+    }).eq("id", cliente.id);
+    
   const { data: numData } = await supabase
   .rpc('get_next_order_number', { rid: cliente.restaurant_id });
 
@@ -6649,16 +6684,9 @@ const nextNumber = numData || 1;
       }])
       .select().single();
 
-    if (orderError) return sendError(res, 500, "Erro ao criar pedido de resgate");
+    if (orderError) { await devolverSaldo(); return sendError(res, 500, "Erro ao criar pedido de resgate"); }
         emitOrderUpdate(order.restaurant_id, order); // aparece no Kanban na hora, sem recarregar
 
-    await supabase
-      .from("base_clientes")
-            .update({
-        [colunaSaldo]: saldoAtual - totalPontos,
-        ...(colunaSaldo === "pontos" ? { pontos_resgatados: (cliente.pontos_resgatados || 0) + totalPontos } : {})
-      })
-      .eq("id", cliente.id);
 
     try {
       const { data: printerConfig } = await supabase
