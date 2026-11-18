@@ -3433,6 +3433,7 @@ app.post("/admin/restaurants/:id/excluir", requireAdmin, async (req, res) => {
 app.patch("/admin/restaurants/:id/config", requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
+    const fields = pick(req.body, CONFIG_CAMPOS); // reaproveita a constante que já existe
     if ("cores_apps" in fields) fields.cores_apps = limparCoresApps(fields.cores_apps);
 
     const { error } = await supabase
