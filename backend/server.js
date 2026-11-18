@@ -434,6 +434,33 @@ function planLevel(plan) {
 }
 const hasPlan = (plan, min) => planLevel(plan) >= planLevel(min);
 
+// ===== O QUE CADA PLANO TEM: uma lista só, o servidor e as telas leem daqui =====
+// ESSENTIAL (tudo que não está aqui): delivery (Kanban, app de pedidos, Pix, acompanhamento por etapas), salão (mesas,
+// QR, reserva de mesa, rodízio), caixa, cardápio, impressão, nota fiscal, Central do cliente, Owner básico
+const RECURSOS_PLANO = {
+  entregador: "advanced", fidelidade: "advanced", crm: "advanced", vale: "advanced", agendamento: "advanced",
+  cardapio_ia: "advanced", estoque: "advanced", ia_whatsapp: "advanced", carrinho_abandonado: "advanced", sugestao_semanal: "advanced",
+  relatorios: "executive", custos: "executive", campanhas: "executive", chat_ia: "executive", multiunidade: "custom"
+};
+const PLANO_NOME = { essential: "Essential", advanced: "Advanced", executive: "Executive", custom: "Custom" };
+const _planoCache = new Map(); // restaurante → { plano, em } (1 min)
+async function planoDo(rid) {
+  const c = _planoCache.get(rid);
+  if (c && Date.now() - c.em < 60000) return c.plano;
+  const { data } = await supabase.from("restaurants").select("plan").eq("id", rid).maybeSingle();
+  const plano = String(data?.plan || "essential").toLowerCase();
+  _planoCache.set(rid, { plano, em: Date.now() });
+  return plano;
+}
+async function temRecurso(rid, recurso) { return hasPlan(await planoDo(rid), RECURSOS_PLANO[recurso] || "essential"); }
+// trava uma rota pelo plano (o :restaurant_id tem que ser um id de restaurante; senão a rota se vira sozinha)
+const exigePlano = (recurso) => async (req, res, next) => {
+  const rid = req.params.restaurant_id;
+  if (!/^[0-9a-f-]{36}$/i.test(String(rid || "")) || await temRecurso(rid, recurso)) return next();
+  const min = RECURSOS_PLANO[recurso];
+  return res.status(403).json({ error: `Disponível no plano ${PLANO_NOME[min]}`, recurso, upgrade_to: min });
+};
+
 // ESSENTIAL: QR, cardápio personalizado, dashboard de resultados (Home), caixa, PDV, nota fiscal (opcional), avaliação
 function canUseAutoatendimento(plan) { return hasPlan(plan, "essential"); }
 function canUsePDV(plan)             { return hasPlan(plan, "essential"); }
@@ -454,6 +481,19 @@ function canUseCampanhas(plan)       { return hasPlan(plan, "executive"); }
 function canUseFidelizacao(plan)     { return hasPlan(plan, "executive"); }
 const canUseResults = canUseROI; // nome antigo: as rotas de métricas continuam funcionando sem mexer
 
+// travas por plano nas rotas (antes delas serem declaradas)
+app.use("/api/v1/vouchers/:restaurant_id", exigePlano("vale"));
+app.use("/api/v1/fidelidade/:restaurant_id", exigePlano("fidelidade"));
+app.use("/api/v1/entregadores/:restaurant_id", exigePlano("entregador"));
+app.use("/owner/restaurants/:restaurant_id/custos/insumos", exigePlano("estoque"));
+app.use(["compras", "imposto", "despesas", "pratos"].map(p => `/owner/restaurants/:restaurant_id/custos/${p}`), exigePlano("custos"));
+app.use("/owner/restaurants/:restaurant_id/financeiro", exigePlano("custos"));
+// as telas (Operacional, Owner, apps) perguntam o que o restaurante tem
+app.get("/api/v1/restaurante/:restaurant_id/plano", async (req, res) => {
+  const plano = await planoDo(req.params.restaurant_id);
+  const recursos = Object.fromEntries(Object.entries(RECURSOS_PLANO).map(([r, min]) => [r, { ok: hasPlan(plano, min), plano: PLANO_NOME[min] }]));
+  return res.json({ plano, nome: PLANO_NOME[plano] || "Essential", recursos });
+});
 
 function planError(res, current_plan, required) {
   return res.status(403).json({
@@ -1409,7 +1449,7 @@ const PIX_TIPOS = {
 /* ---- Pix do delivery: cobra o rascunho (status draft) criado pelo cardápio ---- */
 async function pedidoFidelizar(rid, phone, nome, total) {
   try {
-    if (!phone) return;
+    if (!phone || !(await temRecurso(rid, "fidelidade"))) return;
     const ganho = fidelidadeGanho(await configFidelidade(rid), total);
     if (!(ganho.qtd > 0)) return;
     const { data: perfil } = await supabase.from("base_clientes").select("*")
@@ -1540,7 +1580,7 @@ PIX_TIPOS.voucher = {
   publico: true,
   async preparar({ restaurant_id, dados, pagador, expira }) {
     const cfg = await voucherConfig(restaurant_id);
-    if (!cfg.ativo) throw new PixErro(400, "Vale-presente indisponível neste restaurante");
+    if (!cfg.ativo || !(await temRecurso(restaurant_id, "vale"))) throw new PixErro(400, "Vale-presente indisponível neste restaurante");
     const valor = Number(dados.valor);
     if (!VOUCHER_VALORES.includes(valor)) throw new PixErro(400, "Escolha um dos valores disponíveis");
 
@@ -3032,7 +3072,7 @@ const trackingLink = dominioApp
     
 // ⭐ FIDELIZAÇÃO (roda por trás: o pedido não espera os pontos)
 (async () => { try {
-  if (phone && finalStatus !== "draft" && (!order_id || eraRascunho) && finalOrigin !== "fidelidade") {
+  if (phone && finalStatus !== "draft" && (!order_id || eraRascunho) && finalOrigin !== "fidelidade" && await temRecurso(restaurant_id, "fidelidade")) {
     const cfgFid = await configFidelidade(restaurant_id);
     // pontos/selos contam só os itens, sem a taxa de entrega
     const ganho = fidelidadeGanho(cfgFid, (parseFloat(total_price) || 0) - taxa_entrega);
@@ -5109,7 +5149,6 @@ app.get("/api/v1/central/:restaurant_id", async (req, res) => {
   try {
     const dados = await centralDados(req.params.restaurant_id);
     if (!dados) return sendError(res, 404, "Restaurante não encontrado");
-    if (!hasPlan(dados.rest.plan, "advanced")) return sendError(res, 403, "Página indisponível");
     const { rest, cfg, central } = dados;
     return res.json({
       nome: cfg.nome_exibicao || rest.name || "",
@@ -5134,7 +5173,7 @@ app.get("/admin/restaurants/:id/central", requireAdmin, async (req, res) => {
     if (!dados) return sendError(res, 404, "Restaurante não encontrado");
     const { rest, cfg, central } = dados;
     return res.json({
-      plano_ok: hasPlan(rest.plan, "advanced"),
+      plano_ok: true, // Central do cliente: todos os planos
       nome: cfg.nome_exibicao || rest.name || "",
       logo_url: cfg.logo_url || "",
       cor: cfg.cor_primaria || "#d62828",
@@ -5344,7 +5383,7 @@ async function funcionamento(restaurant_id) {
 
 // dá pra agendar? (ligado no admin + Pix online + loja fechada) → horários do próximo período, de 30 em 30 min
 async function agendamentoDe(restaurant_id, func) {
-  if (func.aberto || !func.proximo) return { disponivel: false, slots: [] };
+  if (func.aberto || !func.proximo || !(await temRecurso(restaurant_id, "agendamento"))) return { disponivel: false, slots: [] };
   const [{ data: cfg }, pix] = await Promise.all([
     supabase.from("restaurante_config").select("agendamento_ativo").eq("restaurant_id", restaurant_id).maybeSingle(),
     pixConfig(restaurant_id)
@@ -6645,6 +6684,7 @@ app.post("/api/v1/fidelidade/resgatar", async (req, res) => {
       .single();
     if (!cliente) return sendError(res, 404, "Cliente não encontrado");
 
+    if (!(await temRecurso(cliente.restaurant_id, "fidelidade"))) return sendError(res, 403, "Fidelidade indisponível neste restaurante");
     const premiosCarrinho = [];
     let totalPontos = 0;
 
@@ -7381,6 +7421,7 @@ const AVALIACAO_NOMES = { comida: "Comida", atendimento: "Atendimento", ambiente
 // onde a IA conversa com o cliente. Marca ia_acionada quando o webhook aceitou.
 async function avaliacaoReclamacao(av, nomeRest) {
   try {
+  if (!(await temRecurso(av.restaurant_id, "crm"))) return; // alerta de reclamação: Advanced pra cima
     const cfg = await getIntegracao(av.restaurant_id, "webhook_reclamacao");
     if (!cfg?.webhook_url) return;
     const tel = String(av.cliente_telefone).replace(/^55(?=\d{10,11}$)/, "");
@@ -7464,6 +7505,7 @@ app.post("/api/v1/avaliacao/:restaurant_id", avaliacaoLimite, async (req, res) =
 async function dispararWebhookSatisfacao(order) {
   try {
     const webhookConfig = await getIntegracao(order.restaurant_id, "webhook_satisfaction");
+    if (!(await temRecurso(order.restaurant_id, "crm"))) return; // pesquisa de satisfação: Advanced pra cima
     const webhookUrl = webhookConfig?.webhook_url;
     if (!webhookUrl) return;
 
@@ -7718,7 +7760,7 @@ async function processarAniversarios() {
     }
     for (const [rid, clientes] of porRest) {
       const { data: rest } = await supabase.from("restaurants").select("name, plan, ativo").eq("id", rid).maybeSingle();
-      if (!rest || rest.ativo === false || !hasPlan(rest.plan, "executive")) continue;
+      if (!rest || rest.ativo === false || !hasPlan(rest.plan, RECURSOS_PLANO.crm)) continue;
       const url = (await getIntegracao(rid, "webhook_aniversario"))?.webhook_url;
       if (!url) continue;
       for (const c of clientes) {
@@ -8701,11 +8743,12 @@ const OWNER_PLANO_NOME = { essential: "Essential", advanced: "Advanced", executi
 // O QUE CADA PLANO LIBERA NO OWNER: cada recurso e o plano mínimo que o libera.
 // Para mudar a divisão dos planos, edite só este bloco (o backend e o app seguem sozinhos).
 const OWNER_RECURSOS = {
-  lucro_basico: "essential", // faturamento, pedidos, ticket, lucro e CMV
-  vendas: "essential",       // vendas por dia e mais vendidos
-  custos: "essential",       // custos e estoque (ingredientes, fichas, despesas)
-  clientes: "essential",     // clientes e origem dos pedidos
-  fidelidade: "essential",   // pontos ou selos
+  lucro_basico: "essential", // faturamento, pedidos, ticket e cancelados
+  vendas: "executive",       // relatórios de vendas: por dia, por hora, mais vendidos
+  estoque: "advanced",       // estoque: só quantidades
+  custos: "executive",       // custos e lucro: compras, fichas, CMV, despesas, impostos
+  clientes: "advanced",      // clientes e origem dos pedidos (CRM)
+  fidelidade: "advanced",    // pontos ou selos
   pdf: "essential",          // exportar PDF
   dre_completa: "executive", // conta completa: impostos e despesas
   canais: "executive",       // rentabilidade por canal
