@@ -410,13 +410,13 @@ if (st.view === "overview") {
   });
 
     // tela → recurso do plano (sem o recurso, aparece o cadeado em vez da tela)
-  const TELA_RECURSO = { custos: "estoque", cuing: "estoque", cuhist: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos", clientes: "clientes", fidelidade: "fidelidade", fidmodelo: "fidelidade", fidpiso: "fidelidade", caixa: "vendas", canais: "canais", operacao: "operacao", previsao: "previsao" };
+  const TELA_RECURSO = { custos: "estoque", cuing: "estoque", cuhist: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos", clientes: "clientes", fidelidade: "fidelidade", fidmodelo: "fidelidade", fidpiso: "fidelidade", caixa: "vendas", canais: "canais", operacao: "operacao", previsao: "previsao", func: "vale_funcionario" };
   const PAI = { cuing: "custos", cuhist: "cuing", cufichas: "custos", cudesp: "custos", cuver: "custos", fidmodelo: "fidelidade", fidpiso: "fidelidade",
-    dre: "t-dinheiro", custos: "t-dinheiro", canais: "t-dinheiro", caixa: "t-dinheiro",
+    dre: "t-dinheiro", custos: "t-dinheiro", canais: "t-dinheiro", caixa: "t-dinheiro", func: "t-dinheiro",
     clientes: "t-clientes", fidelidade: "t-clientes", avaliacoes: "t-clientes",
     operacao: "t-mais", previsao: "t-mais", pdf: "t-mais" };
-  const SEM_PERIODO = ["t-clientes", "t-mais", "custos", "cuing", "cuhist", "cufichas", "cudesp", "fidelidade", "fidmodelo", "fidpiso"];
-  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cuhist: "Histórico de compras", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", fidmodelo: "Modelo de fidelidade", fidpiso: "Piso dos prêmios", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF", avaliacoes: "Avaliações" };
+  const SEM_PERIODO = ["t-clientes", "t-mais", "custos", "cuing", "cuhist", "cufichas", "cudesp", "fidelidade", "fidmodelo", "fidpiso", "func"];
+  const TITULOS = { dre: "Lucro e operação", custos: "Custos e estoque", cuing: "Ingredientes e mercadorias", cuhist: "Histórico de compras", cufichas: "Fichas dos pratos", cudesp: "Despesas", cuver: "Ver meus custos", canais: "Rentabilidade por canal", operacao: "Operação e IA", clientes: "Clientes e origem", fidelidade: "Fidelidade", fidmodelo: "Modelo de fidelidade", fidpiso: "Piso dos prêmios", previsao: "Previsão de demanda", caixa: "Vendas por dia", pdf: "Exportar PDF", avaliacoes: "Avaliações", func: "Funcionários e vales" };
   function render() {
     const ov = st.view === "overview";
     const semPer = !ov && SEM_PERIODO.includes(st.screen);
@@ -429,7 +429,7 @@ if (st.view === "overview") {
     $("content").dataset.tela = ov ? "overview" : st.screen;
     if (ov) { $("content").innerHTML = telaOverview(st.ov); animarNumeros(); return; }
     const d = st.dash;
-    const T = { home: telaHome, "t-dinheiro": telaDinheiro, "t-clientes": telaClientesMenu, "t-mais": telaMais, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, fidmodelo: telaFidModelo, fidpiso: telaFidPiso, cuing: telaIngredientes, cuhist: telaHistorico, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf, avaliacoes: telaAvaliacoes }[st.screen];
+    const T = { home: telaHome, "t-dinheiro": telaDinheiro, "t-clientes": telaClientesMenu, "t-mais": telaMais, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, fidmodelo: telaFidModelo, fidpiso: telaFidPiso, cuing: telaIngredientes, cuhist: telaHistorico, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf, avaliacoes: telaAvaliacoes, func: telaFunc }[st.screen];
     const precisa = TELA_RECURSO[st.screen];
     if (precisa && d && d.restaurant && !pode(d, precisa)) { $("content").innerHTML = lockCard(`${TITULOS[st.screen] || "Esta tela"} faz parte do plano ${planoDe(d, precisa)}.`, planoDe(d, precisa)); return; }
     $("content").innerHTML = T(d);
@@ -676,8 +676,55 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
         ${linhaMenu(d, "custos", "box", "Custos e estoque", "Compras, fichas dos pratos e despesas", "estoque")}
         ${linhaMenu(d, "canais", "pie", "Rentabilidade por canal", "Quanto sobra no salão e no delivery", "canais")}
         ${linhaMenu(d, "caixa", "file", "Vendas por dia", "Dia a dia do período e os mais vendidos", "vendas")}
+        ${linhaMenu(d, "func", "users", "Funcionários e vales", "A equipe e quanto cada um consumiu no mês", "vale_funcionario")}
       </ul></section>`;
   }
+
+  /* funcionários e vales: o dono cadastra a equipe; o caixa lança o vale no Cobrar; aqui sai o total do mês de cada um */
+  const fv = { mes: "", edit: "" };
+  function telaFunc() {
+    if (!fv.mes) fv.mes = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 7);
+    const my = ++st.reqId, base = `/owner/restaurants/${encodeURIComponent(st.view)}`;
+    Promise.all([api(`${base}/funcionarios`), api(`${base}/vales?mes=${fv.mes}`)]).then(([lista, v]) => {
+      if (my !== st.reqId || st.screen !== "func") return;
+      $("content").innerHTML = corpoFunc(Array.isArray(lista) ? lista : [], v?.funcionarios ? v : { total: 0, funcionarios: [] });
+    }).catch((e) => { if (my === st.reqId) $("content").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`; });
+    return `<div class="skeleton"></div><div class="skeleton"></div>`;
+  }
+  function corpoFunc(lista, v) {
+    const equipe = lista.map((f) => fv.edit === f.id
+      ? `<div class="split-row" style="display:grid;gap:8px"><input id="fv-ed" value="${esc(f.nome)}" maxlength="60" aria-label="Nome"><div style="display:flex;gap:8px"><button class="btn primary" data-fv-salvar="${esc(f.id)}" style="flex:1">Salvar</button><button class="btn" data-fv-cancelar style="flex:1">Cancelar</button></div></div>`
+      : `<div class="split-row"><div class="split-head"><span>${esc(f.nome)}</span><span>${cuBtnIc("data-fv-editar", f.id, "Editar nome", "✎")} ${cuBtnIc("data-fv-tirar", f.id, "Tirar da equipe", "✕")}</span></div></div>`).join("");
+    const vales = v.funcionarios.map((f) => `<div class="split-row"><div class="split-head"><span>${esc(f.nome)}${f.ativo ? "" : " · saiu da equipe"}</span><span>${brl(f.total)}</span></div>
+      <div class="muted" style="font-size:12px;display:grid;gap:2px;margin-top:4px">${f.itens.map((i) => `<span style="display:flex;justify-content:space-between"><span>${fmtData(i.data)} · pedido #${esc(i.numero)}</span><span>${brl(i.valor)}</span></span>`).join("")}</div></div>`).join("");
+    return `
+      <section class="card"><h2>Vales do mês</h2><input id="fv-mes" type="month" value="${esc(fv.mes)}" aria-label="Mês">
+        <div class="kpi" style="margin-top:12px"><span class="label">Total a descontar</span><span class="value">${brl(v.total)}</span></div>
+        ${vales ? `<div class="split" style="margin-top:12px">${vales}</div>` : `<div class="empty">Nenhum vale neste mês.</div>`}
+        <p class="foot" style="text-align:left">O caixa lança o vale na hora de cobrar. Como descontar no pagamento é combinado entre você e o funcionário.</p></section>
+      <section class="card"><h2>Equipe</h2>${equipe ? `<div class="split">${equipe}</div>` : `<div class="empty">Ninguém cadastrado ainda.</div>`}
+        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:12px"><input id="fv-nome" maxlength="60" placeholder="Nome do funcionário" aria-label="Nome do funcionário"><button class="btn primary" id="fv-add">Adicionar</button></div>
+        <p class="foot" style="text-align:left">Só quem está aqui aparece para o caixa escolher no vale funcionário.</p></section>`;
+  }
+  const fvBase = () => `/owner/restaurants/${encodeURIComponent(st.view)}/funcionarios`;
+  const fvFaz = async (fn) => { try { await fn(); fv.edit = ""; render(); } catch (e) { alert(e.message); } };
+  document.addEventListener("click", (e) => {
+    if (st.screen !== "func") return;
+    const t = e.target.closest("[data-fv-editar],[data-fv-tirar],[data-fv-salvar],[data-fv-cancelar],#fv-add");
+    if (!t) return;
+    if (t.id === "fv-add") {
+      const nome = $("fv-nome").value.trim();
+      if (nome.length < 2) return $("fv-nome").focus();
+      return fvFaz(() => api(fvBase(), { method: "POST", body: JSON.stringify({ nome }) }));
+    }
+    if (t.dataset.fvEditar) { fv.edit = t.dataset.fvEditar; return render(); }
+    if (t.hasAttribute("data-fv-cancelar")) { fv.edit = ""; return render(); }
+    if (t.dataset.fvSalvar) return fvFaz(() => api(`${fvBase()}/${encodeURIComponent(t.dataset.fvSalvar)}`, { method: "PATCH", body: JSON.stringify({ nome: $("fv-ed").value.trim() }) }));
+    if (t.dataset.fvTirar && confirm("Tirar da equipe? Os vales que já usou continuam aparecendo aqui.")) return fvFaz(() => api(`${fvBase()}/${encodeURIComponent(t.dataset.fvTirar)}`, { method: "DELETE" }));
+  });
+  document.addEventListener("change", (e) => { if (st.screen === "func" && e.target.id === "fv-mes" && e.target.value) { fv.mes = e.target.value; render(); } });
+  document.addEventListener("keydown", (e) => { if (st.screen === "func" && e.key === "Enter" && e.target.id === "fv-nome") $("fv-add").click(); });
+  
   function telaClientesMenu(d) {
     return `<div class="tela-titulo"><h1>Clientes</h1><p>Quem compra, quem volta e o que eles acham.</p></div>
       <section class="card"><ul class="list">
