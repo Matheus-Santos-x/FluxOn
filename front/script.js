@@ -9473,3 +9473,59 @@ manterTelaAcesa();
   if (tela) new MutationObserver(() => { if (tela.classList.contains("open")) { status.textContent = ""; ultimo = ""; } })
     .observe(tela, { attributes: true, attributeFilter: ["class"] });
 })();
+
+
+
+/* =====================================================================
+   VALE FUNCIONÁRIO (só a escolha na hora de cobrar — o cadastro fica no Owner e no Admin)
+   - Cobrar e Novo pedido (delivery): forma de pagamento "Vale funcionário"
+     → o caixa escolhe quem está consumindo e o valor fica marcado no nome dele
+===================================================================== */
+(() => {
+  if (typeof PLANO_LOCAL === "object") PLANO_LOCAL.vale_funcionario = "executive";
+
+  const F = { lista: [] };
+  const esc = (s) => escapeHtml(s);
+  const pode = () => typeof temNoPlano !== "function" || temNoPlano("vale_funcionario");
+
+  async function carregar() {
+    const rid = getRestaurantId();
+    if (!rid || !localStorage.getItem("fluxon_token") || !pode()) return F.lista;
+    try {
+      const r = await fetch(`${API_BASE}/api/v1/funcionarios/${rid}`, { headers: buildHeaders() });
+      if (r.ok) F.lista = await r.json();
+    } catch {}
+    return F.lista;
+  }
+
+  // "Quem está consumindo?" — devolve { id, nome } ou null (cancelou)
+  window.escolherFuncionario = async function () {
+    await carregar();
+    return new Promise((ok) => {
+      document.getElementById("func-escolha")?.remove();
+      const m = document.createElement("div");
+      m.id = "func-escolha"; m.className = "modal-backdrop open";
+      const lista = F.lista.map((f) => `
+        <button type="button" class="ent-item func-op" data-id="${esc(f.id)}" style="width:100%; cursor:pointer; text-align:left; color:inherit; font:inherit;">
+          <div class="ent-item-meio"><b>${esc(f.nome)}</b></div>
+        </button>`).join("");
+      m.innerHTML = `
+        <div class="modal confirm-modal" style="max-width:420px;">
+          <div class="modal-header"><h3>🧑‍🍳 Quem está consumindo?</h3></div>
+          <div class="modal-body" style="display:grid; gap:8px; max-height:55vh; overflow:auto;">
+            ${lista || `<div class="ent-vazio"><b>Nenhum funcionário cadastrado</b><p>O dono cadastra a equipe no app Owner, em Dinheiro → Funcionários e vales.</p></div>`}
+          </div>
+          <div class="modal-actions"><button type="button" class="ghost-button" data-func-fechar>Cancelar</button></div>
+        </div>`;
+      document.body.appendChild(m);
+      const fim = (v) => { m.remove(); ok(v); };
+      m.addEventListener("click", (e) => {
+        const b = e.target.closest(".func-op");
+        if (b) return fim(F.lista.find((f) => f.id === b.dataset.id) || null);
+        if (e.target === m || e.target.closest("[data-func-fechar]")) fim(null);
+      });
+    });
+  };
+  // o nome vai no texto do pagamento: sem números nem "+", que separam as partes ("dinheiro R$10 + vale ...")
+  window.funcionarioNoTexto = (nome) => String(nome || "").replace(/[\d+$]/g, "").replace(/\s+/g, " ").trim();
+})();
