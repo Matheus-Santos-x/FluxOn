@@ -8666,7 +8666,8 @@ MODO CARRINHO (agora): a pessoa abriu o carrinho. Veja se falta um tipo de item 
       reasoning: { effort: "low" },
       prompt_cache_key: `cardapio-${restaurant_id}`,
       max_output_tokens: 800
-
+    });
+        
     let parsed;
     try {
       parsed = JSON.parse(response.output_text || "{}");
