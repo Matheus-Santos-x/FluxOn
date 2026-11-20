@@ -3926,7 +3926,7 @@ app.get("/api/v1/metrics/:restaurant_id/timeline", async (req, res) => {
       .eq("id", restaurant_id)
       .single();
 
-    const planPrices = { essential: 890, advanced: 1690, executive: 2490, custom: 3798 };
+    const planPrices = { essential: 890, advanced: 1690, executive: 2490, custom: 4190 };
     const planPrice = planPrices[(restaurantData?.plan || "essential").toLowerCase()] || 890;
     
     // Cria os pontos do gráfico
@@ -8778,8 +8778,7 @@ const OWNER_TOKEN_TTL = "7d";
 const OWNER_OTP_MINUTOS = 5;
 const OWNER_OTP_MAX_TENTATIVAS = 5;
 // Preço mensal de cada plano (usado no ROI do Owner)
-    const planPrices = { essential: 890, advanced: 1690, executive: 2490, custom: 4190 };
-    const planPrice = planPrices[(restaurantData?.plan || "essential").toLowerCase()] || 890;
+const OWNER_PLAN_PRICE = { essential: 890, advanced: 1690, executive: 2490, custom: 4190 };
 const OWNER_PLANO_NOME = { essential: "Essential", advanced: "Advanced", executive: "Executive", custom: "Custom" };
 
 // O QUE CADA PLANO LIBERA NO OWNER: cada recurso e o plano mínimo que o libera.
