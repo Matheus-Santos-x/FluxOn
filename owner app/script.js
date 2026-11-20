@@ -409,6 +409,8 @@ if (st.view === "overview") {
     const g = e.target.closest("[data-go]"); if (g) { st.screen = g.dataset.go; render(); window.scrollTo({ top: 0 }); }
   });
 
+    // tela → recurso do plano (sem o recurso, aparece o cadeado em vez da tela)
+  const TELA_RECURSO = { custos: "estoque", cuing: "estoque", cuhist: "custos", cufichas: "custos", cudesp: "custos", cuver: "custos", clientes: "clientes", fidelidade: "fidelidade", fidmodelo: "fidelidade", fidpiso: "fidelidade", caixa: "vendas", canais: "canais", operacao: "operacao", previsao: "previsao" };
   const PAI = { cuing: "custos", cuhist: "cuing", cufichas: "custos", cudesp: "custos", cuver: "custos", fidmodelo: "fidelidade", fidpiso: "fidelidade",
     dre: "t-dinheiro", custos: "t-dinheiro", canais: "t-dinheiro", caixa: "t-dinheiro",
     clientes: "t-clientes", fidelidade: "t-clientes", avaliacoes: "t-clientes",
@@ -428,6 +430,8 @@ if (st.view === "overview") {
     if (ov) { $("content").innerHTML = telaOverview(st.ov); animarNumeros(); return; }
     const d = st.dash;
     const T = { home: telaHome, "t-dinheiro": telaDinheiro, "t-clientes": telaClientesMenu, "t-mais": telaMais, dre: telaDre, custos: telaCustos, canais: telaCanais, operacao: telaOperacao, clientes: telaClientes, fidelidade: telaFidelidade, fidmodelo: telaFidModelo, fidpiso: telaFidPiso, cuing: telaIngredientes, cuhist: telaHistorico, cufichas: telaFichas, cudesp: telaDespesas, cuver: telaVerCustos, previsao: telaPrevisao, caixa: telaCaixa, pdf: telaPdf, avaliacoes: telaAvaliacoes }[st.screen];
+    const precisa = TELA_RECURSO[st.screen];
+    if (precisa && d && d.restaurant && !pode(d, precisa)) { $("content").innerHTML = lockCard(`${TITULOS[st.screen] || "Esta tela"} faz parte do plano ${planoDe(d, precisa)}.`, planoDe(d, precisa)); return; }
     $("content").innerHTML = T(d);
     if (st.screen === "pdf") bindPdf(d);
     if (st.screen === "home" && sino.itens.length) atualizarSinoLocal();
@@ -669,7 +673,7 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
         : cardsLucro()}
       <section class="card"><ul class="list">
         ${linhaMenu(d, "dre", "wallet", "Lucro e operação", "A conta do período: faturamento, custos e o que sobrou")}
-        ${linhaMenu(d, "custos", "box", "Custos e estoque", "Compras, fichas dos pratos e despesas", "custos")}
+        ${linhaMenu(d, "custos", "box", "Custos e estoque", "Compras, fichas dos pratos e despesas", "estoque")}
         ${linhaMenu(d, "canais", "pie", "Rentabilidade por canal", "Quanto sobra no salão e no delivery", "canais")}
         ${linhaMenu(d, "caixa", "file", "Vendas por dia", "Dia a dia do período e os mais vendidos", "vendas")}
       </ul></section>`;
@@ -1008,12 +1012,12 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
   const cuBtnIc = (attr, id, rotulo, simbolo) => `<button class="btn link small" ${attr}="${esc(id)}" aria-label="${rotulo}">${simbolo}</button>`;
 
   /* menu da seção */
-  function telaCustos() {
+  function telaCustos(d) {
     return `<section class="card"><h2>Custos e estoque</h2><ul class="list">
-      ${cuLinha("cuing", "box", "Ingredientes e mercadorias", "Registrar compras e ver quanto custa cada produto")}
-      ${cuLinha("cufichas", "file", "Fichas dos pratos", "Quanto de cada ingrediente vai em cada prato")}
-      ${cuLinha("cudesp", "wallet", "Despesas", "Folha, aluguel, impostos e outras contas")}
-      ${cuLinha("cuver", "pie", "Ver meus custos", "Gráficos e porcentagens do período")}
+      ${linhaMenu(d, "cuing", "box", "Ingredientes e mercadorias", "Registrar compras e ver quanto custa cada produto", "estoque")}
+      ${linhaMenu(d, "cufichas", "file", "Fichas dos pratos", "Quanto de cada ingrediente vai em cada prato", "custos")}
+      ${linhaMenu(d, "cudesp", "wallet", "Despesas", "Folha, aluguel, impostos e outras contas", "custos")}
+      ${linhaMenu(d, "cuver", "pie", "Ver meus custos", "Gráficos e porcentagens do período", "custos")}
     </ul></section>`;
   }
 
