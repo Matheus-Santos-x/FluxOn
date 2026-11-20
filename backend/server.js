@@ -10270,6 +10270,14 @@ async function funcionarioValido(restaurant_id, id) {
   return data?.id || null;
 }
 const funcNome = (v) => String(v || "").replace(/\s+/g, " ").trim().slice(0, 60);
+// mesmo nome (sem diferenciar maiúscula) já ativo na equipe? (dois toques em "Adicionar" não viram dois cadastros)
+async function funcNomeEmUso(rid, nome, menosId) {
+  let q = supabase.from("funcionarios").select("id").eq("restaurant_id", rid).eq("ativo", true)
+    .ilike("nome", nome.replace(/[\\%_]/g, "\\$&")).limit(1);
+  if (menosId) q = q.neq("id", menosId);
+  const { data } = await q;
+  return !!data?.length;
+}
 
 // cadastro (Owner e Admin) e lista (o caixa só lê, na hora de cobrar)
 async function funcListar(rid) {
@@ -10287,8 +10295,10 @@ const funcRotas = (base, guardas, ridDe) => {
     try {
       const nome = funcNome(req.body?.nome);
       if (nome.length < 2) return sendError(res, 400, "Digite o nome do funcionário");
+      if (await funcNomeEmUso(ridDe(req), nome)) return sendError(res, 409, "Já tem um funcionário com esse nome na equipe");
       const { data, error } = await supabase.from("funcionarios")
         .insert([{ restaurant_id: ridDe(req), nome, ativo: true }]).select("id, nome").single();
+      if (error?.code === "23505") return sendError(res, 409, "Já tem um funcionário com esse nome na equipe");
       if (error) throw error;
       return res.status(201).json(data);
     } catch (err) { return sendError(res, 500, "Erro ao cadastrar o funcionário"); }
@@ -10297,6 +10307,7 @@ const funcRotas = (base, guardas, ridDe) => {
     try {
       const nome = funcNome(req.body?.nome);
       if (nome.length < 2) return sendError(res, 400, "Digite o nome do funcionário");
+      if (await funcNomeEmUso(ridDe(req), nome, req.params.func_id)) return sendError(res, 409, "Já tem um funcionário com esse nome na equipe");
       const { data, error } = await supabase.from("funcionarios").update({ nome })
         .eq("id", req.params.func_id).eq("restaurant_id", ridDe(req)).eq("ativo", true).select("id, nome").maybeSingle();
       if (error) throw error;
