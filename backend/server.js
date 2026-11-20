@@ -10605,8 +10605,8 @@ app.get("/health", async (req, res) => {
     supabase.from("restaurants").select("id").limit(1),
     new Promise(ok => setTimeout(() => ok({ error: "timeout" }), 3000)) // nunca trava o health
   ]);
-  res.json({
-    status: "ok",
+  res.status(db.error ? 503 : 200).json({
+    status: db.error ? "banco fora" : "ok",
     timestamp: new Date().toISOString(),
     version: "4.0.0-dashboard-completo",
     supabase_ms: Date.now() - t,
