@@ -35,16 +35,20 @@ function showError(msg){
     renderMenu();
     updateCartUI();
 
+    const iaPromessa = iaLiberada(); // já pergunta o plano enquanto carrega o resto
     const bestsellers = await loadBestsellers();
     renderBestsellers(bestsellers);
 
     // intro sequence
     gsap.timeline()
       .to(".brand-row", { opacity:1, y:0, duration:.5, ease:"power2.out" })
-      .to(".hero-sub", { opacity:1, y:0, duration:.5, ease:"power2.out" }, "-=.25")
-      .to(".ai-bubble", { opacity:1, y:0, duration:.5, ease:"back.out(1.7)" }, "-=.2");
+      .to(".hero-sub", { opacity:1, y:0, duration:.5, ease:"power2.out" }, "-=.25");
 
-    maybeShowAiTooltip();
+    // botão da IA: só aparece no plano Advanced pra cima
+    if(await iaPromessa){
+      gsap.to(".ai-bubble", { opacity:1, y:0, duration:.5, ease:"back.out(1.7)" });
+      maybeShowAiTooltip();
+    }
 
     // rastreio: se tiver pedido em andamento, o cardápio abre direto na tela de acompanhar
     rastreio.iniciar().catch(err => console.warn("Rastreio indisponível:", err));
