@@ -230,6 +230,17 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '10mb' }));
+// ninguém de fora do Admin manda HTML: < e > viram ‹ › em todo texto recebido
+// (fecha a porta de quem tenta esconder código num nome, observação ou endereço pra rodar na tela do caixa)
+const semHtml = (v, n = 0) => n > 8 ? v
+  : typeof v === "string" ? v.replace(/</g, "‹").replace(/>/g, "›")
+  : Array.isArray(v) ? v.map(x => semHtml(x, n + 1))
+  : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, semHtml(x, n + 1)]))
+  : v;
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === "object" && !readAuth(req)?.is_admin) req.body = semHtml(req.body);
+  next();
+});
 
 // ===== AUTH (primeiro em modo "log", depois "enforce") =====
 const AUTH_MODE = process.env.AUTH_MODE || "log";
@@ -316,7 +327,7 @@ app.use("/api/v1/rodizio/:restaurant_id", requireAuth);
 app.use("/orders", requireAuth); // só login: aqui o :id pode ser de pedido, não de restaurante
 for (const p of ["integracao", "impressora", "fiscal", "marketplace", "mp", "tracking-url",
   "webhook-satisfaction", "webhook-fechamento", "webhook-crm", "webhook-reclamacao", "webhook-login", "webhook-entregas", "webhook-vale", "webhook-reserva", "webhook-aniversario", "crm-mensagem",
-  "imprimir-pedido", "reimprimir-pedido"]) {
+  "imprimir-pedido", "reimprimir-pedido", "abrir-gaveta", "notas-fiscais"]) {
   app.use(`/api/v1/restaurante/:restaurant_id/${p}`, requireAuth);
 }
 
@@ -510,7 +521,7 @@ function normalizePhone(input) {
 }
 
 const pick = (obj = {}, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
-const CONFIG_CAMPOS = ["nome_exibicao","logo_url","logo_fisico_url","banner_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega","google_avaliacao_url","agendamento_ativo","agendamento_antecedencia_min","cores_apps"];
+const CONFIG_CAMPOS = ["nome_exibicao","logo_url","logo_fisico_url","banner_url","cor_primaria","cor_secundaria","cor_fundo","subtitulo","telefone","instagram","descricao","tema","num_mesas","tempo_recebido","tempo_preparo","tempo_pronto","categorias_ordem","tempo_entrega_min","tempo_entrega_max","pedido_minimo","endereco","pagamento_online","pagamento_entrega","google_avaliacao_url","agendamento_ativo","agendamento_antecedencia_min","cores_apps","taxa_entrega"];
 
 
 /* ========================================
@@ -3178,7 +3189,7 @@ app.post("/auth/google", async (req, res) => {
       return res.status(401).json({ authorized: false, error: "Token inválido" });
     }
 
-    const email = payload.email;
+    if (!payload.email_verified) return res.status(401).json({ authorized: false, error: "Confirme seu e-mail no Google antes de entrar" });
 
     const { data, error } = await supabase
       .from("restaurants")
@@ -9000,10 +9011,11 @@ app.post("/owner/auth/verificar", ownerLimitVerificar, async (req, res) => {
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (!otp || otp.tentativas >= OWNER_OTP_MAX_TENTATIVAS) return invalido();
 
-    if (!safeEqual(ownerHmac(`${owner.id}:${codigo}`), otp.code_hash)) {
-      await supabase.from("owner_otp").update({ tentativas: otp.tentativas + 1 }).eq("id", otp.id);
-      return invalido();
-    }
+    // gasta a tentativa ANTES de conferir: chutes ao mesmo tempo não passam do limite (só um leva cada número)
+    const { data: gasta } = await supabase.from("owner_otp").update({ tentativas: otp.tentativas + 1 })
+      .eq("id", otp.id).eq("tentativas", otp.tentativas).select("id");
+    if (!gasta?.length) return invalido();
+    if (!safeEqual(ownerHmac(`${owner.id}:${codigo}`), otp.code_hash)) return invalido();
 
     const { data: consumido } = await supabase
       .from("owner_otp").update({ usado: true }).eq("id", otp.id).eq("usado", false).select("id");
