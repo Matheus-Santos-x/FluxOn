@@ -4812,6 +4812,7 @@ async function init() {
   setInterval(checkAndRefreshToken, 30 * 60 * 1000); // sistema aberto o dia todo: confere a cada 30 min
 
   restaurantPlan = localStorage.getItem("restaurant_plan") || "basic";
+  applyAccessUI();
   carregarPlano();
 
   if (isImpersonating()) {
