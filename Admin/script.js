@@ -813,14 +813,21 @@ async function secFuncionarios(el) {
     </div>`;
   };
   const carregar = async () => { lista = await api(base); if (S.atual?.id === rid && S.secao === "funcionarios") desenhar(); };
-  const faz = async (fn) => { try { await fn(); editando = ""; await carregar(); } catch (e) { toast(e.message, "erro"); } };
+  let ocupado = false; // um salvamento por vez: o segundo toque enquanto salva é ignorado (não duplica)
+  const faz = async (fn, botao) => {
+    if (ocupado) return;
+    ocupado = true;
+    if (botao) { botao.disabled = true; botao.textContent = "Salvando..."; }
+    try { await fn(); editando = ""; await carregar(); } catch (e) { toast(e.message, "erro"); desenhar(); }
+    finally { ocupado = false; }
+  };
   el.addEventListener("click", (e) => {
     const t = e.target.closest("#fu-add,[data-fu-editar],[data-fu-tirar],[data-fu-salvar],[data-fu-cancelar]");
     if (!t) return;
-    if (t.id === "fu-add") { const nome = val("fu-nome"); if (nome.length < 2) return $("fu-nome").focus(); return faz(() => api(base, { metodo: "POST", corpo: { nome } })); }
+    if (t.id === "fu-add") { const nome = val("fu-nome"); if (nome.length < 2) return $("fu-nome").focus(); return faz(() => api(base, { metodo: "POST", corpo: { nome } }), t); }
     if (t.dataset.fuEditar) { editando = t.dataset.fuEditar; return desenhar(); }
     if (t.hasAttribute("data-fu-cancelar")) { editando = ""; return desenhar(); }
-    if (t.dataset.fuSalvar) return faz(() => api(`${base}/${t.dataset.fuSalvar}`, { metodo: "PATCH", corpo: { nome: val("fu-ed") } }));
+    if (t.dataset.fuSalvar) return faz(() => api(`${base}/${t.dataset.fuSalvar}`, { metodo: "PATCH", corpo: { nome: val("fu-ed") } }), t);
     if (t.dataset.fuTirar) perguntar({ titulo: "Tirar da equipe?", texto: "Some da lista do caixa. Os vales que já usou continuam no Owner.", sim: "Tirar", perigo: true })
       .then(ok => ok && faz(() => api(`${base}/${t.dataset.fuTirar}`, { metodo: "DELETE" })));
   });
