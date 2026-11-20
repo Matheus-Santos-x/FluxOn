@@ -189,7 +189,8 @@ function balaoDesenhar(balao, data){
     balao.querySelector(".ai-cart-balao-top p").innerHTML = `<span class="ai-typing-dot"></span><span class="ai-typing-dot"></span><span class="ai-typing-dot"></span>`;
     const d = await iaPerguntar(texto);
     if(!d || !d.resposta){ balao.remove(); return; }
-    AI_HISTORY.push({ role:"assistant", content:d.resposta });
+    AI_HISTORY.push({ role:"assistant", content:iaParaHistorico(d.resposta, d) });
+    if(d.adicionar?.length){ iaAdicionarAoCarrinho(d.adicionar); balao.remove(); return; }
     balaoDesenhar(balao, d);
   });
 }
@@ -257,6 +258,29 @@ async function iaNoCarrinho(){
   gsap.fromTo(balao, { opacity:0, y:-8 }, { opacity:1, y:0, duration:.35, ease:"back.out(1.6)" });
 }
 
+// a IA mandou colocar no pedido: entra no carrinho igual ao botão (preço sempre o do cardápio, conferido no servidor)
+function iaAdicionarAoCarrinho(lista){
+  if(!Array.isArray(lista) || !lista.length) return;
+  for(const a of lista){
+    const id = a.opcao ? `${a.id}__${a.opcao.nome}` : a.id;
+    const ex = CART.find(c => String(c.id) === String(id));
+    if(ex) ex.qty += a.qty;
+    else CART.push(a.opcao ? { id, nome:`${a.nome} — ${a.opcao.nome}`, preco:a.opcao.preco, qty:a.qty } : { id, nome:a.nome, preco:a.preco, qty:a.qty });
+  }
+  updateCartUI();
+  const wrap = document.createElement("div");
+  wrap.className = "ai-quick-replies";
+  wrap.innerHTML = `<button type="button" class="ai-quick">🛒 Ver meu pedido</button>`;
+  aiMessagesEl.appendChild(wrap);
+  aiMessagesEl.scrollTop = aiMessagesEl.scrollHeight;
+  wrap.querySelector("button").onclick = () => { closeAiChat(); openDrawer(); };
+}
+// no histórico vai também o que foi mostrado: é assim que "adiciona esse" sabe qual é
+function iaParaHistorico(resposta, data){
+  const nomes = (data?.itens || []).map(i => i.nome).slice(0, 10);
+  return nomes.length ? `${resposta} [mostrei: ${nomes.join(", ")}]` : resposta;
+}
+
 // manda o carrinho atual junto — é isso que deixa a IA sugerir
 // complementos (bebida, sobremesa etc) em vez de sugestões soltas
 function carrinhoParaIA(){
@@ -296,7 +320,8 @@ async function sendAiMessage(){
 
     const resposta = data.resposta || "Não consegui pensar em nada agora, dá uma olhada no cardápio 🙂";
     appendChatMessage("assistant", resposta);
-    AI_HISTORY.push({ role:"assistant", content:resposta });
+    AI_HISTORY.push({ role:"assistant", content:iaParaHistorico(resposta, data) });
+    iaAdicionarAoCarrinho(data.adicionar);
     appendSuggestedItems(data.itens);
     appendIrCategoria(data.categoria);
     appendQuickReplies(data.opcoes_rapidas);
@@ -331,7 +356,7 @@ async function sendAiAutoSuggestion(){
 
     const resposta = data.resposta || "Oi! Vi que você já tem alguns itens no carrinho — quer que eu sugira algo pra completar o pedido?";
     appendChatMessage("assistant", resposta);
-    AI_HISTORY.push({ role:"assistant", content:resposta });
+    AI_HISTORY.push({ role:"assistant", content:iaParaHistorico(resposta, data) });
     appendSuggestedItems(data.itens);
     appendIrCategoria(data.categoria);
     appendQuickReplies(data.opcoes_rapidas);
