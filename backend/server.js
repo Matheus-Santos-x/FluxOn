@@ -3529,7 +3529,7 @@ app.post("/admin/impersonate", requireAdmin, async (req, res) => {
    - importar os itens que o admin revisou
    - buscar dados do restaurante na internet (só sugere, quem salva é o admin)
 ======================================== */
-const IA_MODELO_ADMIN = process.env.OPENAI_MODEL_ADMIN || "gpt-5.6-luna";
+const IA_MODELO_ADMIN = process.env.OPENAI_MODEL_ADMIN || "gpt-6-luna";
 const uploadCardapioIA = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 10 } });
 const iaTexto = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 const iaPreco = (v) => {
@@ -4335,7 +4335,7 @@ async function etiquetarCardapio(rid) {
       const lote = pendentes.slice(k, k + 60);
       const lista = lote.map(i => `${i.id} | ${i.nome} | categoria: ${i.categoria || "-"}${i.descricao ? ` | ${String(i.descricao).slice(0, 200)}` : ""}`).join("\n");
       const r = await openai.responses.create({
-        model: "gpt-5.6-luna",
+        model: "gpt-6-luna",
         input: [
           { role: "system", content: `Classifique cada item de cardápio de restaurante (Brasil) com o que ele contém:
 - "comida": prato salgado, lanche, pizza salgada, esfiha salgada, refeição.
@@ -8659,11 +8659,11 @@ ${cardapioTexto || "(vazio)"}`;
       .map(m => ({ role: m.role, content: m.content.slice(0, 600) }));
 
     const response = await openai.responses.create({
-      model: "gpt-5.6-luna",
+      model: "gpt-6-luna",
       input: [{ role: "system", content: systemPrompt }, ...hist, { role: "user", content: mensagemFinal }],
       text: { format: IA_FORMATO },
-      max_output_tokens: 400
-    });
+      reasoning: { effort: "low" },
+      max_output_tokens: 800
 
     let parsed;
     try {
