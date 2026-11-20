@@ -3190,7 +3190,8 @@ app.post("/auth/google", async (req, res) => {
     }
 
     if (!payload.email_verified) return res.status(401).json({ authorized: false, error: "Confirme seu e-mail no Google antes de entrar" });
-
+    const email = payload.email;
+    
     const { data, error } = await supabase
       .from("restaurants")
       .select("*")
