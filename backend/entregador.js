@@ -62,6 +62,7 @@ function pagamentoInfo(o) {
   const pm = String(o.payment_method || "").trim();
   const s = pm.toLowerCase();
   if (/pago online/i.test(String(o.notes || ""))) return { tipo: "pago", texto: "Já pago online", cobrar: 0, dinheiro: 0, troco: 0 };
+  if (/funcion/.test(s) && !s.includes("+")) return { tipo: "pago", texto: "Vale funcionário · nada a cobrar", cobrar: 0, dinheiro: 0, troco: 0 };
   const tipo = (t) => /dinheiro/.test(t) ? "dinheiro"
     : /pix/.test(t) ? "pix"
     : /cart|credito|crédito|debito|débito|maquininha/.test(t) ? "cartao"
