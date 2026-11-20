@@ -3226,12 +3226,14 @@ const COB_METODOS = [
   ["credito", "Crédito", '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 10h19"/>'],
   ["debito", "Débito", '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M6 15h4"/>'],
   ["vale_refeicao", "Vale-refeição", '<path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M16 3c-2 0-3 2-3 5s1 4 3 4v9"/>'],
-  ["voucher", "Voucher", '<rect x="3" y="8" width="18" height="12" rx="1.5"/><path d="M12 8v12M3 12h18M12 8c-2-4-6-3-5 0M12 8c2-4 6-3 5 0"/>']
+  ["voucher", "Voucher", '<rect x="3" y="8" width="18" height="12" rx="1.5"/><path d="M12 8v12M3 12h18M12 8c-2-4-6-3-5 0M12 8c2-4 6-3 5 0"/>'],
+  ["vale_funcionario", "Vale funcionário", '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6"/>']
 ];
 const cobNome = (m) => m === "reserva" ? "Reserva (já paga)" : (COB_METODOS.find(x => x[0] === m) || [m, m])[1];
 const cobSvg = (d, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const cobR = (v) => Math.round((Number(v) || 0) * 100) / 100;
-const cobTxtPag = (p) => p.metodo === "vale_refeicao" ? "vale-refeição" : vpTextoPagamento(p);
+const cobTxtPag = (p) => p.metodo === "vale_refeicao" ? "vale-refeição"
+  : p.metodo === "vale_funcionario" ? `vale funcionário (${window.funcionarioNoTexto ? funcionarioNoTexto(p.codigo) : ""})` : vpTextoPagamento(p);
 const COB_MAQ = ["pix", "credito", "debito"]; // vão pra maquininha quando o Mercado Pago Point está configurado
 
 function abrirCobranca(pedidos, juntos) {
@@ -3369,7 +3371,7 @@ function abrirCobranca(pedidos, juntos) {
         ${f > 0.009 && !aguard ? `
         <div class="cob-met">
           <span class="cob-sec">${pags.length ? "COMO VAI PAGAR O RESTANTE?" : "FORMA DE PAGAMENTO"}</span>
-          <div class="cob-grade">${COB_METODOS.map(([id, nome, d]) => `<button class="cob-btn ${metodo === id ? "on" : ""}" data-a="m:${id}">${cobSvg(d)}${nome}</button>`).join("")}</div>
+          <div class="cob-grade">${COB_METODOS.filter(([id]) => id !== "vale_funcionario" || temNoPlano("vale_funcionario")).map(([id, nome, d]) => `<button class="cob-btn ${metodo === id ? "on" : ""}" data-a="m:${id}">${cobSvg(d)}${nome}</button>`).join("")}</div>
         </div>
         ${painelMetodo(f)}` : ""}
 
@@ -3409,6 +3411,16 @@ function abrirCobranca(pedidos, juntos) {
       if (!metodo || metodo === "voucher" || !(digitado > 0) || f <= 0) return;
       if (mpAtivo && COB_MAQ.includes(metodo)) return cobrarMaq(metodo, cobR(Math.min(digitado, f)));
       const p = { metodo, valor: cobR(Math.min(digitado, f)) };
+            if (metodo === "vale_funcionario") {   // vale funcionário: escolhe quem está consumindo (um por conta)
+        const ja = pags.find(x => x.funcionarioId);
+        (ja ? Promise.resolve({ id: ja.funcionarioId, nome: ja.codigo }) : escolherFuncionario()).then(fu => {
+          if (!fu) return;
+          pags.push({ ...p, funcionarioId: fu.id, codigo: fu.nome });
+          metodo = null; digitado = 0;
+          render();
+        });
+        return;
+      }
       if (metodo === "dinheiro") { p.recebido = cobR(digitado); p.troco = Math.max(0, cobR(digitado - f)); }
       pags.push(p);
       metodo = null; digitado = 0;
@@ -3469,7 +3481,7 @@ function abrirCobranca(pedidos, juntos) {
         await Promise.all(pedidos.map(async (o) => {
           // confere a resposta do servidor: se não salvou, a tela não mostra "finalizado" e dá pra tentar de novo
           const rp = await fetch(`${API_BASE}/api/v1/pedidos/${o.id}/payment`, {
-            method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ payment_method: textoDoPedido(o) })
+            method: "PATCH", headers: buildHeaders(), body: JSON.stringify({ payment_method: textoDoPedido(o), ...(/funcion/i.test(textoDoPedido(o) || "") ? { funcionario_id: pags.find(p => p.funcionarioId)?.funcionarioId } : {}) })
           });
           if (!rp.ok) throw new Error(`Não deu para salvar o pagamento do pedido #${o.order_number}. Confira a internet e toque em Finalizar de novo.`);
           const rs = await fetch(`${API_URL}/${o.id}/status`, {
@@ -4011,6 +4023,8 @@ if (!rid || !client) { alert("Preencha o nome do cliente."); resetSaveBtn(); ret
 if (!itens || itens.length === 0) { alert("Preencha os itens do pedido."); resetSaveBtn(); return; }
 if (isDelivery && !address) { alert("Endereço é obrigatório para delivery."); resetSaveBtn(); return; }
 if (isDelivery && !payment_method) { alert("Forma de pagamento é obrigatória para delivery."); resetSaveBtn(); return; }
+  const funcNovo = isDelivery && /funcion/i.test(payment_method) ? window._npFuncionario : null;   // vale funcionário: quem consumiu
+if (isDelivery && /funcion/i.test(payment_method) && !funcNovo && !editOrderId) { alert("Escolha o funcionário do vale."); resetSaveBtn(); return; }
 
   try {
    const orderAtual = editOrderId ? orders.find(o => o.id === editOrderId) : null;
@@ -4023,7 +4037,8 @@ const body = {
   notes: String(newNotes?.value || ""),
   service_type,
   address: isDelivery ? address : null,
-  payment_method: isDelivery ? payment_method : null,
+  payment_method: isDelivery ? (funcNovo ? `vale funcionário (${funcionarioNoTexto(funcNovo.nome)})` : payment_method) : null,
+  ...(funcNovo ? { funcionario_id: funcNovo.id } : {}),
   total_price,
 origin: orderAtual?.origin || (tipoPedido === "mesa" || !!saveCreateBtn.dataset.mesa ? "balcao" : "balcao_delivery"),
   table_number: orderAtual?.table_number || saveCreateBtn.dataset.mesa || null,
@@ -8081,7 +8096,7 @@ async function showCaixa() {
 
   const FORMAS = [["dinheiro", "Dinheiro"], ["pix", "Pix"], ["credito", "Crédito"], ["debito", "Débito"], ["vale_refeicao", "Vale-refeição"], ["voucher", "Voucher"]];
   const n = (v) => Number(v) || 0;
-  const vendido = FORMAS.reduce((s, [m]) => s + n(c[`valor_${m}`]), 0) + n(c.valor_reserva) + n(c.valor_outros);
+  const vendido = FORMAS.reduce((s, [m]) => s + n(c[`valor_${m}`]), 0) + n(c.valor_reserva) + n(c.valor_outros) + n(c.valor_vale_funcionario);
   const pedidos = n(c.total_pedidos);
   const comEnt = n(c.com_entregador); // dinheiro de entrega que ainda está com o entregador (sem acerto)
   const gaveta = n(c.fundo_inicial) + n(c.valor_dinheiro) - comEnt;
@@ -8089,7 +8104,8 @@ async function showCaixa() {
   const linha = (nome, qtd, valor, fora) =>
     `<div class="cxt-forma${fora ? " fora" : ""}"><span>${nome}<em>${qtd}</em></span><b>${_fmtCurrency(valor)}</b></div>`;
   const formas = FORMAS.map(([m, nome]) => linha(nome, n(c[`qtd_${m}`]), n(c[`valor_${m}`]))).join("")
-    + (n(c.valor_reserva) > 0 ? linha("Reserva (já paga)", n(c.qtd_reserva), n(c.valor_reserva), true) : "");
+    + (n(c.valor_reserva) > 0 ? linha("Reserva (já paga)", n(c.qtd_reserva), n(c.valor_reserva), true) : "")
+    + (n(c.valor_vale_funcionario) > 0 ? linha("Vale funcionário (a descontar)", n(c.qtd_vale_funcionario), n(c.valor_vale_funcionario), true) : "");
 
   const existing = document.getElementById("caixa-modal");
   if (existing) existing.remove();
@@ -9386,19 +9402,38 @@ manterTelaAcesa();
   // forma de pagamento em botões (o select continua escondido por baixo, o resto do código não muda)
   const sel = $("new-payment"), chips = $("new-payment-chips");
   if (sel && chips) {
-    const opcoes = [["pix", "Pix"], ["credito", "Crédito"], ["debito", "Débito"], ["dinheiro", "Dinheiro"], ["vale-refeição", "Vale-refeição"]];   // vale-alimentação: é só voltar com ["vale-alimentação", "Vale-alimentação"]
+    const base = [["pix", "Pix"], ["credito", "Crédito"], ["debito", "Débito"], ["dinheiro", "Dinheiro"], ["vale-refeição", "Vale-refeição"]];   // vale-alimentação: é só voltar com ["vale-alimentação", "Vale-alimentação"]
+    const VF = "vale funcionário";
+    const opcoes = () => temNoPlano("vale_funcionario") ? [...base, [VF, "Vale funcionário"]] : base;
     const pintar = () => {
-      chips.innerHTML = opcoes.map(([v, n]) => `<button type="button" class="np-chip ${sel.value === v ? "on" : ""}" data-v="${v}">${n}</button>`).join("");
+      chips.innerHTML = opcoes().map(([v, n]) => `<button type="button" class="np-chip ${sel.value === v ? "on" : ""}" data-v="${v}">${v === VF && sel.value === VF && window._npFuncionario ? `Vale · ${escapeHtml(window._npFuncionario.nome)}` : n}</button>`).join("");
     };
     const nativo = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
     Object.defineProperty(sel, "value", {   // quando o código muda o select (abrir/editar pedido), os botões acompanham
       get() { return nativo.get.call(this); },
-      set(v) { nativo.set.call(this, v); pintar(); },
+      set(v) {
+        const vv = /^vale funcion/i.test(String(v || "")) ? VF : v;   // pedido salvo como "vale funcionário (Ana)" volta marcado
+        nativo.set.call(this, vv);
+        if (vv !== VF) window._npFuncionario = null;
+        pintar();
+      },
       configurable: true
     });
     chips.addEventListener("click", (e) => {
       const b = e.target.closest("[data-v]");
       if (!b) return;
+      if (b.dataset.v === VF && sel.value !== VF) {   // vale funcionário: escolhe quem está consumindo
+        escolherFuncionario().then(fu => {
+          if (!fu) return;
+          sel.value = VF;
+          window._npFuncionario = fu;
+          const nome = $("new-customer");
+          if (nome && !nome.value.trim()) nome.value = fu.nome;
+          pintar();
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        return;
+      }
       sel.value = sel.value === b.dataset.v ? "" : b.dataset.v;   // tocar de novo desmarca
       sel.dispatchEvent(new Event("change", { bubbles: true }));
     });
