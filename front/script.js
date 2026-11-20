@@ -262,43 +262,54 @@ function getPlanPrice(plan) {
   return prices[plan.toLowerCase()] || 1400;
 }
 
-function applyAccessUI() {
-  const plan = restaurantPlan.toLowerCase();
-  restaurantPlanPrice = getPlanPrice(plan);
-
-  // Essential — só pedidos
-  if (plan === "essential") {
-    features.crm = false;
-    features.results = false;
-    features.roi = false;
-    features.forecast = false;
-  }
-  // Advanced — + rastreio, CRM, PDV
-  else if (plan === "advanced") {
-    features.crm = true;
-    features.results = false;
-    features.roi = false;
-    features.forecast = false;
-  }
-  // Executive — + dashboard, fidelização, autoatendimento
-  else if (plan === "executive") {
-    features.crm = true;
-    features.results = true;
-    features.roi = true;
-    features.forecast = true;
-  }
-  // Custom — tudo
-  else if (plan === "custom") {
-    features.crm = true;
-    features.results = true;
-    features.roi = true;
-    features.forecast = true;
-  }
-
-  drawerCrmBtn?.classList.toggle("locked", !features.crm);
-  drawerResultsBtn?.classList.toggle("locked", !features.results);
-  document.getElementById("drawer-autoatendimento")?.classList.toggle("locked", plan !== "executive" && plan !== "custom");
+// ===== PLANOS: o servidor diz o que o plano libera; no menu, o resto fica com 🔒 =====
+let PLANO_RECURSOS = null; // { crm: { ok, plano }, ... } vindo de /plano
+const PLANO_LOCAL = { entregador: "advanced", fidelidade: "advanced", crm: "advanced", vale: "advanced", estoque: "advanced", relatorios: "executive", custos: "executive" };
+const ORDEM_PLANOS = ["essential", "advanced", "executive", "custom"];
+function temNoPlano(recurso) {
+  if (PLANO_RECURSOS?.[recurso]) return !!PLANO_RECURSOS[recurso].ok;
+  const min = PLANO_LOCAL[recurso];
+  if (!min) return true;
+  return ORDEM_PLANOS.indexOf(String(restaurantPlan).toLowerCase()) >= ORDEM_PLANOS.indexOf(min);
 }
+function planoMinimo(recurso) { return String(PLANO_RECURSOS?.[recurso]?.plano || PLANO_LOCAL[recurso] || "advanced").toLowerCase(); }
+window.temNoPlano = temNoPlano;
+const TRAVAS_MENU = {
+  "drawer-crm": ["crm", "CRM de Clientes"],
+  "drawer-fidelidade": ["fidelidade", "Programa de Fidelidade"],
+  "drawer-entregadores": ["entregador", "Entregadores"]
+};
+
+function applyAccessUI() {
+  restaurantPlanPrice = getPlanPrice(String(restaurantPlan));
+  features.crm = temNoPlano("crm");
+  features.results = features.roi = features.forecast = temNoPlano("relatorios");
+  for (const [id, [rec]] of Object.entries(TRAVAS_MENU)) document.getElementById(id)?.classList.toggle("locked", !temNoPlano(rec));
+}
+
+async function carregarPlano() {
+  const rid = getRestaurantId();
+  if (!rid) return;
+  try {
+    const r = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/plano`);
+    if (!r.ok) return;
+    const d = await r.json();
+    PLANO_RECURSOS = d.recursos || null;
+    if (d.plano) { restaurantPlan = d.plano; try { localStorage.setItem("restaurant_plan", d.plano); } catch {} }
+    applyAccessUI();
+  } catch {}
+}
+
+// toque num item com 🔒: mostra o plano em vez de abrir a tela
+document.addEventListener("click", (e) => {
+  const b = e.target.closest(".drawer-item");
+  if (!b || !TRAVAS_MENU[b.id] || temNoPlano(TRAVAS_MENU[b.id][0])) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const [rec, nome] = TRAVAS_MENU[b.id];
+  closeDrawer();
+  showUpgradeModal(planoMinimo(rec), nome);
+}, true);
 
 function closeDrawer() {
   drawer?.classList.remove("open");
@@ -350,11 +361,13 @@ function showUpgradeModal(requiredPlan, featureName) {
   planDisplay = "ADVANCED";
   planPrice = "R$ 2.500/mês";
   featuresList = [
-    "CRM completo de clientes",
-    "Recuperação de carrinho abandonado",
-    "Link de rastreio em tempo real",
-    "Relatórios PDF via WhatsApp (quinzenais)",
-    "Integração PDV",
+    "App do entregador com mapa ao vivo",
+    "Fidelidade com pontos ou selos",
+    "CRM: aniversário, satisfação e reclamação",
+    "Vale-presente",
+    "Pedido agendado",
+    "IA no cardápio e no WhatsApp",
+    "Carrinho abandonado",
     "Controle de estoque"
   ];
 } else if (requiredPlan === "executive") {
@@ -362,12 +375,11 @@ function showUpgradeModal(requiredPlan, featureName) {
   planPrice = "R$ 4.000/mês";
   featuresList = [
     "Tudo do plano Advanced",
-    "Dashboard de ROI em tempo real",
-    "Previsão de demanda por IA",
-    "Automação de campanhas",
-    "Controle de metas",
-    "Programa de fidelização",
-    "Acompanhamento quinzenal com equipe Evorise"
+    "Relatórios de vendas",
+    "Custos, CMV e lucro real",
+    "DRE, ROI e previsão de demanda",
+    "Rentabilidade por canal",
+    "Reuniões quinzenais com a equipe Evorise"
   ];
 }
 
@@ -503,9 +515,8 @@ function showCardapio() {
 }
 
 function showFidelidade() {
-  const plan = restaurantPlan.toLowerCase();
-  if (plan !== "executive" && plan !== "custom") {
-    showUpgradeModal("executive", "Programa de Fidelidade");
+  if (!temNoPlano("fidelidade")) {
+    showUpgradeModal(planoMinimo("fidelidade"), "Programa de Fidelidade");
     return;
   }
   board?.classList.add("hidden");
@@ -524,11 +535,6 @@ function showFidelidade() {
 }
 
 function showAutoatendimento() {
-  const plan = restaurantPlan.toLowerCase();
-  if (plan !== "executive" && plan !== "custom") {
-    showUpgradeModal("executive", "Autoatendimento");
-    return;
-  }
   board?.classList.add("hidden");
   crmView?.classList.add("hidden");
   resultsView?.classList.add("hidden");
@@ -3103,6 +3109,7 @@ async function vpConsultar(codigo) {
 
 // Home: botão "Consultar vale-presente"
 function abrirConsultaVale() {
+    if (!temNoPlano("vale")) { showUpgradeModal(planoMinimo("vale"), "Vale-presente"); return; }
   document.getElementById("vale-modal")?.remove();
   const modal = document.createElement("div");
   modal.id = "vale-modal";
@@ -4805,7 +4812,7 @@ async function init() {
   setInterval(checkAndRefreshToken, 30 * 60 * 1000); // sistema aberto o dia todo: confere a cada 30 min
 
   restaurantPlan = localStorage.getItem("restaurant_plan") || "basic";
-  applyAccessUI();
+  carregarPlano();
 
   if (isImpersonating()) {
     const banner = document.getElementById("impersonate-banner");
