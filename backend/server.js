@@ -451,7 +451,8 @@ const hasPlan = (plan, min) => planLevel(plan) >= planLevel(min);
 const RECURSOS_PLANO = {
   entregador: "advanced", fidelidade: "advanced", crm: "advanced", vale: "advanced", agendamento: "advanced",
   cardapio_ia: "advanced", estoque: "advanced", ia_whatsapp: "advanced", carrinho_abandonado: "advanced", sugestao_semanal: "advanced",
-  relatorios: "executive", custos: "executive", campanhas: "executive", chat_ia: "executive", multiunidade: "custom"
+  relatorios: "executive", custos: "executive", campanhas: "executive", chat_ia: "executive", multiunidade: "custom",
+  vale_funcionario: "executive"
 };
 const PLANO_NOME = { essential: "Essential", advanced: "Advanced", executive: "Executive", custom: "Custom" };
 const _planoCache = new Map(); // restaurante → { plano, em } (1 min)
@@ -499,6 +500,8 @@ app.use("/api/v1/entregadores/:restaurant_id", exigePlano("entregador"));
 app.use("/owner/restaurants/:restaurant_id/custos/insumos", exigePlano("estoque"));
 app.use(["compras", "imposto", "despesas", "pratos"].map(p => `/owner/restaurants/:restaurant_id/custos/${p}`), exigePlano("custos"));
 app.use("/owner/restaurants/:restaurant_id/financeiro", exigePlano("custos"));
+app.use("/api/v1/funcionarios/:restaurant_id", requireAuth, exigePlano("vale_funcionario"));
+app.use(["/owner/restaurants/:restaurant_id/vales", "/owner/restaurants/:restaurant_id/funcionarios"], exigePlano("vale_funcionario"));
 // as telas (Operacional, Owner, apps) perguntam o que o restaurante tem
 app.get("/api/v1/restaurante/:restaurant_id/plano", async (req, res) => {
   const plano = await planoDo(req.params.restaurant_id);
@@ -2706,6 +2709,7 @@ async function estornarSeloFidelidade(order) {
 const tipoPagamento = (t) =>
   t.includes("reserva") ? "reserva"
   : t.includes("refeicao") || t.includes("refeição") || t.includes("alimentacao") || t.includes("alimentação") ? "vale_refeicao"
+    : t.includes("funcion") ? "vale_funcionario"
   : t.includes("vale") || t.includes("voucher") ? "voucher"
   : t.includes("pix") ? "pix"
   : t.includes("credito") || t.includes("crédito") ? "credito"
@@ -2914,6 +2918,13 @@ app.post("/api/v1/pedidos", async (req, res) => {
       && (finalOrigin === "cardapio_delivery" || String(service_type || "").toLowerCase() === "delivery");
         // resgate da fidelidade só nasce dentro do servidor: de fora, essa origem não passa (seria pedido de graça)
     if (publico && finalOrigin === "fidelidade") return sendError(res, 403, "Origem inválida");
+        // vale funcionário: só o caixa logado lança, e o funcionário tem que ser deste restaurante (de fora seria pedido de graça)
+    if (publico && /funcion/i.test(String(payment_method || ""))) return sendError(res, 400, "Forma de pagamento inválida");
+    let funcionario_id;
+    if (!publico && req.body && "funcionario_id" in req.body) {
+      funcionario_id = req.body.funcionario_id ? await funcionarioValido(restaurant_id, req.body.funcionario_id) : null;
+      if (req.body.funcionario_id && !funcionario_id) return sendError(res, 400, "Funcionário não encontrado");
+    }
     // pedido da mesa/QR sem login entra sempre como novo: quem finaliza e recebe é o caixa
     if (publico && !ehDeliveryPublico) finalStatus = "pending";
 
@@ -3000,6 +3011,7 @@ app.post("/api/v1/pedidos", async (req, res) => {
   service_type: service_type || "local",
   address: address || null,
   payment_method: payment_method || null,
+  ...(funcionario_id !== undefined ? { funcionario_id } : {}),
   update_at: now
 };
 
@@ -3037,6 +3049,7 @@ const nextNumber = numData || 1;
       service_type: service_type || "local",
       address: address || null,
       payment_method: payment_method || null,
+      ...(funcionario_id ? { funcionario_id } : {}),
       total_price: total_price || 0,
       origin: finalOrigin,
       destino: calcularDestino(finalOrigin),
@@ -6521,10 +6534,17 @@ app.patch("/api/v1/pedidos/:id/payment", requireRowOwner("orders"), async (req, 
     const { payment_method } = req.body;
 
     if (!payment_method) return sendError(res, 400, "payment_method é obrigatório");
+    // vale funcionário: guarda quem consumiu (o Owner soma por funcionário no mês)
+    const mudar = { payment_method, update_at: new Date().toISOString() };
+    if (req.body && "funcionario_id" in req.body) {
+      const { data: ped } = await supabase.from("orders").select("restaurant_id").eq("id", id).maybeSingle();
+      mudar.funcionario_id = req.body.funcionario_id ? await funcionarioValido(ped?.restaurant_id, req.body.funcionario_id) : null;
+      if (req.body.funcionario_id && !mudar.funcionario_id) return sendError(res, 400, "Funcionário não encontrado");
+    }
 
     const { data, error } = await supabase
       .from("orders")
-      .update({ payment_method, update_at: new Date().toISOString() })
+      .update(mudar)
       .eq("id", id)
       .select()
       .single();
@@ -8225,7 +8245,7 @@ async function caixaComEntregador(caixa) {
 async function totaisDoCaixa(caixa, ate) {
   const ini = (await inicioDoCaixa(caixa)).toISOString();
   const fim = new Date(ate || Date.now());
-  const t = { total_pedidos: 0, valor_outros: 0, qtd_outros: 0, valor_reserva: 0, qtd_reserva: 0 };
+  const t = { total_pedidos: 0, valor_outros: 0, qtd_outros: 0, valor_reserva: 0, qtd_reserva: 0, valor_vale_funcionario: 0, qtd_vale_funcionario: 0 };
   CAIXA_METODOS.forEach(m => { t[`valor_${m}`] = 0; t[`qtd_${m}`] = 0; });
   for (let de = 0; ; de += 1000) {
     const { data, error } = await supabase.from("orders")
@@ -8238,7 +8258,7 @@ async function totaisDoCaixa(caixa, ate) {
       if (new Date(o.delivered_at || o.update_at) > fim) continue;
       t.total_pedidos++;
       for (const p of repartirPagamento(o.payment_method, parseFloat(o.total_price || 0))) {
-        const m = CAIXA_METODOS.includes(p.metodo) || p.metodo === "reserva" ? p.metodo : "outros"; // sinal da reserva: separado, não é dinheiro da gaveta
+        const m = CAIXA_METODOS.includes(p.metodo) || p.metodo === "reserva" || p.metodo === "vale_funcionario" ? p.metodo : "outros"; // sinal da reserva e vale funcionário: separados, não são dinheiro da gaveta
         if (m === "outros") console.warn(`⚠️ Caixa: pagamento "${o.payment_method || "(vazio)"}" do pedido #${o.order_number} sem forma reconhecida`);
         t[`valor_${m}`] = Math.round((t[`valor_${m}`] + p.valor) * 100) / 100;
         t[`qtd_${m}`]++;
@@ -8362,15 +8382,17 @@ const totalMovimentado = ["dinheiro", "pix", "credito", "debito", "maquininha", 
           restaurant_name: metricas.restaurant_name || null,
           data_turno: new Date(caixa.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", day: "2-digit", month: "long", year: "numeric" }),
           duracao_turno_min: Math.round((Date.now() - new Date(caixa.created_at).getTime()) / 60000),
-          vendido_total: Math.round((totalMovimentado + (totais.valor_reserva || 0) + (totais.valor_outros || 0)) * 100) / 100,
-          ticket_medio_turno: totais.total_pedidos ? Math.round((totalMovimentado + (totais.valor_reserva || 0) + (totais.valor_outros || 0)) / totais.total_pedidos * 100) / 100 : 0,
+          vendido_total: Math.round((totalMovimentado + (totais.valor_reserva || 0) + (totais.valor_outros || 0) + (totais.valor_vale_funcionario || 0)) * 100) / 100,
+          ticket_medio_turno: totais.total_pedidos ? Math.round((totalMovimentado + (totais.valor_reserva || 0) + (totais.valor_outros || 0) + (totais.valor_vale_funcionario || 0)) / totais.total_pedidos * 100) / 100 : 0,
           valor_reserva: totais.valor_reserva || 0,
           qtd_reserva: totais.qtd_reserva || 0,
+          valor_vale_funcionario: totais.valor_vale_funcionario || 0,
+          qtd_vale_funcionario: totais.qtd_vale_funcionario || 0,
           valor_outros: totais.valor_outros || 0,
           qtd_outros: totais.qtd_outros || 0,
           diferenca_caixa: valor_informado !== undefined && valor_informado !== null && valor_informado !== ""
             ? Math.round((Number(valor_informado) - (Number(caixa.fundo_inicial) || 0) - (Number(caixa.valor_dinheiro) || 0) + comEntregador) * 100) / 100 : null,
-          formas_pagamento: [["dinheiro", "Dinheiro"], ["pix", "Pix"], ["credito", "Crédito"], ["debito", "Débito"], ["maquininha", "Maquininha"], ["vale_refeicao", "Vale-refeição"], ["voucher", "Voucher"], ["reserva", "Reserva (já paga)"]]
+          formas_pagamento: [["dinheiro", "Dinheiro"], ["pix", "Pix"], ["credito", "Crédito"], ["debito", "Débito"], ["maquininha", "Maquininha"], ["vale_refeicao", "Vale-refeição"], ["voucher", "Voucher"], ["reserva", "Reserva (já paga)"], ["vale_funcionario", "Vale funcionário"]]
             .map(([m, nome]) => ({ forma: nome, qtd: totais[`qtd_${m}`] || 0, valor: totais[`valor_${m}`] || 0 })),
           top_itens: metricas.top_itens || []
         })
@@ -8795,7 +8817,8 @@ const OWNER_RECURSOS = {
   canais: "executive",       // rentabilidade por canal
   previsao: "executive",     // previsão de demanda
     roi: "executive",          // ROI do FluxON
-  operacao: "executive"      // operação e IA: status, horário de pico, tempo por etapa, desempenho da IA
+  operacao: "executive",     // operação e IA: status, horário de pico, tempo por etapa, desempenho da IA
+  vale_funcionario: "executive" // quanto cada funcionário consumiu no mês
 };
 function ownerRecursos(plan) {
   return Object.fromEntries(Object.entries(OWNER_RECURSOS).map(([r, min]) => [r, { ok: hasPlan(plan, min), plano: OWNER_PLANO_NOME[min] }]));
@@ -10233,6 +10256,212 @@ app.get("/owner/restaurants/:restaurant_id/operacao", donoRota, async (req, res)
 });
 
 /* ---------- ADMIN: cadastrar donos (só quem está em ADMIN_EMAILS) ---------- */
+
+/* ========================================
+   🧑‍🍳 VALE FUNCIONÁRIO
+   O caixa lança o consumo do funcionário como forma de pagamento ("Vale funcionário"):
+   não entra como dinheiro no caixa e fica marcado no pedido (funcionario_id).
+   O Owner soma por funcionário no mês; o desconto no pagamento é com o dono.
+======================================== */
+async function funcionarioValido(restaurant_id, id) {
+  if (!restaurant_id || !/^[0-9a-f-]{36}$/i.test(String(id || ""))) return null;
+  const { data } = await supabase.from("funcionarios").select("id")
+    .eq("id", id).eq("restaurant_id", restaurant_id).eq("ativo", true).maybeSingle();
+  return data?.id || null;
+}
+const funcNome = (v) => String(v || "").replace(/\s+/g, " ").trim().slice(0, 60);
+
+// cadastro (Owner e Admin) e lista (o caixa só lê, na hora de cobrar)
+async function funcListar(rid) {
+  const { data, error } = await supabase.from("funcionarios").select("id, nome")
+    .eq("restaurant_id", rid).eq("ativo", true).order("nome");
+  if (error) throw error;
+  return data || [];
+}
+const funcRotas = (base, guardas, ridDe) => {
+  app.get(base, ...guardas, async (req, res) => {
+    try { return res.json(await funcListar(ridDe(req))); }
+    catch (err) { return sendError(res, 500, "Erro ao carregar os funcionários"); }
+  });
+  app.post(base, ...guardas, async (req, res) => {
+    try {
+      const nome = funcNome(req.body?.nome);
+      if (nome.length < 2) return sendError(res, 400, "Digite o nome do funcionário");
+      const { data, error } = await supabase.from("funcionarios")
+        .insert([{ restaurant_id: ridDe(req), nome, ativo: true }]).select("id, nome").single();
+      if (error) throw error;
+      return res.status(201).json(data);
+    } catch (err) { return sendError(res, 500, "Erro ao cadastrar o funcionário"); }
+  });
+  app.patch(`${base}/:func_id`, ...guardas, async (req, res) => {
+    try {
+      const nome = funcNome(req.body?.nome);
+      if (nome.length < 2) return sendError(res, 400, "Digite o nome do funcionário");
+      const { data, error } = await supabase.from("funcionarios").update({ nome })
+        .eq("id", req.params.func_id).eq("restaurant_id", ridDe(req)).eq("ativo", true).select("id, nome").maybeSingle();
+      if (error) throw error;
+      if (!data) return sendError(res, 404, "Funcionário não encontrado");
+      return res.json(data);
+    } catch (err) { return sendError(res, 500, "Erro ao salvar o funcionário"); }
+  });
+  // remover: sai da lista, mas os vales que ele já usou continuam no histórico do Owner
+  app.delete(`${base}/:func_id`, ...guardas, async (req, res) => {
+    try {
+      const { data, error } = await supabase.from("funcionarios").update({ ativo: false })
+        .eq("id", req.params.func_id).eq("restaurant_id", ridDe(req)).select("id");
+      if (error) throw error;
+      if (!data?.length) return sendError(res, 404, "Funcionário não encontrado");
+      return res.json({ success: true });
+    } catch (err) { return sendError(res, 500, "Erro ao remover o funcionário"); }
+  });
+};
+// Operacional: só a lista (o cadastro é do dono, no Owner, e do Admin)
+app.get("/api/v1/funcionarios/:restaurant_id", async (req, res) => {
+  try { return res.json(await funcListar(req.params.restaurant_id)); }
+  catch (err) { return sendError(res, 500, "Erro ao carregar os funcionários"); }
+});
+funcRotas("/owner/restaurants/:restaurant_id/funcionarios", donoRota, (req) => req.params.restaurant_id);
+funcRotas("/admin/restaurants/:id/funcionarios", [requireAdmin], (req) => req.params.id);
+
+// Owner: quanto cada funcionário consumiu no mês (só a parte paga com vale funcionário)
+app.get("/owner/restaurants/:restaurant_id/vales", donoRota, async (req, res) => {
+  try {
+    const { restaurant_id } = req.params;
+    const mes = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(req.query.mes || "")) ? req.query.mes
+      : new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 7);
+    const [y, m] = mes.split("-").map(Number);
+    const ini = new Date(Date.UTC(y, m - 1, 1, 3)).toISOString();   // meia-noite em Brasília
+    const fim = new Date(Date.UTC(y, m, 1, 3)).toISOString();
+    const pedidos = [];
+    for (let de = 0; ; de += 1000) {
+      const { data, error } = await supabase.from("orders")
+        .select("id, order_number, funcionario_id, payment_method, total_price, created_at")
+        .eq("restaurant_id", restaurant_id).eq("status", "finished").not("funcionario_id", "is", null)
+        .gte("created_at", ini).lt("created_at", fim).order("created_at").range(de, de + 999);
+      if (error) throw error;
+      pedidos.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    const ids = [...new Set(pedidos.map(p => p.funcionario_id))];
+    const { data: funcs } = ids.length
+      ? await supabase.from("funcionarios").select("id, nome, ativo").eq("restaurant_id", restaurant_id).in("id", ids)
+      : { data: [] };
+    const porId = new Map((funcs || []).map(f => [f.id, { id: f.id, nome: f.nome, ativo: f.ativo !== false, total: 0, qtd: 0, itens: [] }]));
+    for (const p of pedidos) {
+      const valor = repartirPagamento(p.payment_method, parseFloat(p.total_price || 0))
+        .filter(x => x.metodo === "vale_funcionario").reduce((s, x) => s + x.valor, 0);
+      const f = porId.get(p.funcionario_id);
+      if (!f || valor <= 0) continue;
+      f.total = Math.round((f.total + valor) * 100) / 100;
+      f.qtd++;
+      f.itens.push({ numero: p.order_number, data: new Date(new Date(p.created_at).getTime() - 3 * 3600e3).toISOString().slice(0, 10), valor: Math.round(valor * 100) / 100 });
+    }
+    const funcionarios = [...porId.values()].filter(f => f.qtd).sort((a, b) => b.total - a.total);
+    const total = Math.round(funcionarios.reduce((s, f) => s + f.total, 0) * 100) / 100;
+    return res.json({ mes, total, funcionarios });
+  } catch (err) {
+    console.error("❌ owner vales:", err.message);
+    return res.status(500).json({ error: "Erro ao carregar os vales" });
+  }
+});
+
+/* ========================================
+   ✅ CHECK-UP DE IMPLANTAÇÃO (Admin)
+   O que dá pra conferir sozinho vem do banco; o resto é marcado à mão
+   (fica em restaurante_config.implantacao: { chave: "data em que marcou" }).
+======================================== */
+const CHECKUP_MANUAL = {
+  contrato: "Contrato assinado",
+  pagamento: "Implantação paga",
+  treinamento: "Equipe treinada (caixa, cozinha e entregadores)",
+  plaquinhas: "Plaquinhas e QR das mesas entregues",
+  acompanhamento: "Primeira semana acompanhada"
+};
+app.get("/admin/restaurants/:id/checkup", requireAdmin, async (req, res) => {
+  try {
+    const rid = req.params.id;
+    const conta = (tabela, filtro = (q) => q) =>
+      Promise.resolve(filtro(supabase.from(tabela).select("id", { count: "exact", head: true }).eq("restaurant_id", rid)))
+        .then(r => r.count || 0).catch(() => 0);
+    const [{ data: rest }, { data: cfg }, { data: hor }, { data: integ }, { data: central },
+      itens, comFoto, pedidos, caixas, ents, premios, semPiso, funcs, donos] = await Promise.all([
+      supabase.from("restaurants").select("plan, cardapio_url, cardapio_delivery_url, central_url, reservas_url, vouchers_url").eq("id", rid).maybeSingle(),
+      supabase.from("restaurante_config").select("nome_exibicao, logo_url, endereco, telefone, num_mesas, google_avaliacao_url, reserva_ativo, voucher_ativo, implantacao").eq("restaurant_id", rid).maybeSingle(),
+      supabase.from("restaurante_horarios").select("dia_semana").eq("restaurant_id", rid).eq("ativo", true),
+      supabase.from("integracoes").select("tipo, dados").eq("restaurant_id", rid),
+      supabase.from("central_cliente").select("restaurant_id").eq("restaurant_id", rid).maybeSingle(),
+      conta("cardapio"), conta("cardapio", q => q.not("foto_url", "is", null)), conta("orders", q => q.neq("status", "draft")),
+      conta("caixa", q => q.eq("status", "fechado")), conta("entregadores", q => q.eq("ativo", true)),
+      conta("premios_fidelidade", q => q.eq("ativo", true)),
+      conta("premios_fidelidade", q => q.eq("ativo", true).or("piso_resgate.is.null,piso_resgate.lte.0")),
+      conta("funcionarios", q => q.eq("ativo", true)),
+      supabase.from("owner_restaurants").select("owner_id", { count: "exact", head: true }).eq("restaurant_id", rid).then(r => r.count || 0)
+    ]);
+    if (!rest) return sendError(res, 404, "Restaurante não encontrado");
+    const plano = String(rest.plan || "essential").toLowerCase();
+    const dados = (tipo) => (integ || []).find(i => i.tipo === tipo)?.dados || null;
+    const hook = (tipo) => !!dados(tipo)?.webhook_url;
+    const crm = hook("webhook_crm"); // vazio nos outros: a mensagem vai pelo webhook do CRM
+    const pn = dados("printnode");
+    const manual = cfg?.implantacao && typeof cfg.implantacao === "object" ? cfg.implantacao : {};
+    const nDias = (hor || []).length;
+    // [grupo, chave, texto, feito (null = não se aplica), detalhe, plano mínimo, seção do Admin]
+    const lista = [
+      ["Cadastro", "dados", "Nome, logo, endereço e telefone", !!(cfg?.nome_exibicao && cfg?.logo_url && cfg?.endereco && cfg?.telefone), "", "essential", "operacao"],
+      ["Cadastro", "horarios", "Horários de funcionamento", nDias > 0, nDias ? `${nDias} dia(s) com horário` : "Nenhum dia cadastrado", "essential", "horarios"],
+      ["Cadastro", "donos", "Dono com acesso ao app Owner", donos > 0, donos ? `${donos} dono(s)` : "Ninguém acompanha pelo Owner", "essential", "donos"],
+      ["Cardápio", "cardapio", "Itens cadastrados", itens > 0, `${itens} item(ns)`, "essential", "cardapio"],
+      ["Cardápio", "fotos", "Fotos nos itens (80% ou mais)", itens > 0 && comFoto / itens >= 0.8, `${comFoto} de ${itens} com foto`, "essential", "cardapio"],
+      ["Endereços", "dom_delivery", "Domínio do app de pedidos", !!rest.cardapio_delivery_url, rest.cardapio_delivery_url || "Sem domínio", "essential", "enderecos"],
+      ["Endereços", "dom_qr", "Domínio do cardápio da mesa (QR)", !!rest.cardapio_url, rest.cardapio_url || "Sem domínio", "essential", "enderecos"],
+      ["Endereços", "central", "Central do cliente no ar", !!(rest.central_url && central), rest.central_url || "Sem domínio", "essential", "central"],
+      ["Salão", "mesas", "Número de mesas", Number(cfg?.num_mesas) > 0, `${Number(cfg?.num_mesas) || 0} mesa(s)`, "essential", "operacao"],
+      ["Salão", "reservas", "Página de reservas no ar", cfg?.reserva_ativo ? !!rest.reservas_url : null, rest.reservas_url || "Sem domínio", "essential", "reservas"],
+      ["Pagamento", "pix", "Pix online (Mercado Pago)", !!dados("pix_online"), "Operacional → Configurações → Pix online", "essential", ""],
+      ["Impressão", "impressora", "Impressora do caixa e da cozinha", !!(pn?.api_key && (pn?.impressoras || []).length), "Operacional → Configurações → Impressora", "essential", ""],
+      ["Avaliação", "google", "Link de avaliação do Google", !!cfg?.google_avaliacao_url, "", "essential", "operacao"],
+      ["Mensagens", "wh_login", "Código de login do cliente (WhatsApp)", hook("webhook_login") || crm, "Operacional → Configurações → Webhooks", "essential", ""],
+      ["Mensagens", "wh_fechamento", "Relatório de fechamento do caixa", hook("webhook_fechamento"), "Operacional → Configurações → Webhooks", "essential", ""],
+      ["Mensagens", "wh_reserva", "Mensagens da reserva de mesa", cfg?.reserva_ativo ? hook("webhook_reserva") || crm : null, "Operacional → Configurações → Webhooks", "essential", ""],
+      ["Mensagens", "wh_satisfacao", "Pesquisa de satisfação", hook("webhook_satisfaction"), "Operacional → Configurações → Webhooks", "advanced", ""],
+      ["Mensagens", "wh_reclamacao", "Alerta de reclamação", hook("webhook_reclamacao") || crm, "Operacional → Configurações → Webhooks", "advanced", ""],
+      ["Mensagens", "wh_aniversario", "Sinal de aniversário", hook("webhook_aniversario") || crm, "Operacional → Configurações → Webhooks", "advanced", ""],
+      ["Mensagens", "wh_entregas", "Mensagens do entregador", hook("webhook_entregas") || crm, "Operacional → Configurações → Webhooks", "advanced", ""],
+      ["Mensagens", "wh_vale", "Mensagens do vale-presente", cfg?.voucher_ativo ? hook("webhook_vale") || crm : null, "Operacional → Configurações → Webhooks", "advanced", ""],
+      ["Equipe", "entregadores", "Entregadores cadastrados", ents > 0, `${ents} entregador(es)`, "advanced", ""],
+      ["Equipe", "funcionarios", "Funcionários cadastrados (vale funcionário)", funcs > 0, `${funcs} funcionário(s)`, "executive", "funcionarios"],
+      ["Fidelidade", "premios", "Prêmios cadastrados e com piso no Owner", premios > 0 && semPiso === 0, premios ? (semPiso ? `${semPiso} prêmio(s) sem piso` : `${premios} prêmio(s)`) : "Nenhum prêmio", "advanced", ""],
+      ["Teste", "pedido", "Pedido de teste feito", pedidos > 0, `${pedidos} pedido(s) até agora`, "essential", ""],
+      ["Teste", "caixa", "Caixa aberto e fechado uma vez", caixas > 0, caixas ? `${caixas} fechamento(s)` : "Nenhum fechamento", "essential", ""]
+    ];
+    const passos = lista
+      .filter(([, , , feito, , min]) => feito !== null && hasPlan(plano, min))
+      .map(([grupo, chave, texto, feito, detalhe, , secao]) => ({ grupo, chave, texto, feito: !!feito, detalhe, secao, manual: false }))
+      .concat(Object.entries(CHECKUP_MANUAL).map(([chave, texto]) =>
+        ({ grupo: "Fechamento", chave, texto, feito: !!manual[chave], detalhe: manual[chave] ? `Marcado em ${new Date(manual[chave]).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : "", secao: "", manual: true })));
+    return res.json({ plano, feitos: passos.filter(p => p.feito).length, total: passos.length, passos });
+  } catch (err) {
+    console.error("❌ checkup:", err.message);
+    return sendError(res, 500, "Erro ao montar o check-up");
+  }
+});
+
+app.patch("/admin/restaurants/:id/checkup", requireAdmin, async (req, res) => {
+  try {
+    const chave = String(req.body?.chave || "");
+    if (!CHECKUP_MANUAL[chave]) return sendError(res, 400, "Item inválido");
+    const { data: cfg } = await supabase.from("restaurante_config").select("implantacao").eq("restaurant_id", req.params.id).maybeSingle();
+    const implantacao = { ...(cfg?.implantacao && typeof cfg.implantacao === "object" ? cfg.implantacao : {}) };
+    if (req.body?.feito) implantacao[chave] = new Date().toISOString(); else delete implantacao[chave];
+    const { error } = await supabase.from("restaurante_config")
+      .upsert({ restaurant_id: req.params.id, implantacao }, { onConflict: "restaurant_id" });
+    if (error) return sendError(res, 500, "Erro ao salvar");
+    await logAdminAction(req.auth.email, "checkup_implantacao", { restaurant_id: req.params.id, chave, feito: !!req.body?.feito });
+    return res.json({ success: true, implantacao });
+  } catch (err) {
+    return sendError(res, 500, "Erro interno");
+  }
+});
 
 app.get("/admin/owners", requireAdmin, async (req, res) => {
   try {
