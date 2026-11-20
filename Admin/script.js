@@ -406,7 +406,7 @@ function desenharParede() {
 
 // ===== TELA: RESTAURANTE =====
 const SECOES = [
-  ["conta", "Conta e plano", "conta"],
+  ["checkup", "Check-up de implantação", "check"],
   ["donos", "Donos e acesso", "pessoas"],
   ["aparencia", "Aparência", "paleta"],
   ["cardapio", "Cardápio", "livro"],
@@ -416,7 +416,7 @@ const SECOES = [
   ["central", "Central do cliente", "casa"],
   ["vale", "Vale-presente", "presente"],
    ["reservas", "Reservas", "calendario"],
-    ["avaliacao", "Avaliação", "estrela"],
+  ["funcionarios", "Funcionários", "pessoas"],
   ["mapa", "Mapa (TomTom)", "globo"]
 ];
 
@@ -488,7 +488,7 @@ function desenharSecao() {
   velho.replaceWith(el);
   S.salvar = null; S.descartar = null;
   limparSujo();
-  const fn = { conta: secConta, donos: secDonos, aparencia: secAparencia, cardapio: secCardapio, horarios: secHorarios, operacao: secOperacao, enderecos: secEnderecos, central: secCentral, vale: secVale, reservas: secReservas, avaliacao: secAvaliacao, mapa: secMapa }[S.secao];
+  const fn = { conta: secConta, donos: secDonos, aparencia: secAparencia, cardapio: secCardapio, horarios: secHorarios, operacao: secOperacao, enderecos: secEnderecos, central: secCentral, vale: secVale, reservas: secReservas, avaliacao: secAvaliacao, mapa: secMapa, checkup: secCheckup, funcionarios: secFuncionarios }[S.secao];
   fn(el);
   if (CORES_APPS[S.secao]) el.appendChild(blocoCoresApp(S.secao)); // cores do app (ou a paleta do restaurante)
   pintarIcones(el);
@@ -758,6 +758,72 @@ function blocoCoresApp(app) {
     }
   };
   return box;
+}
+
+// --- Check-up de implantação: tudo o que precisa estar pronto antes do restaurante rodar
+async function secCheckup(el) {
+  el.innerHTML = `${cabecaSecao("Check-up de implantação", "O que precisa estar pronto antes do restaurante começar a usar. O que dá pra conferir sozinho o sistema marca; o resto você marca aqui.")}<div id="ck-corpo"><div class="carregando">Conferindo...</div></div>`;
+  const rid = S.atual.id;
+  const desenhar = (d) => {
+    const pct = d.total ? Math.round(d.feitos / d.total * 100) : 0;
+    const grupos = [...new Set(d.passos.map(p => p.grupo))];
+    $("ck-corpo").innerHTML = `
+      <div class="ck-topo">
+        <div><b>${d.feitos} de ${d.total} prontos</b><span>${pct === 100 ? "Tudo pronto para rodar" : `Faltam ${d.total - d.feitos}`}</span></div>
+        <div class="ck-barra"><i style="width:${pct}%"></i></div>
+      </div>
+      ${grupos.map(g => `<div class="ck-grupo"><h3>${esc(g)}</h3>${d.passos.filter(p => p.grupo === g).map(p => `
+        <div class="ck-item ${p.feito ? "ok" : ""}">
+          ${p.manual ? `<input type="checkbox" data-ck="${esc(p.chave)}" ${p.feito ? "checked" : ""} data-sem-barra aria-label="${esc(p.texto)}">`
+            : `<span class="ck-bola" aria-hidden="true">${p.feito ? ico("check", "ico ico-sm") : ""}</span>`}
+          <div class="ck-texto"><b>${esc(p.texto)}</b>${p.detalhe ? `<small>${esc(p.detalhe)}</small>` : ""}</div>
+          ${!p.feito && p.secao ? `<a class="btn" href="#/r/${esc(rid)}/${esc(p.secao)}">Resolver</a>` : ""}
+        </div>`).join("")}</div>`).join("")}`;
+  };
+  const carregar = async () => {
+    try {
+      const d = await api(`/restaurants/${rid}/checkup`);
+      if (S.atual?.id === rid && S.secao === "checkup") desenhar(d);
+    } catch (e) { if ($("ck-corpo")) $("ck-corpo").innerHTML = `<div class="aviso">${esc(e.message)}</div>`; }
+  };
+  el.addEventListener("change", async (e) => {
+    const c = e.target.closest("[data-ck]");
+    if (!c) return;
+    c.disabled = true;
+    try { await api(`/restaurants/${rid}/checkup`, { metodo: "PATCH", corpo: { chave: c.dataset.ck, feito: c.checked } }); await carregar(); }
+    catch (err) { c.checked = !c.checked; c.disabled = false; toast(err.message, "erro"); }
+  });
+  await carregar();
+}
+
+// --- Funcionários: quem o caixa pode escolher no vale funcionário (o dono também cadastra pelo Owner)
+async function secFuncionarios(el) {
+  el.innerHTML = `${cabecaSecao("Funcionários", "A equipe que pode consumir com o vale funcionário. O caixa escolhe o nome na hora de cobrar e o dono vê o total do mês no Owner. Disponível no plano Executive.")}<div id="fu-corpo"><div class="carregando">Carregando...</div></div>`;
+  const rid = S.atual.id, base = `/restaurants/${rid}/funcionarios`;
+  let lista = [], editando = "";
+  const desenhar = () => {
+    $("fu-corpo").innerHTML = `<div class="bloco">
+      ${lista.length ? lista.map(f => editando === f.id
+        ? `<div class="fu-linha"><input class="inp" id="fu-ed" value="${esc(f.nome)}" maxlength="60" data-sem-barra aria-label="Nome"><button type="button" class="btn btn-pri" data-fu-salvar="${esc(f.id)}">Salvar</button><button type="button" class="btn" data-fu-cancelar>Cancelar</button></div>`
+        : `<div class="fu-linha"><b>${esc(f.nome)}</b><button type="button" class="btn" data-fu-editar="${esc(f.id)}">${ico("editar", "ico ico-sm")}Editar</button><button type="button" class="btn" data-fu-tirar="${esc(f.id)}">${ico("lixo", "ico ico-sm")}Tirar</button></div>`).join("")
+        : `<p class="dica">Ninguém cadastrado ainda.</p>`}
+      <div class="fu-linha"><input class="inp" id="fu-nome" placeholder="Nome do funcionário" maxlength="60" data-sem-barra aria-label="Nome do funcionário"><button type="button" class="btn btn-pri" id="fu-add">${ico("mais", "ico ico-sm")}Adicionar</button></div>
+    </div>`;
+  };
+  const carregar = async () => { lista = await api(base); if (S.atual?.id === rid && S.secao === "funcionarios") desenhar(); };
+  const faz = async (fn) => { try { await fn(); editando = ""; await carregar(); } catch (e) { toast(e.message, "erro"); } };
+  el.addEventListener("click", (e) => {
+    const t = e.target.closest("#fu-add,[data-fu-editar],[data-fu-tirar],[data-fu-salvar],[data-fu-cancelar]");
+    if (!t) return;
+    if (t.id === "fu-add") { const nome = val("fu-nome"); if (nome.length < 2) return $("fu-nome").focus(); return faz(() => api(base, { metodo: "POST", corpo: { nome } })); }
+    if (t.dataset.fuEditar) { editando = t.dataset.fuEditar; return desenhar(); }
+    if (t.hasAttribute("data-fu-cancelar")) { editando = ""; return desenhar(); }
+    if (t.dataset.fuSalvar) return faz(() => api(`${base}/${t.dataset.fuSalvar}`, { metodo: "PATCH", corpo: { nome: val("fu-ed") } }));
+    if (t.dataset.fuTirar) perguntar({ titulo: "Tirar da equipe?", texto: "Some da lista do caixa. Os vales que já usou continuam no Owner.", sim: "Tirar", perigo: true })
+      .then(ok => ok && faz(() => api(`${base}/${t.dataset.fuTirar}`, { metodo: "DELETE" })));
+  });
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "fu-nome") $("fu-add").click(); });
+  try { await carregar(); } catch (e) { $("fu-corpo").innerHTML = `<div class="aviso">${esc(e.message)}</div>`; }
 }
 
 // --- Avaliação (pesquisa de satisfação)
