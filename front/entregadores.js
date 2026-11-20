@@ -472,6 +472,7 @@
     document.getElementById("modal-entregador-row")?.remove();
     const delivery = String(order?.service_type || "").toLowerCase() === "delivery";
     if (!delivery || !["pronto", "caminho"].includes(order._frontStatus)) return;
+         if (window.temNoPlano && !window.temNoPlano("entregador")) return; // plano sem entregador: nada de "Mandar pro entregador"
     if (!E.carregou) carregarLista().then(() => { if (activeOrderId === order.id) window.entregadorNoModal(orders.find((o) => o.id === order.id) || order); });
     const row = document.createElement("div");
     row.id = "modal-entregador-row";
