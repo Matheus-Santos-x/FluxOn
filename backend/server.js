@@ -4716,7 +4716,102 @@ function validarItensCardapio(cardapio, itens) {
   return resultados;
 }
 
-// item pausado (esgotado) não entra, mesmo com o cardápio aberto desde antes da pausa
+/* ========================================
+   🆔 PEDIDO POR ID (contrato único)
+   Todo app manda o pedido do mesmo jeito: { item_id, opcao_id, sabores: [id, id], qtd }.
+   Nome e preço saem do cardápio (nunca do aparelho) e ficam gravados no pedido como estavam
+   na hora da venda. chave_envio: o mesmo envio repetido devolve o mesmo pedido (não duplica).
+======================================== */
+const _cardapioCache = new Map(); // restaurante → { em, itens } (1 min; limpa sozinho quando o cardápio muda)
+async function cardapioDoRestaurante(rid) {
+  const c = _cardapioCache.get(String(rid));
+  if (c && Date.now() - c.em < 60000) return c.itens;
+  const { data, error } = await supabase.from("cardapio")
+    .select("id, nome, preco, categoria, opcoes, ativo").eq("restaurant_id", rid);
+  if (error) throw error;
+  _cardapioCache.set(String(rid), { em: Date.now(), itens: data || [] });
+  return data || [];
+}
+const _norm = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+const _r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
+// cada opção do cardápio ganha um id fixo (op_xxxxxxxxxx); editar o item mantém os ids que já existiam
+function comIdsNasOpcoes(lista, antigas = []) {
+  if (!Array.isArray(lista) || !lista.length) return null;
+  const usados = new Set(), velhas = Array.isArray(antigas) ? antigas : [];
+  return lista.map((o) => {
+    let id = typeof o?.id === "string" && /^op_[a-z0-9]{6,20}$/.test(o.id) && !usados.has(o.id) ? o.id : null;
+    if (!id) id = velhas.find(v => v?.id && !usados.has(v.id) && _norm(v.nome) === _norm(o?.nome))?.id || null;
+    if (!id) id = "op_" + crypto.randomBytes(5).toString("hex");
+    usados.add(id);
+    return { ...o, id };
+  });
+}
+
+// preço de um sabor no tamanho da opção (ex.: filtro "grande"); sem filtro, o preço do item
+function precoDoSaborNoTamanho(item, filtro) {
+  if (filtro && Array.isArray(item.opcoes)) {
+    const v = item.opcoes.find(o => _norm(o?.nome).includes(filtro));
+    if (v) return parseFloat(v.preco) || 0;
+  }
+  return parseFloat(item.preco) || 0;
+}
+
+// itens no formato novo → itens completos do pedido (ou { erro } com a mensagem pro cliente)
+async function montarItensPorId(rid, lista) {
+  if (!Array.isArray(lista) || !lista.length || lista.length > 100) return { erro: "Pedido sem itens ou com itens demais" };
+  const porId = new Map((await cardapioDoRestaurante(rid)).map(c => [String(c.id), c]));
+  const itens = [];
+  let total = 0;
+  for (const e of lista) {
+    const it = porId.get(String(e?.item_id));
+    if (!it) return { erro: "Um item do pedido saiu do cardápio. Atualize a página e monte de novo." };
+    if (it.ativo === false) return { erro: `${it.nome} acabou de esgotar. Tire do carrinho para continuar.` };
+    const qty = e.qtd ?? e.quantidade ?? e.qty;
+    if (typeof qty !== "number" || !Number.isInteger(qty) || qty < 1 || qty > 99) return { erro: `Quantidade inválida em ${it.nome}` };
+    const ops = Array.isArray(it.opcoes) ? it.opcoes : [];
+    let nome = it.nome, preco = parseFloat(it.preco) || 0, op = null, sabores = null;
+    if (ops.length) {
+      op = ops.find(o => o?.id && o.id === e.opcao_id);
+      if (!op) return { erro: `Escolha o tamanho ou a opção de ${it.nome}` };
+      if (op.texto_livre) { // 2 sabores: itens da mesma categoria (com o filtro da opção, ex.: "grande")
+        const f = _norm(op.filtro);
+        const ids = Array.isArray(e.sabores) ? [...new Set(e.sabores.map(String))] : [];
+        sabores = ids.map(id => porId.get(id));
+        const valido = (s) => s && s.ativo !== false && String(s.id) !== String(it.id) && s.categoria === it.categoria
+          && (!f || _norm(s.nome).includes(f) || (Array.isArray(s.opcoes) && s.opcoes.some(v => _norm(v?.nome).includes(f))));
+        if (ids.length !== 2 || !sabores.every(valido)) return { erro: `Escolha 2 sabores válidos para ${it.nome}` };
+        preco = parseFloat(op.preco) > 0 ? parseFloat(op.preco) : Math.max(...sabores.map(s => precoDoSaborNoTamanho(s, f)));
+        nome = `${it.nome}${_norm(it.nome).includes(_norm(op.nome)) ? "" : " " + op.nome} — ${sabores[0].nome} + ${sabores[1].nome}`;
+      } else {
+        preco = parseFloat(op.preco) || 0;
+        nome = `${it.nome} — ${op.nome}`;
+      }
+    } else if (e.opcao_id) return { erro: `${it.nome} não tem opções. Atualize a página e monte de novo.` };
+    preco = _r2(preco);
+    total += preco * qty;
+    itens.push({
+      item_id: it.id, cardapio_id: String(it.id), opcao_id: op?.id || null,
+      ...(sabores ? { sabores: sabores.map(s => s.id) } : {}),
+      name: nome, nome, price: preco, preco, qty, quantidade: qty
+    });
+  }
+  return { itens, total: _r2(total) };
+}
+
+// chave do envio: gerada pelo aparelho (uuid); o mesmo envio repetido não cria outro pedido
+const chaveEnvioValida = (v) => (/^[A-Za-z0-9_-]{8,64}$/.test(String(v || "")) ? String(v) : null);
+async function pedidoPelaChave(rid, chave) {
+  const { data } = await supabase.from("orders").select("*").eq("restaurant_id", rid).eq("chave_envio", chave).maybeSingle();
+  return data || null;
+}
+async function respostaPedidoRepetido(o) {
+  const { data: r } = await supabase.from("restaurants").select("cardapio_delivery_url").eq("id", o.restaurant_id).maybeSingle();
+  const dominio = String(r?.cardapio_delivery_url || "").replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  return { success: true, repetido: true, order: o, tracking_code: o.tracking_token,
+    tracking_link: dominio && o.tracking_token ? `https://${dominio}?acompanhar=${o.tracking_token}` : null };
+}
+
 // compara pelo nome do item ("Item" ou "Item — Opção"); devolve o nome do item pausado ou null
 async function itemPausado(restaurant_id, itens) {
   const { data: pausados } = await supabase.from("cardapio").select("nome")
@@ -4837,7 +4932,7 @@ app.post("/api/v1/cardapio", async (req, res) => {
 
   const { data, error } = await supabase
     .from("cardapio")
-    .insert([{ restaurant_id, nome, descricao, preco, categoria: categoria || "Geral", foto_url, ordem: ordem || 0, opcoes: opcoes || null }])
+    .insert([{ restaurant_id, nome, descricao, preco, categoria: categoria || "Geral", foto_url, ordem: ordem || 0, opcoes: comIdsNasOpcoes(opcoes) }])
     .select().single();
 
   if (error) return sendError(res, 500, "Erro ao criar item");
@@ -4847,9 +4942,14 @@ app.post("/api/v1/cardapio", async (req, res) => {
 // PATCH - Edita item
 app.patch("/api/v1/cardapio/:id", requireRowOwner("cardapio"), async (req, res) => {
   const { id } = req.params;
+  const mudar = pick(req.body, ["nome","descricao","preco","categoria","foto_url","ordem","opcoes","ativo"]);
+  if ("opcoes" in mudar) { // opções mantêm o id que já tinham (o pedido por ID depende dele)
+    const { data: atual } = await supabase.from("cardapio").select("opcoes").eq("id", id).maybeSingle();
+    mudar.opcoes = comIdsNasOpcoes(mudar.opcoes, atual?.opcoes);
+  }
   const { data, error } = await supabase
         .from("cardapio")
-    .update(pick(req.body, ["nome","descricao","preco","categoria","foto_url","ordem","opcoes","ativo"]))
+    .update(mudar)
     .eq("id", id)
     .select().single();
 
