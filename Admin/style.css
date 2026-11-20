@@ -599,3 +599,29 @@ a { color: inherit; }
   .inp, .campo input:not([type="checkbox"]):not([type="color"]):not([type="file"]), .campo select, .campo textarea { font-size: 16px; }
   .so-pc { display: none; }
 }
+
+
+/* Check-up de implantação */
+.ck-topo { display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border-radius: var(--r-lg); background: var(--bg-2); border: 1px solid var(--line); margin-bottom: 18px; }
+.ck-topo b { font: 700 22px/1.2 var(--display); letter-spacing: -.01em; }
+.ck-topo span { display: block; color: var(--tx-3); font-size: 13px; margin-top: 2px; }
+.ck-barra { height: 8px; border-radius: 99px; background: var(--bg-4); overflow: hidden; }
+.ck-barra i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--brand), var(--ok)); transition: width .4s; }
+.ck-grupo { margin-bottom: 16px; }
+.ck-grupo h3 { font: 600 13px/1 var(--body); color: var(--tx-3); margin: 0 0 8px 4px; }
+.ck-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--r-md); background: var(--bg-2); border: 1px solid var(--line); margin-bottom: 6px; }
+.ck-item.ok { border-color: rgba(70, 192, 138, .28); }
+.ck-bola { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line-2); display: grid; place-items: center; flex-shrink: 0; color: #0d1a14; }
+.ck-item.ok .ck-bola { background: var(--ok); border-color: var(--ok); }
+.ck-item input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--ok); flex-shrink: 0; margin: 1px; }
+.ck-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ck-texto b { font-size: 14px; font-weight: 600; }
+.ck-texto small { font-size: 12.5px; color: var(--tx-3); }
+.ck-item.ok .ck-texto b { color: var(--tx-2); }
+
+/* Funcionários */
+.fu-linha { display: flex; align-items: center; gap: 8px; }
+.fu-linha b { flex: 1; font-size: 14.5px; font-weight: 600; }
+.fu-linha .inp { flex: 1; min-width: 0; }
+
+
