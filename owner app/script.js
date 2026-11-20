@@ -132,7 +132,7 @@
     const ps = peso.reduce((a, b) => a + b, 0);
     return {
       restaurant: { id: l.id, name: l.name, plan: l.plan }, period,
-      kpis: { revenue: s.rev, orders: s.ped, ticket: s.rev / s.ped, cancelados: 3, growth: { revenue: 12.4, orders: -3.1, ticket: 8 }, roi: l.plan === "essential" ? null : 24.1, roi_locked: l.plan === "essential", plan_price: 4000 },
+      kpis: { revenue: s.rev, orders: s.ped, ticket: s.rev / s.ped, cancelados: 3, growth: { revenue: 12.4, orders: -3.1, ticket: 8 }, roi: l.plan === "essential" ? null : 24.1, roi_locked: l.plan === "essential", plan_price: 2490 },
       timeline: t,
       horas: peso.map((w, h) => ({ h, revenue: Math.round(s.rev * w / ps), orders: Math.round(s.ped * w / ps) })),
       canais: { salao: { orders: Math.round(s.ped * 0.65), revenue: s.rev * 0.65 }, delivery: { orders: Math.round(s.ped * 0.35), revenue: s.rev * 0.35 } },
