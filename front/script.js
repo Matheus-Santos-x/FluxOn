@@ -837,7 +837,7 @@ function _atualizarItensPausados() {
   if (!pausados.length) { card.style.display = "none"; return; }
 
   lista.innerHTML = pausados.map(nome =>
-    `<span style="background:rgba(239,68,68,0.15); color:rgba(239,68,68,0.9); font-size:12px; font-weight:700; padding:4px 10px; border-radius:99px;">${nome}</span>`
+    `<span style="background:rgba(239,68,68,0.15); color:rgba(239,68,68,0.9); font-size:12px; font-weight:700; padding:4px 10px; border-radius:99px;">${escapeHtml(nome)}</span>`
   ).join("");
   card.style.display = "block";
 }
@@ -848,7 +848,7 @@ async function _atualizarNotasFiscais() {
 
   try {
     const rid  = getRestaurantId();
-    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/notas-fiscais/contador`);
+    const resp = await fetch(`${API_BASE}/api/v1/restaurante/${rid}/notas-fiscais/contador`, { headers: buildHeaders() });
     if (!resp.ok) { card.style.display = "none"; return; }
 
     const { usado, limite, emissao_ativa } = await resp.json();
@@ -4983,7 +4983,7 @@ border:1px solid rgba(255, 255, 255, 0.08);
       <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
         <span style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px;
           white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-          ${it.name}
+          ${escapeHtml(it.name)}
         </span>
         ${it.price > 0 ? `
           <span style="color:rgba(251,191,36,0.85); font-size:12px; font-weight:700; white-space:nowrap;">
@@ -5172,7 +5172,7 @@ const resp = await fetch(`${API_BASE}/api/v1/cardapio/${rid}/busca?q=${encodeURI
               transition:background 0.15s;"
             onmouseover="this.style.background='rgba(255,255,255,0.09)'"
             onmouseout="this.style.background='transparent'">
-            <span style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px;">${it.nome}</span>
+            <span style="color:rgba(252,228,228,0.95); font-weight:700; font-size:14px;">${escapeHtml(it.nome)}</span>
             <span style="color:rgba(251,191,36,0.9); font-weight:800; font-size:13px;">R$${parseFloat(it.preco).toFixed(2)}</span>
           </div>
         `).join('');
@@ -8401,7 +8401,7 @@ async function exportarFechamentoPDF() {
       <table>
         <thead><tr><th>#</th><th>Item</th><th>Qtd</th></tr></thead>
         <tbody>
-          ${d.top_itens.map(({ nome, qty }, i) => `<tr><td>${i+1}</td><td>${nome}</td><td>${qty}x</td></tr>`).join("")}
+          ${d.top_itens.map(({ nome, qty }, i) => `<tr><td>${i+1}</td><td>${escapeHtml(nome)}</td><td>${qty}x</td></tr>`).join("")}
         </tbody>
       </table>` : ""}
 
