@@ -8625,16 +8625,6 @@ CAMPOS DA RESPOSTA:
 - "etapa": "perguntar_tipo", "mostrar_categoria", "sugerir_itens", "adicionar" ou "conversa".
 - "adicionar": itens pra colocar no pedido agora (só na etapa "adicionar"); senão vazio.
 - "pular": sempre false, menos no MODO CARRINHO quando não há nada para oferecer.
-${modoCarrinho ? `
-MODO CARRINHO (agora): a pessoa abriu o carrinho. Veja se falta um tipo de item que combina e que EXISTE no cardápio — principalmente bebida; depois sobremesa ou acompanhamento.
-- Se faltar, pergunte só se ela quer, de forma curta, dizendo o que faltou (ex.: "Vi que você não adicionou nenhuma bebida. Quer adicionar?"), com "opcoes_rapidas": ["Sim", "Não, obrigado"]. Ainda não liste tipos nem itens.
-- Se nada faltar ou não houver nada que combine: "pular": true e "resposta": "".
-` : ""}
-INFORMAÇÕES DA LOJA:
-${loja.texto}
-
-CARRINHO DO CLIENTE:
-${carrinhoTexto}
 
 CATEGORIAS:
 ${categoriasTexto || "(nenhuma)"}
@@ -8643,7 +8633,18 @@ MAIS PEDIDOS (categorias grandes):
 ${maisPedidosTexto || "(nenhuma categoria grande)"}
 
 CARDÁPIO:
-${cardapioTexto || "(vazio)"}`;
+${cardapioTexto || "(vazio)"}
+
+INFORMAÇÕES DA LOJA:
+${loja.texto}
+
+CARRINHO DO CLIENTE:
+${carrinhoTexto}
+${modoCarrinho ? `
+MODO CARRINHO (agora): a pessoa abriu o carrinho. Veja se falta um tipo de item que combina e que EXISTE no cardápio — principalmente bebida; depois sobremesa ou acompanhamento.
+- Se faltar, pergunte só se ela quer, de forma curta, dizendo o que faltou (ex.: "Vi que você não adicionou nenhuma bebida. Quer adicionar?"), com "opcoes_rapidas": ["Sim", "Não, obrigado"]. Ainda não liste tipos nem itens.
+- Se nada faltar ou não houver nada que combine: "pular": true e "resposta": "".
+` : ""}`;
 
     // chamada automática (ao abrir o chat com carrinho cheio)
     const mensagemFinal = mensagem === "__sugestao_automatica__"
@@ -8663,6 +8664,7 @@ ${cardapioTexto || "(vazio)"}`;
       input: [{ role: "system", content: systemPrompt }, ...hist, { role: "user", content: mensagemFinal }],
       text: { format: IA_FORMATO },
       reasoning: { effort: "low" },
+      prompt_cache_key: `cardapio-${restaurant_id}`,
       max_output_tokens: 800
 
     let parsed;
