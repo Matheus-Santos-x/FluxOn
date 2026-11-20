@@ -254,12 +254,12 @@ function normalizePhone(phone) {
 // ===== PLAN FEATURES & PRICES =====
 function getPlanPrice(plan) {
   const prices = {
-    essential: 1200,
-    advanced: 2500,
-    executive: 4000,
-    custom: 7000
+    essential: 890,
+    advanced: 1690,
+    executive: 2490,
+    custom: 3798
   };
-  return prices[plan.toLowerCase()] || 1400;
+  return prices[plan.toLowerCase()] || 890;
 }
 
 // ===== PLANOS: o servidor diz o que o plano libera; no menu, o resto fica com 🔒 =====
@@ -359,7 +359,7 @@ function showUpgradeModal(requiredPlan, featureName) {
   
  if (requiredPlan === "pro" || requiredPlan === "advanced") {
   planDisplay = "ADVANCED";
-  planPrice = "R$ 2.500/mês";
+  planPrice = "R$ 1.690/mês";
   featuresList = [
     "App do entregador com mapa ao vivo",
     "Fidelidade com pontos ou selos",
@@ -372,14 +372,14 @@ function showUpgradeModal(requiredPlan, featureName) {
   ];
 } else if (requiredPlan === "executive") {
   planDisplay = "EXECUTIVE";
-  planPrice = "R$ 4.000/mês";
+  planPrice = "R$ 2.490/mês";
   featuresList = [
     "Tudo do plano Advanced",
     "Relatórios de vendas",
     "Custos, CMV e lucro real",
     "DRE, ROI e previsão de demanda",
     "Rentabilidade por canal",
-    "Reuniões quinzenais com a equipe Evorise"
+    "IA do negócio conversando com os seus dados"
   ];
 }
 
