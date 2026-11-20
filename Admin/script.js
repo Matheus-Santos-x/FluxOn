@@ -406,6 +406,7 @@ function desenharParede() {
 
 // ===== TELA: RESTAURANTE =====
 const SECOES = [
+  ["conta", "Conta e plano", "conta"],
   ["checkup", "Check-up de implantação", "check"],
   ["donos", "Donos e acesso", "pessoas"],
   ["aparencia", "Aparência", "paleta"],
@@ -416,6 +417,7 @@ const SECOES = [
   ["central", "Central do cliente", "casa"],
   ["vale", "Vale-presente", "presente"],
    ["reservas", "Reservas", "calendario"],
+    ["avaliacao", "Avaliação", "estrela"],
   ["funcionarios", "Funcionários", "pessoas"],
   ["mapa", "Mapa (TomTom)", "globo"]
 ];
