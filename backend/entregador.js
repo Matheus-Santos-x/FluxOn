@@ -563,10 +563,11 @@ export function registrarEntregador(ctx) {
         .eq("telefone", tel).eq("usado", false).gt("expires_at", new Date().toISOString())
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (!otp || otp.tentativas >= OTP_MAX_TENTATIVAS) return invalido();
-      if (!igual(hmac(`${tel}:${codigo}`), otp.code_hash)) {
-        await supabase.from("entregador_otp").update({ tentativas: otp.tentativas + 1 }).eq("id", otp.id);
-        return invalido();
-      }
+      // gasta a tentativa ANTES de conferir: chutes ao mesmo tempo não passam do limite (só um leva cada número)
+      const { data: gasta } = await supabase.from("entregador_otp").update({ tentativas: otp.tentativas + 1 })
+        .eq("id", otp.id).eq("tentativas", otp.tentativas).select("id");
+      if (!gasta?.length) return invalido();
+      if (!igual(hmac(`${tel}:${codigo}`), otp.code_hash)) return invalido();
       const { data: usado } = await supabase.from("entregador_otp").update({ usado: true }).eq("id", otp.id).eq("usado", false).select("id");
       if (!usado?.length) return invalido();
       const { data: lista } = await supabase.from("entregadores").select("id, restaurant_id, nome, token_version").eq("telefone", tel).eq("ativo", true);
