@@ -502,6 +502,11 @@ app.use(["compras", "imposto", "despesas", "pratos"].map(p => `/owner/restaurant
 app.use("/owner/restaurants/:restaurant_id/financeiro", exigePlano("custos"));
 app.use("/api/v1/funcionarios/:restaurant_id", requireAuth, exigePlano("vale_funcionario"));
 app.use(["/owner/restaurants/:restaurant_id/vales", "/owner/restaurants/:restaurant_id/funcionarios"], exigePlano("vale_funcionario"));
+// cardápio mudou (item, preço, opção, pausa, categoria, importação): o cache do pedido por ID se renova na hora
+app.use(["/api/v1/cardapio", "/api/v1/categorias", "/admin/restaurants/:id/cardapio"], (req, res, next) => {
+  if (req.method !== "GET") res.on("finish", () => _cardapioCache.clear());
+  next();
+});
 // as telas (Operacional, Owner, apps) perguntam o que o restaurante tem
 app.get("/api/v1/restaurante/:restaurant_id/plano", async (req, res) => {
   const plano = await planoDo(req.params.restaurant_id);
@@ -2551,7 +2556,7 @@ app.get("/api/v1/rodizio/:restaurant_id/reservas/:res_id/status", async (req, re
 app.patch("/api/v1/pedidos/:id/adicionar-itens", requireRowOwner("orders"), async (req, res) => {
   try {
     const { id } = req.params;
-    const { itens_novos, total_adicional, client_name, client_phone, notes } = req.body;
+    let { itens_novos, total_adicional, client_name, client_phone, notes } = req.body;
 
     if (!Array.isArray(itens_novos) || itens_novos.length === 0)
       return sendError(res, 400, "itens_novos é obrigatório");
@@ -2561,15 +2566,27 @@ app.patch("/api/v1/pedidos/:id/adicionar-itens", requireRowOwner("orders"), asyn
       .from("orders").select("*").eq("id", id).single();
     if (fetchError || !pedidoAtual) return sendError(res, 404, "Pedido não encontrado");
 
+    // 🔁 mesmo envio repetido: não soma os itens de novo
+    const chaveEnvio = chaveEnvioValida(req.body?.chave_envio);
+    const jaAplicada = (p) => chaveEnvio && Array.isArray(p?.chaves_envio) && p.chaves_envio.includes(chaveEnvio);
+    if (jaAplicada(pedidoAtual)) return res.json({ success: true, repetido: true, order: pedidoAtual });
+    // 🆔 formato novo: itens por ID (nome e preço do cardápio)
+    let totalPorId = null;
+    if (itens_novos.every(i => i && i.item_id != null)) {
+      const m = await montarItensPorId(pedidoAtual.restaurant_id, itens_novos);
+      if (m.erro) return sendError(res, 400, m.erro);
+      itens_novos = m.itens; totalPorId = m.total;
+    } else if (itens_novos.some(i => i && i.item_id != null)) return sendError(res, 400, "Itens em formatos diferentes no mesmo pedido");
+
     // cliente pela mesa (QR, sem login): o servidor confere conta aberta, item pausado e preço
-    let adicional = parseFloat(total_adicional || 0);
+    let adicional = totalPorId ?? parseFloat(total_adicional || 0);
     if (!readAuth(req)) {
       if (!ORIGINS_FORA_DO_KANBAN.includes(pedidoAtual.origin)) return sendError(res, 403, "Não autorizado");
       if (["finished", "cancelled", "canceled"].includes(pedidoAtual.status))
         return sendError(res, 400, "Essa conta já foi fechada. Chame o garçom.");
-      const pausado = await itemPausado(pedidoAtual.restaurant_id, itens_novos);
+      const pausado = totalPorId === null ? await itemPausado(pedidoAtual.restaurant_id, itens_novos) : null;
       if (pausado) return sendError(res, 400, `${pausado} acabou de esgotar. Tire do carrinho para continuar.`);
-      const { total, naoEncontrados } = await calcularTotalServidor(pedidoAtual.restaurant_id, itens_novos);
+      const { total, naoEncontrados } = totalPorId !== null ? { total: totalPorId, naoEncontrados: [] } : await calcularTotalServidor(pedidoAtual.restaurant_id, itens_novos);
       if (naoEncontrados.length > 0 || Math.abs(total - adicional) > 0.01) {
         console.warn(`💰 TOTAL[${AUTH_MODE}] adicionar-itens pedido=${id} cliente=${adicional} servidor=${total} fora_do_cardapio=${JSON.stringify(naoEncontrados)}`);
         if (AUTH_MODE === "enforce") {
@@ -2584,13 +2601,15 @@ app.patch("/api/v1/pedidos/:id/adicionar-itens", requireRowOwner("orders"), asyn
     for (let tentativa = 0; tentativa < 4 && !pedidoAtualizado; tentativa++) {
       if (tentativa > 0) {
         ({ data: pedidoAtual } = await supabase.from("orders").select("*").eq("id", id).single());
+      if (jaAplicada(pedidoAtual)) return res.json({ success: true, repetido: true, order: pedidoAtual });
         if (!pedidoAtual) return sendError(res, 404, "Pedido não encontrado");
       }
       const itensAntigos = Array.isArray(pedidoAtual.itens) ? pedidoAtual.itens : [];
       const updatePayload = {
         itens: [...itensAntigos, ...itens_novos],
-        total_price: Math.round((parseFloat(pedidoAtual.total_price || 0) + adicional) * 100) / 100,
-        update_at: new Date().toISOString()
+               total_price: Math.round((parseFloat(pedidoAtual.total_price || 0) + adicional) * 100) / 100,
+        update_at: new Date().toISOString(),
+        ...(chaveEnvio ? { chaves_envio: [...(Array.isArray(pedidoAtual.chaves_envio) ? pedidoAtual.chaves_envio : []), chaveEnvio].slice(-30) } : {})
       };
       if (client_name && !pedidoAtual.client_name) updatePayload.client_name = client_name;
       if (client_phone && !pedidoAtual.client_phone) updatePayload.client_phone = client_phone;
@@ -2897,7 +2916,7 @@ app.post("/api/v1/pedidos", async (req, res) => {
       status, order_id, table_number
     } = req.body || {};
 
-    const normalizedItems = Array.isArray(items) ? items : Array.isArray(itens) ? itens : [];
+    let normalizedItems = Array.isArray(items) ? items : Array.isArray(itens) ? itens : [];
     const phone = normalizePhone(client_phone);
  const finalOrigin = origin || "outros";
     let finalStatus = status || "pending";
@@ -2908,6 +2927,20 @@ app.post("/api/v1/pedidos", async (req, res) => {
 
     const exists = await restaurantExists(restaurant_id);
     if (!exists) return sendError(res, 404, "Restaurante não encontrado");
+
+    // 🔁 mesmo envio repetido (a internet caiu e o aparelho mandou de novo): devolve o pedido que já foi criado
+    const chaveEnvio = chaveEnvioValida(req.body?.chave_envio);
+    if (chaveEnvio && !order_id) {
+      const ja = await pedidoPelaChave(restaurant_id, chaveEnvio);
+      if (ja) return res.json(await respostaPedidoRepetido(ja));
+    }
+    // 🆔 formato novo: itens por ID (nome e preço saem do cardápio, nunca do aparelho)
+    let totalPorId = null;
+    if (normalizedItems.length && normalizedItems.every(i => i && i.item_id != null)) {
+      const m = await montarItensPorId(restaurant_id, normalizedItems);
+      if (m.erro) return sendError(res, 400, m.erro);
+      normalizedItems = m.itens; totalPorId = m.total;
+    } else if (normalizedItems.some(i => i && i.item_id != null)) return sendError(res, 400, "Itens em formatos diferentes no mesmo pedido");
 
     // 💰 Pedido público (sem login nem chave): o servidor confere o total pelo cardápio
     let total_price = total_price_cliente;
@@ -2972,7 +3005,8 @@ app.post("/api/v1/pedidos", async (req, res) => {
       const reservada = (await mesasReservadasAgora(restaurant_id)).get(Number(table_number));
       if (reservada) return sendError(res, 409, `A mesa ${table_number} está reservada. Se foi você quem reservou, vá até o caixa para abrirmos a sua mesa. Se não, por favor, escolha outra mesa.`);
     }
-    if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0 && (ehDeliveryPublico || !order_id)) {
+    if (totalPorId !== null) total_price = totalPorId;   // por ID: o total é sempre o do servidor
+    else if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0 && (ehDeliveryPublico || !order_id)) {
       const { total: totalServidor, naoEncontrados, divergentes } = await calcularTotalServidor(restaurant_id, normalizedItems);
       const diverge = Math.abs(totalServidor - (parseFloat(total_price_cliente) || 0)) > 0.01;
       if (naoEncontrados.length > 0 || diverge) {
@@ -3049,7 +3083,8 @@ const nextNumber = numData || 1;
       service_type: service_type || "local",
       address: address || null,
       payment_method: payment_method || null,
-      ...(funcionario_id ? { funcionario_id } : {}),
+     ...(funcionario_id ? { funcionario_id } : {}),
+    ...(chaveEnvio ? { chave_envio: chaveEnvio } : {}),
       total_price: total_price || 0,
       origin: finalOrigin,
       destino: calcularDestino(finalOrigin),
@@ -3061,8 +3096,13 @@ const nextNumber = numData || 1;
     .select()
     .single();
 
-  if (error) {
-    console.error("❌ Erro ao criar pedido:", error);
+ 
+     if (error) {
+        if (error.code === "23505" && chaveEnvio) { // dois envios iguais ao mesmo tempo: o banco deixou passar só um
+      const ja = await pedidoPelaChave(restaurant_id, chaveEnvio);
+      if (ja) return res.json(await respostaPedidoRepetido(ja));
+    }
+       console.error("❌ Erro ao criar pedido:", error);
     return sendError(res, 500, "Erro ao criar pedido: " + error.message);
   }
   resultData = data;
@@ -3684,7 +3724,7 @@ app.post("/admin/restaurants/:id/cardapio/importar", requireAdmin, async (req, r
         descricao: iaTexto(i.descricao, 600) || null,
         preco: iaPreco(i.preco) ?? (opcoes.length ? Math.min(...opcoes.map(o => o.preco)) : 0),
         categoria: iaTexto(i.categoria, 60) || "Geral",
-        opcoes: opcoes.length ? opcoes : null
+        opcoes: comIdsNasOpcoes(opcoes)
       };
     }).filter(i => i.nome);
     if (!itens.length) return sendError(res, 400, "Nenhum item válido para importar");
