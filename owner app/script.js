@@ -680,50 +680,94 @@ const t = d.totals, comCustos = (st.finOv || []).filter((f) => f && f.cmv && f.c
       </ul></section>`;
   }
 
-  /* funcionários e vales: o dono cadastra a equipe; o caixa lança o vale no Cobrar; aqui sai o total do mês de cada um */
-  const fv = { mes: "", edit: "" };
+  /* funcionários e vales: o dono cadastra a equipe; o caixa lança o vale no Cobrar; aqui sai o total do mês de cada um
+     (salvar não recarrega a tela: só a parte que mudou é redesenhada) */
+  const fv = { mes: "", edit: "", lista: [], vales: null, ocupado: false };
+  const fvBase = () => `/owner/restaurants/${encodeURIComponent(st.view)}/funcionarios`;
+  const fvVales = () => api(`/owner/restaurants/${encodeURIComponent(st.view)}/vales?mes=${fv.mes}`);
   function telaFunc() {
     if (!fv.mes) fv.mes = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 7);
-    const my = ++st.reqId, base = `/owner/restaurants/${encodeURIComponent(st.view)}`;
-    Promise.all([api(`${base}/funcionarios`), api(`${base}/vales?mes=${fv.mes}`)]).then(([lista, v]) => {
+    const my = ++st.reqId;
+    Promise.all([api(fvBase()), fvVales()]).then(([lista, v]) => {
       if (my !== st.reqId || st.screen !== "func") return;
-      $("content").innerHTML = corpoFunc(Array.isArray(lista) ? lista : [], v?.funcionarios ? v : { total: 0, funcionarios: [] });
+      fv.lista = Array.isArray(lista) ? lista : [];
+      fv.vales = v?.funcionarios ? v : { total: 0, funcionarios: [] };
+      fv.edit = "";
+      $("content").innerHTML = `<section class="card" id="fv-vales">${htmlVales()}</section><section class="card" id="fv-equipe">${htmlEquipe()}</section>`;
     }).catch((e) => { if (my === st.reqId) $("content").innerHTML = `<div class="card err"><p style="margin:0">${esc(e.message)}</p></div>`; });
     return `<div class="skeleton"></div><div class="skeleton"></div>`;
   }
-  function corpoFunc(lista, v) {
-    const equipe = lista.map((f) => fv.edit === f.id
+  function htmlVales() {
+    const v = fv.vales || { total: 0, funcionarios: [] };
+    const linhas = v.funcionarios.map((f) => `<div class="split-row"><div class="split-head"><span>${esc(f.nome)}${f.ativo ? "" : " · saiu da equipe"}</span><span>${brl(f.total)}</span></div>
+      <div class="muted" style="font-size:12px;display:grid;gap:2px;margin-top:4px">${f.itens.map((i) => `<span style="display:flex;justify-content:space-between"><span>${fmtData(i.data)} · pedido #${esc(i.numero)}</span><span>${brl(i.valor)}</span></span>`).join("")}</div></div>`).join("");
+    return `<h2>Vales do mês</h2><input id="fv-mes" type="month" value="${esc(fv.mes)}" aria-label="Mês">
+      <div class="kpi" style="margin-top:12px"><span class="label">Total a descontar</span><span class="value">${brl(v.total)}</span></div>
+      ${linhas ? `<div class="split" style="margin-top:12px">${linhas}</div>` : `<div class="empty">Nenhum vale neste mês.</div>`}
+      <p class="foot" style="text-align:left">O caixa lança o vale na hora de cobrar. Como descontar no pagamento é combinado entre você e o funcionário.</p>`;
+  }
+  function htmlEquipe() {
+    const itens = fv.lista.map((f) => fv.edit === f.id
       ? `<div class="split-row" style="display:grid;gap:8px"><input id="fv-ed" value="${esc(f.nome)}" maxlength="60" aria-label="Nome"><div style="display:flex;gap:8px"><button class="btn primary" data-fv-salvar="${esc(f.id)}" style="flex:1">Salvar</button><button class="btn" data-fv-cancelar style="flex:1">Cancelar</button></div></div>`
       : `<div class="split-row"><div class="split-head"><span>${esc(f.nome)}</span><span>${cuBtnIc("data-fv-editar", f.id, "Editar nome", "✎")} ${cuBtnIc("data-fv-tirar", f.id, "Tirar da equipe", "✕")}</span></div></div>`).join("");
-    const vales = v.funcionarios.map((f) => `<div class="split-row"><div class="split-head"><span>${esc(f.nome)}${f.ativo ? "" : " · saiu da equipe"}</span><span>${brl(f.total)}</span></div>
-      <div class="muted" style="font-size:12px;display:grid;gap:2px;margin-top:4px">${f.itens.map((i) => `<span style="display:flex;justify-content:space-between"><span>${fmtData(i.data)} · pedido #${esc(i.numero)}</span><span>${brl(i.valor)}</span></span>`).join("")}</div></div>`).join("");
-    return `
-      <section class="card"><h2>Vales do mês</h2><input id="fv-mes" type="month" value="${esc(fv.mes)}" aria-label="Mês">
-        <div class="kpi" style="margin-top:12px"><span class="label">Total a descontar</span><span class="value">${brl(v.total)}</span></div>
-        ${vales ? `<div class="split" style="margin-top:12px">${vales}</div>` : `<div class="empty">Nenhum vale neste mês.</div>`}
-        <p class="foot" style="text-align:left">O caixa lança o vale na hora de cobrar. Como descontar no pagamento é combinado entre você e o funcionário.</p></section>
-      <section class="card"><h2>Equipe</h2>${equipe ? `<div class="split">${equipe}</div>` : `<div class="empty">Ninguém cadastrado ainda.</div>`}
-        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:12px"><input id="fv-nome" maxlength="60" placeholder="Nome do funcionário" aria-label="Nome do funcionário"><button class="btn primary" id="fv-add">Adicionar</button></div>
-        <p class="foot" style="text-align:left">Só quem está aqui aparece para o caixa escolher no vale funcionário.</p></section>`;
+    return `<h2>Equipe</h2>${itens ? `<div class="split">${itens}</div>` : `<div class="empty">Ninguém cadastrado ainda.</div>`}
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:12px"><input id="fv-nome" maxlength="60" placeholder="Nome do funcionário" aria-label="Nome do funcionário"><button class="btn primary" id="fv-add">Adicionar</button></div>
+      <p class="foot" style="text-align:left">Só quem está aqui aparece para o caixa escolher no vale funcionário.</p>`;
   }
-  const fvBase = () => `/owner/restaurants/${encodeURIComponent(st.view)}/funcionarios`;
-  const fvFaz = async (fn) => { try { await fn(); fv.edit = ""; render(); } catch (e) { alert(e.message); } };
+  const fvEquipe = (foco) => { const el = $("fv-equipe"); if (el) el.innerHTML = htmlEquipe(); if (foco) $(foco)?.focus(); };
+  const fvOrdenar = () => fv.lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  // um salvamento por vez: o segundo toque enquanto salva é ignorado (não duplica)
+  async function fvAcao(botao, fn, aoErrar) {
+    if (fv.ocupado) return;
+    fv.ocupado = true;
+    if (botao) { botao.disabled = true; botao.textContent = "Salvando..."; }
+    try { await fn(); }
+    catch (e) { alert(e.message); aoErrar ? aoErrar() : fvEquipe(); }
+    finally { fv.ocupado = false; }
+  }
   document.addEventListener("click", (e) => {
     if (st.screen !== "func") return;
     const t = e.target.closest("[data-fv-editar],[data-fv-tirar],[data-fv-salvar],[data-fv-cancelar],#fv-add");
-    if (!t) return;
+    if (!t || fv.ocupado) return;
     if (t.id === "fv-add") {
       const nome = $("fv-nome").value.trim();
       if (nome.length < 2) return $("fv-nome").focus();
-      return fvFaz(() => api(fvBase(), { method: "POST", body: JSON.stringify({ nome }) }));
+      return fvAcao(t, async () => {
+        const novo = await api(fvBase(), { method: "POST", body: JSON.stringify({ nome }) });
+        fv.lista.push(novo); fvOrdenar(); fvEquipe("fv-nome");
+      }, () => { fvEquipe("fv-nome"); $("fv-nome").value = nome; });
     }
-    if (t.dataset.fvEditar) { fv.edit = t.dataset.fvEditar; return render(); }
-    if (t.hasAttribute("data-fv-cancelar")) { fv.edit = ""; return render(); }
-    if (t.dataset.fvSalvar) return fvFaz(() => api(`${fvBase()}/${encodeURIComponent(t.dataset.fvSalvar)}`, { method: "PATCH", body: JSON.stringify({ nome: $("fv-ed").value.trim() }) }));
-    if (t.dataset.fvTirar && confirm("Tirar da equipe? Os vales que já usou continuam aparecendo aqui.")) return fvFaz(() => api(`${fvBase()}/${encodeURIComponent(t.dataset.fvTirar)}`, { method: "DELETE" }));
+    if (t.dataset.fvEditar) { fv.edit = t.dataset.fvEditar; return fvEquipe("fv-ed"); }
+    if (t.hasAttribute("data-fv-cancelar")) { fv.edit = ""; return fvEquipe(); }
+    if (t.dataset.fvSalvar) {
+      const id = t.dataset.fvSalvar, nome = $("fv-ed").value.trim();
+      if (nome.length < 2) return $("fv-ed").focus();
+      return fvAcao(t, async () => {
+        const novo = await api(`${fvBase()}/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ nome }) });
+        const f = fv.lista.find((x) => x.id === id); if (f) f.nome = novo.nome;
+        fv.edit = ""; fvOrdenar(); fvEquipe();
+      });
+    }
+    if (t.dataset.fvTirar) {
+      const id = t.dataset.fvTirar, f = fv.lista.find((x) => x.id === id);
+      if (!confirm(`Tirar ${f?.nome || "este funcionário"} da equipe? Os vales que já usou continuam aparecendo aqui.`)) return;
+      return fvAcao(t, async () => {
+        await api(`${fvBase()}/${encodeURIComponent(id)}`, { method: "DELETE" });
+        fv.lista = fv.lista.filter((x) => x.id !== id); fvEquipe();
+      });
+    }
   });
-  document.addEventListener("change", (e) => { if (st.screen === "func" && e.target.id === "fv-mes" && e.target.value) { fv.mes = e.target.value; render(); } });
-  document.addEventListener("keydown", (e) => { if (st.screen === "func" && e.key === "Enter" && e.target.id === "fv-nome") $("fv-add").click(); });
+  document.addEventListener("change", async (e) => {
+    if (st.screen !== "func" || e.target.id !== "fv-mes" || !e.target.value) return;
+    fv.mes = e.target.value;
+    try { fv.vales = await fvVales(); if (st.screen === "func" && $("fv-vales")) $("fv-vales").innerHTML = htmlVales(); }
+    catch (err) { alert(err.message); }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (st.screen !== "func" || e.key !== "Enter") return;
+    if (e.target.id === "fv-nome") $("fv-add")?.click();
+    if (e.target.id === "fv-ed") document.querySelector("[data-fv-salvar]")?.click();
+  });
   
   function telaClientesMenu(d) {
     return `<div class="tela-titulo"><h1>Clientes</h1><p>Quem compra, quem volta e o que eles acham.</p></div>
