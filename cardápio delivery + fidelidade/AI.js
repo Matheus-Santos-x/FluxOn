@@ -227,8 +227,20 @@ function iaOQueFalta(){
   return { nome: falta, ...IA_OFERTA[falta] };
 }
 
+// IA do cardápio: só do plano Advanced pra cima (o servidor também barra)
+let IA_LIBERADA = false;
+async function iaLiberada(){
+  if(IS_DEMO) return (IA_LIBERADA = true);
+  try{
+    const r = await fetch(`${CONFIG.API_BASE}/api/v1/restaurante/${RESTAURANT_ID}/plano`);
+    IA_LIBERADA = !!(await r.json())?.recursos?.cardapio_ia?.ok;
+  }catch{ IA_LIBERADA = false; }
+  if(!IA_LIBERADA){ aiBubble?.remove(); aiTooltip?.remove(); }
+  return IA_LIBERADA;
+}
+
 async function iaNoCarrinho(){
-  if(IS_DEMO || !CART.length || AI_CARRINHO_FEITO) return;
+  if(IS_DEMO || !IA_LIBERADA || !CART.length || AI_CARRINHO_FEITO) return;
   const falta = iaOQueFalta();
   if(!falta) return;
   AI_CARRINHO_FEITO = true;
