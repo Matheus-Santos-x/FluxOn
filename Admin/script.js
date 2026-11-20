@@ -888,7 +888,8 @@ function secOperacao(el) {
       <h3>Salão e delivery</h3>
       <div class="grade">
         <label class="campo"><span>Mesas no salão</span><input id="f-mesas" type="number" min="0" value="${esc(c.num_mesas ?? 10)}"></label>
-        <label class="campo"><span>Taxa de entrega (R$)</span><input id="f-taxa" type="number" min="0" step="0.01" value="${esc(c.taxa_entrega ?? 0)}"></label><input id="f-minimo" type="number" min="0" step="0.01" value="${esc(c.pedido_minimo ?? 0)}"></label>
+        <label class="campo"><span>Taxa de entrega (R$)</span><input id="f-taxa" type="number" min="0" step="0.01" value="${esc(c.taxa_entrega ?? 0)}"></label>
+        <label class="campo"><span>Pedido mínimo (R$)</span><input id="f-minimo" type="number" min="0" step="0.01" value="${esc(c.pedido_minimo ?? 0)}"></label>
         <label class="campo"><span>Entrega mais rápida (min)</span><input id="f-ent-min" type="number" min="0" value="${esc(c.tempo_entrega_min ?? "")}"></label>
         <label class="campo"><span>Entrega mais demorada (min)</span><input id="f-ent-max" type="number" min="0" value="${esc(c.tempo_entrega_max ?? "")}"></label>
       </div>
