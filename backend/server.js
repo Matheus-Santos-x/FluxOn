@@ -8523,10 +8523,13 @@ const IA_FORMATO = {
       itens_sugeridos: { type: "array", items: { type: "string" } },
       opcoes_rapidas: { type: "array", items: { type: "string" } },
       categoria: { type: "string" },
-      etapa: { type: "string", enum: ["perguntar_tipo", "mostrar_categoria", "sugerir_itens", "conversa"] },
+      etapa: { type: "string", enum: ["perguntar_tipo", "mostrar_categoria", "sugerir_itens", "adicionar", "conversa"] },
+      adicionar: { type: "array", items: { type: "object", additionalProperties: false,
+        properties: { nome: { type: "string" }, quantidade: { type: "integer" }, opcao: { type: "string" } },
+        required: ["nome", "quantidade", "opcao"] } },
       pular: { type: "boolean" }
     },
-    required: ["resposta", "itens_sugeridos", "opcoes_rapidas", "categoria", "etapa", "pular"]
+    required: ["resposta", "itens_sugeridos", "opcoes_rapidas", "categoria", "etapa", "adicionar", "pular"]
   }
 };
 
@@ -8590,6 +8593,10 @@ COMO ATENDER (o mais importante) — conduza a escolha em etapas, como quem ofer
   Categoria com até ${IA_MAX_NO_CHAT} itens: o sistema mostra todos; diga algo como "Separei aqui pra você, é só escolher".
   Categoria com mais de ${IA_MAX_NO_CHAT} itens: o sistema mostra as mais pedidas (lista MAIS PEDIDOS) e um botão para ver a categoria inteira no cardápio; diga algo como "Aqui estão algumas das nossas mais pedidas. Pra ver todos os sabores, é só tocar em ver a categoria".
 - ETAPA "sugerir_itens": quando a pessoa já diz o que quer ("uma Coca 2L", "pizza de calabresa") ou escolhe um tipo que não é categoria (ex.: só os refrigerantes dentro de "Bebidas"), coloque esses itens em "itens_sugeridos" (até ${IA_MAX_NO_CHAT}).
+- ETAPA "adicionar": quando a pessoa pede pra colocar no pedido ("adiciona", "coloca no carrinho", "pode adicionar", "adicione ao meu pedido", "quero esse", "manda 2 dessa") e dá pra saber QUAL item — pelo que ela falou ou pelo que você ofereceu nas últimas mensagens (veja [mostrei: ...] no histórico) —, coloque em "adicionar": o nome exato, a quantidade (1 se ela não disse) e em "opcao" o nome exato do tamanho/opção quando o item tiver opções ("" quando não tiver). Na "resposta", confirme curto o que entrou (ex.: "Pronto! Coloquei 2 Coca-Cola 2 litros no seu pedido 😉").
+  - Item com tamanhos e a pessoa não disse qual: NÃO adicione; pergunte o tamanho com "opcoes_rapidas" (só os que existem).
+  - Item de 2 sabores: não adicione pelo chat; mostre em "itens_sugeridos" pra ela escolher os sabores tocando.
+  - Se não der pra saber qual item, pergunte. Nunca adicione o que a pessoa não pediu. Fora dessa etapa, "adicionar" fica vazio.
 - ETAPA "conversa": dúvidas, horário, entrega etc.
 - Com itens no carrinho, ofereça o que combina (bebida, sobremesa, acompanhamento) do mesmo jeito: pergunte antes e ofereça os tipos. Se a pessoa recusar, não insista.
 
@@ -8598,6 +8605,7 @@ EXEMPLOS (categorias Refrigerantes, Sucos, Cervejas e Pizzas):
 - Cliente: "Refrigerantes" → etapa "mostrar_categoria", categoria "Refrigerantes", itens_sugeridos [].
 - Cliente: "tô querendo uma pizza" → etapa "mostrar_categoria", categoria "Pizzas", itens_sugeridos [].
 - Cliente: "quero uma Coca 2L" → etapa "sugerir_itens", itens_sugeridos ["Coca 2L"].
+- (depois de oferecer a Coca 2L) Cliente: "adicione ao meu pedido" → etapa "adicionar", adicionar [{nome "Coca 2L", quantidade 1, opcao ""}], resposta "Pronto! Coloquei 1 Coca 2L no seu pedido 😉".
 
 REGRAS:
 1. Só fale do que está no CARDÁPIO, com o nome exato. Nunca invente prato, sabor, tamanho, adicional ou preço.
@@ -8614,7 +8622,8 @@ CAMPOS DA RESPOSTA:
 - "itens_sugeridos": nomes exatos dos itens que você está oferecendo (viram botões para adicionar). Vazio se não for o caso.
 - "opcoes_rapidas": até 4 respostas curtas que a pessoa pode tocar (tipos, "Sim", "Não, obrigado"). Vazio se não fizer uma pergunta de escolha.
 - "categoria": nome exato de uma categoria na etapa "mostrar_categoria"; senão "".
-- "etapa": "perguntar_tipo", "mostrar_categoria", "sugerir_itens" ou "conversa".
+- "etapa": "perguntar_tipo", "mostrar_categoria", "sugerir_itens", "adicionar" ou "conversa".
+- "adicionar": itens pra colocar no pedido agora (só na etapa "adicionar"); senão vazio.
 - "pular": sempre false, menos no MODO CARRINHO quando não há nada para oferecer.
 ${modoCarrinho ? `
 MODO CARRINHO (agora): a pessoa abriu o carrinho. Veja se falta um tipo de item que combina e que EXISTE no cardápio — principalmente bebida; depois sobremesa ou acompanhamento.
@@ -8683,6 +8692,21 @@ ${cardapioTexto || "(vazio)"}`;
     // pergunta de tipo nunca vem com item (a pessoa escolhe o tipo primeiro)
     if (parsed.etapa === "perguntar_tipo") itensCompletos = [];
 
+        // "adiciona ao meu pedido": o servidor confere item, opção e preço no cardápio (a IA só diz o quê)
+    const adicionar = [], naoDeu = [];
+    for (const a of (parsed.etapa === "adicionar" && Array.isArray(parsed.adicionar) ? parsed.adicionar : []).slice(0, 10)) {
+      const item = itens.find(i => iaNorm(i.nome) === iaNorm(a.nome));
+      if (!item) continue;
+      const ops = Array.isArray(item.opcoes) ? item.opcoes : [];
+      const qty = Math.min(20, Math.max(1, parseInt(a.quantidade) || 1));
+      const op = ops.find(o => !o.texto_livre && iaNorm(o.nome) === iaNorm(a.opcao));
+      if (ops.some(o => o.texto_livre) || (ops.length && !op)) { naoDeu.push(enxuto(item)); continue; } // 2 sabores ou sem tamanho: a pessoa toca e escolhe
+      adicionar.push(op ? { id: item.id, nome: item.nome, qty, opcao: { nome: op.nome, preco: Number(op.preco) || 0 } }
+        : { id: item.id, nome: item.nome, qty, preco: Number(item.preco) || 0 });
+    }
+    if (naoDeu.length) itensCompletos = [...itensCompletos.filter(i => !naoDeu.some(n => n.id === i.id)), ...naoDeu];
+    if (parsed.etapa === "adicionar" && !adicionar.length) // nada entrou: não deixa a IA dizer que colocou
+      parsed.resposta = naoDeu.length ? "Esse aqui tem opções pra escolher: toca nele que eu já deixo separado 🙂" : "Não achei esse item no cardápio. Me diz de novo qual você quer?";
     const opcoesRapidas = (Array.isArray(parsed.opcoes_rapidas) ? parsed.opcoes_rapidas : [])
       .map(o => String(o).slice(0, 30)).filter(Boolean).slice(0, 4);
 
@@ -8691,6 +8715,7 @@ ${cardapioTexto || "(vazio)"}`;
       itens: itensCompletos,
       opcoes_rapidas: opcoesRapidas,
       categoria,
+      adicionar,
       pular: modoCarrinho && (parsed.pular === true || !String(parsed.resposta || "").trim())
     });
 
