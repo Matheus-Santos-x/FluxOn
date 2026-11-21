@@ -265,7 +265,8 @@ function iaAdicionarAoCarrinho(lista){
     const id = a.opcao ? `${a.id}__${a.opcao.nome}` : a.id;
     const ex = CART.find(c => String(c.id) === String(id));
     if(ex) ex.qty += a.qty;
-    else CART.push(a.opcao ? { id, nome:`${a.nome} — ${a.opcao.nome}`, preco:a.opcao.preco, qty:a.qty } : { id, nome:a.nome, preco:a.preco, qty:a.qty });
+    else CART.push(a.opcao ? { id, item_id:a.id, opcao_id:a.opcao.id || null, nome:`${a.nome} — ${a.opcao.nome}`, preco:a.opcao.preco, qty:a.qty }
+      : { id, item_id:a.id, opcao_id:null, nome:a.nome, preco:a.preco, qty:a.qty });
   }
   updateCartUI();
   const wrap = document.createElement("div");
