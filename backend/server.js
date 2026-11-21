@@ -2966,8 +2966,11 @@ app.post("/api/v1/pedidos", async (req, res) => {
       if (!["draft", "pending"].includes(finalStatus)) return sendError(res, 400, "Status inválido");
       if (order_id) {
         // o cliente só altera o próprio rascunho, nunca um pedido já confirmado
-        const { data: atual } = await supabase.from("orders").select("id, status")
+        const { data: atual } = await supabase.from("orders").select("*")
           .eq("id", order_id).eq("restaurant_id", restaurant_id).maybeSingle();
+        // a confirmação chegou mas a resposta se perdeu (internet caiu): o reenvio devolve o mesmo pedido
+        if (atual && atual.status !== "draft" && finalStatus === "pending" && chaveEnvio && atual.chave_envio === chaveEnvio)
+          return res.json(await respostaPedidoRepetido(atual));
         if (!atual || atual.status !== "draft") return sendError(res, 403, "Este pedido não pode mais ser alterado");
                 // com Pix aberto o carrinho fica travado: mudar depois de gerar o Pix faria o pagamento não bater com o pedido
         const { count: pixAberto } = await supabase.from("cobrancas_pix").select("id", { count: "exact", head: true })
@@ -8878,7 +8881,7 @@ MODO CARRINHO (agora): a pessoa abriu o carrinho. Veja se falta um tipo de item 
       const qty = Math.min(20, Math.max(1, parseInt(a.quantidade) || 1));
       const op = ops.find(o => !o.texto_livre && iaNorm(o.nome) === iaNorm(a.opcao));
       if (ops.some(o => o.texto_livre) || (ops.length && !op)) { naoDeu.push(enxuto(item)); continue; } // 2 sabores ou sem tamanho: a pessoa toca e escolhe
-      adicionar.push(op ? { id: item.id, nome: item.nome, qty, opcao: { nome: op.nome, preco: Number(op.preco) || 0 } }
+      adicionar.push(op ? { id: item.id, nome: item.nome, qty, opcao: { id: op.id, nome: op.nome, preco: Number(op.preco) || 0 } }
         : { id: item.id, nome: item.nome, qty, preco: Number(item.preco) || 0 });
     }
     if (naoDeu.length) itensCompletos = [...itensCompletos.filter(i => !naoDeu.some(n => n.id === i.id)), ...naoDeu];
