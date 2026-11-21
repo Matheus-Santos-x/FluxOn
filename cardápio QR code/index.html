@@ -826,6 +826,7 @@ function showToast() {
     await loadRestaurant();
 await loadCategorias();
 await loadCardapio();
+await reenviarPendenteMesa();
 await checkPedidoAtivo();
 
   } catch (e) {
@@ -1235,10 +1236,14 @@ async function submitOrder() {
       const notes = document.getElementById('input-notes').value.trim();
       if (!name) { alert('Por favor, informe seu nome.'); document.getElementById('input-name').focus(); return; }
       const cartItems = Object.values(cart);
-      const itensNovos = cartItems.map(({item,qty}) => ({
-        name: item.nome, qty, quantidade: qty,
-        price: parseFloat(item.preco||0), preco: parseFloat(item.preco||0)
+      // contrato único: só os ids e a quantidade (nome e preço saem do cardápio no servidor)
+      const itensNovos = cartItems.map(c => ({
+        item_id: c.itemId ?? c.item.id,
+        opcao_id: c.opcao_id || null,
+        ...(c.sabores ? { sabores: c.sabores } : {}),
+        qtd: c.qty
       }));
+      chaveEnvioMesa = chaveEnvioMesa || novaChaveEnvio();
       const totalNovo = cartItems.reduce((s,c) => s + c.qty * parseFloat(c.item.preco||0), 0);
       const btn = document.getElementById('confirm-btn');
       btn.disabled = true;
@@ -1246,27 +1251,22 @@ async function submitOrder() {
       try {
         let resp, data;
         if (modoAdicao && pedidoAtivo) {
-          resp = await fetch(`${API_BASE}/api/v1/pedidos/${pedidoAtivo.id}/adicionar-itens`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+          resp = await enviarMesa(`${API_BASE}/api/v1/pedidos/${pedidoAtivo.id}/adicionar-itens`, 'PATCH', {
               itens_novos: itensNovos,
+              chave_envio: chaveEnvioMesa,
               total_adicional: totalNovo,
               client_name: name,
               client_phone: phone || null,
               notes: notes || null
-            })
           });
           data = await resp.json();
           if (!resp.ok) throw new Error(data.error || 'Erro ao adicionar itens');
           closeCheckout();
           showSuccess(data.order?.order_number);
         } else {
-          resp = await fetch(`${API_BASE}/api/v1/pedidos`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+          resp = await enviarMesa(`${API_BASE}/api/v1/pedidos`, 'POST', {
               restaurant_id: restaurantId,
+              chave_envio: chaveEnvioMesa,
               client_name: name,
               client_phone: phone || null,
               itens: itensNovos,
@@ -1275,7 +1275,6 @@ async function submitOrder() {
               origin: 'autoatendimento',
               table_number: mesaNum || null,
               notes: notes || null
-            })
           });
           data = await resp.json();
           if (!resp.ok) throw new Error(data.error || 'Erro ao criar pedido');
@@ -1287,6 +1286,40 @@ async function submitOrder() {
         btn.disabled = false;
         btn.textContent = 'Fazer pedido';
       }
+    }
+    
+    /* ── ENVIO QUE NÃO SOME ──
+       chave_envio: o mesmo envio repetido não cria outro pedido nem soma os itens de novo.
+       Caiu a internet: tenta de novo sozinho; fechou a página: reenvia quando abrir (até 30 min). */
+    let chaveEnvioMesa = null;
+    const novaChaveEnvio = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12)).replace(/[^A-Za-z0-9_-]/g, '');
+    const pendenteChave = () => `fx_envio_mesa_${restaurantId}`;
+    const limparPendente = () => { try { localStorage.removeItem(pendenteChave()); } catch {} };
+
+    async function enviarMesa(url, method, corpo, guardar = true) {
+      if (guardar) try { localStorage.setItem(pendenteChave(), JSON.stringify({ url, method, corpo, em: Date.now() })); } catch {}
+      let ultima = null;
+      for (const espera of [0, 1500, 3000, 6000]) {
+        if (espera) await new Promise(r => setTimeout(r, espera));
+        try {
+          ultima = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+          if (ultima.status < 500) { limparPendente(); return ultima; } // a loja respondeu (aceitou ou recusou)
+        } catch { ultima = null; }
+      }
+      if (ultima) return ultima;
+      throw new Error('Não conseguimos falar com a loja agora. Confira sua internet e toque de novo: seu pedido não vai duplicar.');
+    }
+
+    async function reenviarPendenteMesa() {
+      let p = null;
+      try { p = JSON.parse(localStorage.getItem(pendenteChave()) || 'null'); } catch {}
+      if (!p?.url) return;
+      if (Date.now() - (p.em || 0) > 30 * 60000) return limparPendente();
+      try {
+        const resp = await enviarMesa(p.url, p.method, p.corpo, false);
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok) showSuccess(data.order?.order_number);
+      } catch (e) { console.warn('Reenvio do pedido:', e.message); }
     }
     
     function showSuccess(orderNum) {
@@ -1632,13 +1665,20 @@ const nomeCompleto = op.texto_livre
       precoFinal = Math.max(...precos);
     }
 
-cart[`${itemId}_${idx}`] = {
+// o pedido vai por id (item, opção e sabores): nome e preço quem decide é o cardápio no servidor
+const saborIds = op.texto_livre ? saboresSelecionados.map(n => cardapioItems.find(i => i.nome === n && i.categoria === item.categoria)?.id) : null;
+const chave = `${itemId}_${idx}` + (saborIds ? `_${[...saborIds].sort().join('+')}` : '');
+if (cart[chave]) cart[chave].qty++;
+else cart[chave] = {
   item: { ...item, nome: nomeCompleto, preco: precoFinal },
   qty: 1,
-  itemId
+  itemId,
+  opcao_id: op.id || null,
+  ...(saborIds ? { sabores: saborIds } : {})
 };
 } else {
-  cart[itemId] = { item, qty: 1 };
+  if (cart[itemId]) cart[itemId].qty++;
+  else cart[itemId] = { item, qty: 1 };
 }
 document.getElementById('item-detail-modal')?.remove();
 updateCartUI();
