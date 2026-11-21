@@ -2573,7 +2573,7 @@ app.patch("/api/v1/pedidos/:id/adicionar-itens", requireRowOwner("orders"), asyn
     // 🆔 formato novo: itens por ID (nome e preço do cardápio)
     let totalPorId = null;
     if (itens_novos.every(i => i && i.item_id != null)) {
-      const m = await montarItensPorId(pedidoAtual.restaurant_id, itens_novos);
+      const m = await montarItensPorId(pedidoAtual.restaurant_id, itens_novos, { precoLivre: readAuth(req)?.kind === "user" });
       if (m.erro) return sendError(res, 400, m.erro);
       itens_novos = m.itens; totalPorId = m.total;
     } else if (itens_novos.some(i => i && i.item_id != null)) return sendError(res, 400, "Itens em formatos diferentes no mesmo pedido");
@@ -2936,8 +2936,9 @@ app.post("/api/v1/pedidos", async (req, res) => {
     }
     // 🆔 formato novo: itens por ID (nome e preço saem do cardápio, nunca do aparelho)
     let totalPorId = null;
+    const doCaixa = readAuth(req)?.kind === "user"; // caixa logado (Operacional)
     if (normalizedItems.length && normalizedItems.every(i => i && i.item_id != null)) {
-      const m = await montarItensPorId(restaurant_id, normalizedItems);
+      const m = await montarItensPorId(restaurant_id, normalizedItems, { precoLivre: doCaixa });
       if (m.erro) return sendError(res, 400, m.erro);
       normalizedItems = m.itens; totalPorId = m.total;
     } else if (normalizedItems.some(i => i && i.item_id != null)) return sendError(res, 400, "Itens em formatos diferentes no mesmo pedido");
@@ -3008,7 +3009,9 @@ app.post("/api/v1/pedidos", async (req, res) => {
       const reservada = (await mesasReservadasAgora(restaurant_id)).get(Number(table_number));
       if (reservada) return sendError(res, 409, `A mesa ${table_number} está reservada. Se foi você quem reservou, vá até o caixa para abrirmos a sua mesa. Se não, por favor, escolha outra mesa.`);
     }
-    if (totalPorId !== null) total_price = totalPorId;   // por ID: o total é sempre o do servidor
+    // por ID: o total é o do servidor; só o caixa logado pode mudar o total (desconto/ajuste no balcão)
+    if (totalPorId !== null) total_price = doCaixa && total_price_cliente != null && total_price_cliente !== "" && Number(total_price_cliente) > 0
+      ? Number(total_price_cliente) : totalPorId;
     else if (publico && finalOrigin !== "fidelidade" && normalizedItems.length > 0 && (ehDeliveryPublico || !order_id)) {
       const { total: totalServidor, naoEncontrados, divergentes } = await calcularTotalServidor(restaurant_id, normalizedItems);
       const diverge = Math.abs(totalServidor - (parseFloat(total_price_cliente) || 0)) > 0.01;
@@ -4801,7 +4804,8 @@ function precoDoSaborNoTamanho(item, filtro) {
 }
 
 // itens no formato novo → itens completos do pedido (ou { erro } com a mensagem pro cliente)
-async function montarItensPorId(rid, lista) {
+// precoLivre: o caixa logado digita o valor de item sem preço no cardápio (ex.: "Diversos"); de fora, nunca
+async function montarItensPorId(rid, lista, { precoLivre = false } = {}) {
   if (!Array.isArray(lista) || !lista.length || lista.length > 100) return { erro: "Pedido sem itens ou com itens demais" };
   const porId = new Map((await cardapioDoRestaurante(rid)).map(c => [String(c.id), c]));
   const itens = [];
@@ -4831,6 +4835,11 @@ async function montarItensPorId(rid, lista) {
         nome = `${it.nome} — ${op.nome}`;
       }
     } else if (e.opcao_id) return { erro: `${it.nome} não tem opções. Atualize a página e monte de novo.` };
+    else if (precoLivre && (preco === 0 || _norm(it.nome).includes("diversos"))) {
+      const digitado = Number(e.preco);
+      if (!Number.isFinite(digitado) || digitado < 0 || digitado > 100000) return { erro: `Valor inválido em ${it.nome}` };
+      preco = digitado;
+    }
     preco = _r2(preco);
     total += preco * qty;
     itens.push({
