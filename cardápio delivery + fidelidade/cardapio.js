@@ -434,7 +434,7 @@ function openItemDetail(itemId){
     }else{
       const existing = CART.find(c => String(c.id) === String(item.id));
       if(existing){ existing.qty++; }
-      else{ CART.push({ id:item.id, nome:item.nome, preco:parseFloat(item.preco || 0), qty:1 }); }
+      else{ CART.push({ id:item.id, item_id:item.id, opcao_id:null, nome:item.nome, preco:parseFloat(item.preco || 0), qty:1 }); }
       updateCartUI();
     }
     flyToCart(e.currentTarget);
@@ -466,9 +466,12 @@ function addVariationToCart(item, opcao, sabores, preco){
   const nomeCompleto = doisSabores
     ? `${item.nome}${item.nome.toLowerCase().includes(String(opcao.nome).toLowerCase()) ? "" : " " + opcao.nome} — ${sabores.join(" + ")}`
     : `${item.nome} — ${opcao.nome}`;
+  // o pedido vai por id (item, opção e sabores): nome e preço quem decide é o cardápio no servidor
+  const saborIds = doisSabores ? sabores.map(n => saboresDoItem(item, opcao).find(s => s.nome === n)?.id) : null;
   const existing = CART.find(c => c.id === cartId);
   if(existing){ existing.qty++; }
-  else{ CART.push({ id:cartId, nome:nomeCompleto, preco: preco ?? parseFloat(opcao.preco || 0), qty:1 }); }
+  else{ CART.push({ id:cartId, item_id:item.id, opcao_id:opcao.id || null, ...(saborIds ? { sabores:saborIds } : {}),
+    nome:nomeCompleto, preco: preco ?? parseFloat(opcao.preco || 0), qty:1 }); }
   updateCartUI();
 }
 
@@ -477,7 +480,7 @@ function addToCart(id, evt){
   if(!item) return;
   const existing = CART.find(c => String(c.id) === String(id));
   if(existing){ existing.qty++; }
-  else{ CART.push({ id:item.id, nome:item.nome, preco:parseFloat(item.preco||0), qty:1 }); }
+  else{ CART.push({ id:item.id, item_id:item.id, opcao_id:null, nome:item.nome, preco:parseFloat(item.preco||0), qty:1 }); }
 
   updateCartUI();
   flyToCart(evt.currentTarget);
@@ -766,20 +769,27 @@ let CEP_INFO = null;
   });
 })();
 
+// chave deste envio: o mesmo pedido mandado de novo (internet caiu, toque duplo) não vira outro pedido
+let CHAVE_ENVIO = null;
+function chaveDoEnvio(){
+  if(!CHAVE_ENVIO) CHAVE_ENVIO = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12)).replace(/[^A-Za-z0-9_-]/g, "");
+  return CHAVE_ENVIO;
+}
+
 function basePayload(v, extra){
   return {
     restaurant_id: RESTAURANT_ID,
     client_name: v.nome,
     client_phone: v.telefone,
-    // manda nos dois formatos (name/qty/price E nome/quantidade/preco)
-    // porque é assim que o backend e a rota de impressão leem os itens
+    // contrato único: só os ids e a quantidade (nome e preço saem do cardápio no servidor)
     itens: CART.map(c => ({
-      cardapio_id: String(c.id).split("__")[0],
-      name:c.nome, nome:c.nome,
-      qty:c.qty, quantidade:c.qty,
-      price:c.preco, preco:c.preco
+      item_id: c.item_id ?? String(c.id).split("__")[0],
+      opcao_id: c.opcao_id || null,
+      ...(c.sabores ? { sabores: c.sabores } : {}),
+      qtd: c.qty
     })),
     total_price: cartTotal(),
+    chave_envio: chaveDoEnvio(),
     origin: "cardapio_delivery",
     ...(CURRENT_ORDER_ID ? { order_id: CURRENT_ORDER_ID } : {}),
     ...extra
@@ -1040,6 +1050,7 @@ function showSuccess(result){
       SELECTED_PAY = null;
       TROCO_NECESSARIO = null;
       CURRENT_ORDER_ID = null;   // próximo pedido começa do zero
+      CHAVE_ENVIO = null;
       PIX_COBRANCA = null;
       pararPix();
       showStep(1);
