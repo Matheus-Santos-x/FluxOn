@@ -113,16 +113,60 @@ async function submitOrder(payload){
     const fakeId = payload.order_id || ("demo-" + Date.now());
     return { success:true, order:{ id: fakeId, order_number: Math.floor(Math.random()*900+100) }, tracking_link:null };
   }
-  const res = await fetch(`${CONFIG.API_BASE}/api/v1/pedidos`, {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify(payload)
-  });
-  if(!res.ok){
-    const erro = await res.json().catch(() => ({}));
-    throw new Error(erro.error || "Falha ao enviar pedido");
+  // a confirmação fica guardada no celular até o servidor responder (fechou a página, caiu a internet: reenvia)
+  const guardar = payload?.status === "pending";
+  if(guardar) try{
+    const antes = JSON.parse(localStorage.getItem(envioPendenteChave()) || "null");
+    const em = antes?.payload?.chave_envio === payload.chave_envio ? antes.em : Date.now(); // reenvio não renova o prazo
+    localStorage.setItem(envioPendenteChave(), JSON.stringify({ payload, em }));
+  }catch{}
+  try{
+    const r = await enviarPedido(payload);
+    if(guardar) limparEnvioPendente();
+    return r;
+  }catch(err){
+    if(guardar && err.definitivo) limparEnvioPendente(); // a loja recusou: não tem o que reenviar
+    throw err;
   }
-  return res.json();
+}
+
+// tenta de novo sozinho quando a falha é de rede ou do servidor (a chave_envio garante que não duplica)
+async function enviarPedido(payload){
+  const esperas = [0, 1500, 3000, 6000];
+  for(let i = 0; i < esperas.length; i++){
+    if(esperas[i]) await new Promise(r => setTimeout(r, esperas[i]));
+    let res;
+    try{
+      res = await fetch(`${CONFIG.API_BASE}/api/v1/pedidos`, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify(payload),
+        ...(AbortSignal.timeout ? { signal: AbortSignal.timeout(20000) } : {})
+      });
+    }catch{ continue; }                                   // sem internet ou demorou demais
+    if(res.ok) return res.json();
+    const erro = await res.json().catch(() => ({}));
+    if(res.status < 500 && res.status !== 429){
+      const e = new Error(erro.error || "Falha ao enviar pedido"); e.definitivo = true; throw e;
+    }
+  }
+  throw new Error("Não conseguimos falar com a loja agora. Confira sua internet e toque de novo: seu pedido não vai duplicar.");
+}
+
+const envioPendenteChave = () => `fx_envio_${RESTAURANT_ID}`;
+function limparEnvioPendente(){ try{ localStorage.removeItem(envioPendenteChave()); }catch{} }
+
+// abriu o cardápio e tem uma confirmação que não teve resposta (até 30 min): manda de novo e mostra o acompanhamento
+async function reenviarPendente(){
+  if(IS_DEMO) return;
+  let p = null;
+  try{ p = JSON.parse(localStorage.getItem(envioPendenteChave()) || "null"); }catch{}
+  if(!p?.payload) return;
+  if(Date.now() - (p.em || 0) > 30 * 60000){ limparEnvioPendente(); return; }
+  try{
+    const r = await submitOrder(p.payload);
+    if(r?.tracking_code && typeof rastreio !== "undefined") rastreio.abrirUltimo(r.tracking_code);
+  }catch(e){ console.warn("Reenvio do pedido:", e.message); }
 }
 
 /* ============================================================
