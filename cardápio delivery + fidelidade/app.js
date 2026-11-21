@@ -51,7 +51,7 @@ function showError(msg){
     }
 
     // rastreio: se tiver pedido em andamento, o cardápio abre direto na tela de acompanhar
-    rastreio.iniciar().catch(err => console.warn("Rastreio indisponível:", err));
+    rastreio.iniciar().catch(err => console.warn("Rastreio indisponível:", err)).finally(reenviarPendente);
 
     // fidelidade roda à parte: se falhar, o cardápio continua normal
     iniciarAbas().finally(() => rastreio.menuLateral());
