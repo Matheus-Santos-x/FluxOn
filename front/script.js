@@ -1649,6 +1649,7 @@ function editarPedidoMesa(key) {
     nome: it.name || it.nome || "",
     qty: it.qty || it.quantidade || 1,
     price: parseFloat(it.price || it.preco || 0),
+    item_id: it.item_id ?? null, opcao_id: it.opcao_id || null, ...(Array.isArray(it.sabores) ? { sabores: it.sabores } : {}),
   }));
 
   const modal = document.createElement("div");
@@ -1811,15 +1812,22 @@ function editarPedidoMesa(key) {
     });
 
     window._epAddItem = function(item) {
-      const existente = itens.find(i => i.nome === item.nome);
-      if (existente) { existente.qty++; }
-      else { itens.push({ nome: item.nome, qty: 1, price: parseFloat(item.preco || 0) }); }
       input.value = "";
       dropdown.style.display = "none";
-      renderItens();
+      // item com tamanho/sabores: escolhe no mesmo popup do Novo pedido
+      if (Array.isArray(item.opcoes) && item.opcoes.length && window._escolherVariacao) return window._escolherVariacao(item, juntar);
+      juntar({ ...item, item_id: item.id, opcao_id: null });
     };
+    function juntar(item) {
+      const existente = itens.find(i => i.nome === item.nome);
+      if (existente) { existente.qty++; }
+      else { itens.push({ nome: item.nome, qty: 1, price: parseFloat(item.preco || 0),
+        item_id: item.item_id ?? item.id ?? null, opcao_id: item.opcao_id || null, ...(item.sabores ? { sabores: item.sabores } : {}) }); }
+      renderItens();
+    }
   }
 
+let chaveEp = null; // mesmo envio repetido não soma os itens duas vezes
 function setupSalvar() {
   const btn = document.getElementById("ep-salvar");
   if (!btn) return;
@@ -1840,17 +1848,20 @@ function setupSalvar() {
     }).map(it => {
       const orig = itensOriginais.find(o => (o.name || o.nome) === it.nome);
       const qtyNova = orig ? it.qty - (orig.qty || orig.quantidade || 1) : it.qty;
-      return { name: it.nome, nome: it.nome, qty: qtyNova, quantidade: qtyNova, price: it.price, preco: it.price };
+      return { name: it.nome, nome: it.nome, qty: qtyNova, quantidade: qtyNova, price: it.price, preco: it.price,
+        item_id: it.item_id ?? null, opcao_id: it.opcao_id || null, ...(it.sabores ? { sabores: it.sabores } : {}) };
     });
 
     const totalNovo = itensNovos.reduce((s, it) => s + it.price * it.qty, 0);
 
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/pedidos/${pedido.id}/adicionar-itens`, {
+      chaveEp = chaveEp || novaChaveEnvio();
+      const resp = await enviarComRetentativa(`${API_BASE}/api/v1/pedidos/${pedido.id}/adicionar-itens`, {
         method: "PATCH",
         headers: buildHeaders(),
         body: JSON.stringify({
-          itens_novos: itensNovos,
+          itens_novos: itensParaEnvio(itensNovos),
+          chave_envio: chaveEp,
           total_adicional: totalNovo,
           client_name: clienteNome,
           client_phone: clienteTel || null,
@@ -2051,16 +2062,23 @@ border:1px solid rgba(255,255,255,0.08); border-radius:10px;">
   });
 
   window._addItem = function(item) {
+    searchInput.value = '';
+    dropdown.style.display = 'none';
+    // item com tamanho/sabores: escolhe no mesmo popup do Novo pedido
+    if (Array.isArray(item.opcoes) && item.opcoes.length && window._escolherVariacao) return window._escolherVariacao(item, juntar);
+    juntar({ ...item, item_id: item.id, opcao_id: null });
+  };
+  function juntar(item) {
     const existente = itensSelecionados.find(i => i.name === item.nome);
     if (existente) {
       existente.qty++;
     } else {
-      itensSelecionados.push({ name: item.nome, qty: 1, price: parseFloat(item.preco || 0), quantidade: 1 });
+      itensSelecionados.push({ name: item.nome, qty: 1, price: parseFloat(item.preco || 0), quantidade: 1,
+        item_id: item.item_id ?? item.id ?? null, opcao_id: item.opcao_id || null, ...(item.sabores ? { sabores: item.sabores } : {}) });
     }
-    searchInput.value = '';
-    dropdown.style.display = 'none';
     renderItens();
-  };
+  }
+  let chaveAdicionar = null; // mesmo envio repetido não soma os itens duas vezes
 
   // Confirmar
   document.getElementById("btn-confirmar-adicionar")?.addEventListener("click", async () => {
@@ -2072,15 +2090,13 @@ border:1px solid rgba(255,255,255,0.08); border-radius:10px;">
     btn.textContent = "Enviando...";
 
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/pedidos/${pedidoExistente.id}/adicionar-itens`, {
+      chaveAdicionar = chaveAdicionar || novaChaveEnvio();
+      const resp = await enviarComRetentativa(`${API_BASE}/api/v1/pedidos/${pedidoExistente.id}/adicionar-itens`, {
         method: "PATCH",
         headers: buildHeaders(),
         body: JSON.stringify({
-          itens_novos: itensSelecionados.map(i => ({
-            name: i.name, nome: i.name,
-            qty: i.qty, quantidade: i.qty,
-            price: i.price, preco: i.price
-          })),
+          itens_novos: itensParaEnvio(itensSelecionados),
+          chave_envio: chaveAdicionar,
           total_adicional: total,
           notes: obs || null
         })
@@ -3904,6 +3920,7 @@ function openCreateModal(e, mesa, tipo) {
 
 function closeCreateModal() {
   window._editandoPedido = false;
+  window._chaveNovoPedido = null; // o próximo pedido ganha chave nova
   editingOrderId = null;
   closeBackdrop(createModal);
   if (newCustomer) newCustomer.value = "";
@@ -4033,13 +4050,15 @@ const body = {
   restaurant_id: rid,
   client_name: client,
   client_phone,
-  itens,
+  itens: itensParaEnvio(itens),
+  ...(editOrderId ? {} : { chave_envio: window._chaveNovoPedido = window._chaveNovoPedido || novaChaveEnvio() }),
   notes: String(newNotes?.value || ""),
   service_type,
   address: isDelivery ? address : null,
   payment_method: isDelivery ? (funcNovo ? `vale funcionário (${funcionarioNoTexto(funcNovo.nome)})` : payment_method) : null,
   ...(funcNovo ? { funcionario_id: funcNovo.id } : {}),
-  total_price,
+  // total: se o caixa não mexeu (é a soma dos itens), quem calcula é o servidor; mexeu (desconto/ajuste), vale o dele
+  ...(Math.abs(total_price - itens.reduce((t, i) => t + (Number(i.price) || 0) * (Number(i.qty) || 1), 0)) > 0.009 ? { total_price } : {}),
 origin: orderAtual?.origin || (tipoPedido === "mesa" || !!saveCreateBtn.dataset.mesa ? "balcao" : "balcao_delivery"),
   table_number: orderAtual?.table_number || saveCreateBtn.dataset.mesa || null,
   ...(editOrderId ? { 
@@ -4048,7 +4067,7 @@ origin: orderAtual?.origin || (tipoPedido === "mesa" || !!saveCreateBtn.dataset.
   } : {})
 };
 
-    const resp = await fetch(`${API_BASE}/api/v1/pedidos`, {
+    const resp = await enviarComRetentativa(`${API_BASE}/api/v1/pedidos`, {
       method: "POST",
       headers: buildHeaders(),
       body: JSON.stringify(body),
@@ -4917,7 +4936,8 @@ if (modalEditBtn) modalEditBtn.addEventListener("click", (e) => {
       name: it.name || it.nome || "",
       qty: it.qty || it.quantidade || 1,
       price: parseFloat(it.price || it.preco || 0),
-      quantidade: it.qty || it.quantidade || 1
+      quantidade: it.qty || it.quantidade || 1,
+      item_id: it.item_id ?? null, opcao_id: it.opcao_id || null, ...(Array.isArray(it.sabores) ? { sabores: it.sabores } : {})
     }));
     renderItensSelecionados();
 
@@ -5148,7 +5168,8 @@ window.alterarQtd = function(index, delta) {
     if (existente) {
       existente.qty++;
     } else {
-      itensPedido.push({ name: item.nome, qty: 1, price: preco, quantidade: 1 });
+      itensPedido.push({ name: item.nome, qty: 1, price: preco, quantidade: 1,
+     item_id: item.item_id ?? item.id ?? null, opcao_id: item.opcao_id || null, ...(item.sabores ? { sabores: item.sabores } : {}) });
     }
     renderItensSelecionados();
     searchInput.value = '';
@@ -5196,7 +5217,7 @@ const resp = await fetch(`${API_BASE}/api/v1/cardapio/${rid}/busca?q=${encodeURI
     }, 250);
   });
 
-async function abrirModalVariacaoAdmin(item, opcoes) {
+async function abrirModalVariacaoAdmin(item, opcoes, aoAdicionar = adicionarItem) {
   if (!cardapioItems || cardapioItems.length === 0) {
     const rid = getRestaurantId();
     try {
@@ -5214,6 +5235,13 @@ async function abrirModalVariacaoAdmin(item, opcoes) {
   modal.className = "modal-backdrop open";
 
   let selectedIdx = 0;
+  const _sn = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  // mesmos sabores que o servidor aceita: mesma categoria e com o filtro da opção (ex.: "grande")
+  function saboresDe(op) {
+    const f = _sn(op.filtro);
+    return cardapioItems.filter(i => String(i.id) !== String(item.id) && i.ativo !== false && i.categoria === item.categoria
+      && (!f || _sn(i.nome).includes(f) || (Array.isArray(i.opcoes) && i.opcoes.some(v => _sn(v?.nome).includes(f)))));
+  }
 
   function getPreco(idx) {
     return opcoes[idx]?.preco || 0;
@@ -5249,11 +5277,7 @@ async function abrirModalVariacaoAdmin(item, opcoes) {
           <div style="margin-top:8px;">
             <div style="font-size:11px; font-weight:700; color:rgba(252,228,228,0.5); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Escolha 2 sabores</div>
             <div id="admin-sabores-lista" style="display:flex; flex-direction:column; gap:6px;">
-              ${cardapioItems.filter(i => {
-                if (i.id === item.id || !i.ativo) return false;
-                if (i.categoria !== item.categoria) return false;
-                return true;
-              }).map(s => `
+              ${saboresDe(op).map(s => `
                 <label style="display:flex; align-items:center; gap:10px; padding:10px 14px;
                   border:1.5px solid rgba(255,255,255,0.18); border-radius:10px; cursor:pointer;
                   background:rgba(28,28,30,0.45);">
@@ -5327,9 +5351,10 @@ async function abrirModalVariacaoAdmin(item, opcoes) {
         precoFinal = Math.max(...precos);
       }
 
-      adicionarItem({ ...item, nome: nomeCompleto, preco: precoFinal });
+      const ids = sabores.map(n => saboresDe(op).find(s => s.nome === n)?.id);
+      aoAdicionar({ ...item, nome: nomeCompleto, preco: precoFinal, item_id: item.id, opcao_id: op.id || null, sabores: ids });
     } else {
-      adicionarItem({ ...item, nome: `${item.nome} — ${op.nome}`, preco: op.preco });
+      aoAdicionar({ ...item, nome: `${item.nome} — ${op.nome}`, preco: op.preco, item_id: item.id, opcao_id: op.id || null });
     }
 
     modal.remove();
@@ -5344,6 +5369,8 @@ async function abrirModalVariacaoAdmin(item, opcoes) {
   }
   abrirModalVariacaoAdmin(item, opcoes);
 };
+// o mesmo popup de tamanho/sabores serve pra mesa (adicionar e editar itens)
+window._escolherVariacao = (item, aoAdicionar) => abrirModalVariacaoAdmin(item, item.opcoes, aoAdicionar);
 
   document.addEventListener("click", (e) => {
   document.querySelectorAll("[id^='cat-dropdown-']").forEach(d => {
@@ -9529,3 +9556,42 @@ manterTelaAcesa();
   // o nome vai no texto do pagamento: sem números nem "+", que separam as partes ("dinheiro R$10 + vale ...")
   window.funcionarioNoTexto = (nome) => String(nome || "").replace(/[\d+$]/g, "").replace(/\s+/g, " ").trim();
 })();
+
+
+
+/* ========================================
+   🆔 PEDIDO POR ID (contrato único, igual aos outros apps)
+   Cada item vai como { item_id, opcao_id, sabores, qtd }: nome e preço saem do cardápio no servidor.
+   "preco" só vale pra item sem preço no cardápio (ex.: Diversos), que o caixa digita.
+   chave_envio: o mesmo envio repetido (internet caiu, clique duplo) não cria nem soma de novo.
+======================================== */
+window.novaChaveEnvio = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12)).replace(/[^A-Za-z0-9_-]/g, "");
+
+window.itensParaEnvio = function (lista) {
+  const l = Array.isArray(lista) ? lista : [];
+  // pedido antigo (itens sem id): vai como antes, pelo nome
+  if (!l.length || !l.every((i) => i && i.item_id != null)) return l.map(({ item_id, opcao_id, sabores, ...r }) => {
+    const nome = r.name || r.nome || "", q = Number(r.qty ?? r.quantidade) || 1, p = Number(r.price ?? r.preco) || 0;
+    return { ...r, name: nome, nome, qty: q, quantidade: q, price: p, preco: p };
+  });
+  return l.map((i) => ({
+    item_id: i.item_id, opcao_id: i.opcao_id || null,
+    ...(Array.isArray(i.sabores) && i.sabores.length ? { sabores: i.sabores } : {}),
+    qtd: Math.max(1, Math.round(Number(i.qty ?? i.quantidade) || 1)),
+    preco: Number(i.price ?? i.preco) || 0
+  }));
+};
+
+// tenta de novo sozinho quando cai a internet ou o servidor oscila (a chave_envio garante que não duplica)
+window.enviarComRetentativa = async function (url, opcoes) {
+  let ultima = null;
+  for (const espera of [0, 1500, 3000]) {
+    if (espera) await new Promise((r) => setTimeout(r, espera));
+    try {
+      ultima = await fetch(url, opcoes);
+      if (ultima.status < 500) return ultima;
+    } catch { ultima = null; }
+  }
+  if (ultima) return ultima;
+  throw new Error("Sem conexão com o servidor. Confira a internet e tente de novo: o pedido não vai duplicar.");
+};
