@@ -3026,7 +3026,10 @@ app.post("/api/v1/pedidos", async (req, res) => {
       }
     }
 
-    if (ehDeliveryPublico) {
+    // taxa de entrega e pedido mínimo: delivery do cardápio e delivery da IA do WhatsApp (n8n)
+    const comTaxa = ehDeliveryPublico || (readAuth(req)?.kind === "service" && finalOrigin === "ia_whatsapp"
+      && String(service_type || "").toLowerCase() === "delivery");
+    if (comTaxa) {
       const { data: cfgEnt } = await supabase.from("restaurante_config")
         .select("taxa_entrega, pedido_minimo").eq("restaurant_id", restaurant_id).maybeSingle();
       const subtotal = parseFloat(total_price) || 0;
@@ -3115,7 +3118,7 @@ const nextNumber = numData || 1;
 }
 
     // 🛵 grava a taxa de entrega no pedido (delivery do cardápio)
-    if (ehDeliveryPublico && resultData?.id) {
+    if (comTaxa && resultData?.id) {
       const { error: errTaxa } = await supabase.from("orders").update({ taxa_entrega, agendado_para }).eq("id", resultData.id);
       if (errTaxa) console.error("⚠️ taxa_entrega/agendado_para não gravados:", errTaxa.message);
       else Object.assign(resultData, { taxa_entrega, agendado_para });
@@ -4849,6 +4852,48 @@ async function montarItensPorId(rid, lista, { precoLivre = false } = {}) {
     });
   }
   return { itens, total: _r2(total) };
+}
+
+// IA do WhatsApp (n8n) fala em nomes: aqui vira o contrato por id (mesma regra dos outros apps)
+// { nome, opcao, sabores: [nome, nome], quantidade } → { item_id, opcao_id, sabores: [id, id], qtd } ou { erro, opcoes }
+function resolverPorNome(cardapio, lista) {
+  if (!Array.isArray(lista) || !lista.length || lista.length > 50) return { erro: "Pedido sem itens" };
+  const ativos = cardapio.filter(i => i.ativo !== false);
+  const acha = (nome, base) => {
+    const q = _norm(nome);
+    if (!q) return null;
+    const iguais = base.filter(i => _norm(i.nome) === q);
+    if (iguais.length) return iguais[0];
+    const parecidos = base.filter(i => { const n = _norm(i.nome); return n.includes(q) || q.includes(n); });
+    return parecidos.length === 1 ? parecidos[0] : null; // dois parecidos: pergunta em vez de chutar
+  };
+  const itens = [];
+  for (const e of lista) {
+    const it = acha(e?.nome, cardapio);
+    if (!it) {
+      const palavras = _norm(e?.nome).split(/\s+/).filter(w => w.length > 3);
+      return { erro: `Não achei "${String(e?.nome || "").slice(0, 60)}" no cardápio.`,
+        opcoes: ativos.filter(i => palavras.some(w => _norm(i.nome).includes(w))).slice(0, 8).map(i => i.nome) };
+    }
+    const ops = Array.isArray(it.opcoes) ? it.opcoes : [];
+    let op = null, sabores;
+    if (ops.length) {
+      const q = _norm(e?.opcao);
+      op = (q && (ops.find(o => _norm(o.nome) === q) || (ops.filter(o => _norm(o.nome).includes(q)).length === 1 ? ops.find(o => _norm(o.nome).includes(q)) : null)))
+        || (ops.length === 1 ? ops[0] : null);
+      if (!op) return { erro: `Qual opção de ${it.nome}?`, opcoes: ops.map(o => o.nome) };
+      if (op.texto_livre) {
+        const f = _norm(op.filtro);
+        const validos = ativos.filter(s => String(s.id) !== String(it.id) && s.categoria === it.categoria
+          && (!f || _norm(s.nome).includes(f) || (Array.isArray(s.opcoes) && s.opcoes.some(v => _norm(v?.nome).includes(f)))));
+        const ss = (Array.isArray(e?.sabores) ? e.sabores : []).map(n => acha(n, validos));
+        if (ss.length !== 2 || ss.some(x => !x)) return { erro: `Quais os 2 sabores de ${it.nome}?`, opcoes: validos.map(s => s.nome) };
+        sabores = ss.map(s => s.id);
+      }
+    }
+    itens.push({ item_id: it.id, opcao_id: op?.id || null, ...(sabores ? { sabores } : {}), qtd: Math.round(Number(e?.quantidade ?? e?.qtd ?? 1)) || 1 });
+  }
+  return { itens };
 }
 
 // chave do envio: gerada pelo aparelho (uuid); o mesmo envio repetido não cria outro pedido
@@ -8618,6 +8663,82 @@ app.get("/api/v1/cardapio/:restaurant_id/item/:id", async (req, res) => {
   return res.json(data);
 });
 
+/* ========================================
+   💬 IA DO WHATSAPP (n8n) — mesmo contrato por id dos outros apps
+   GET  /api/v1/n8n/:rid/cardapio  → o cardápio em texto (nomes e opções exatos) + dados da loja, pro prompt
+   POST /api/v1/n8n/:rid/montar    → confere o pedido e devolve linhas, preços e total (pra IA confirmar com o cliente)
+   POST /api/v1/n8n/:rid/pedido    → cria o pedido (ref = id da mensagem/conversa: repetir não duplica)
+   Só com a x-service-key. Erro de item volta com ok:false e as opções certas (a IA pergunta pro cliente).
+======================================== */
+const soServico = (req, res, next) => (readAuth(req)?.kind === "service" ? next() : res.status(401).json({ error: "Não autorizado" }));
+
+async function n8nMontar(rid, lista, delivery) {
+  const r = resolverPorNome(await cardapioDoRestaurante(rid), lista);
+  if (r.erro) return r;
+  const m = await montarItensPorId(rid, r.itens);
+  if (m.erro) return { erro: m.erro };
+  const { data: cfg } = await supabase.from("restaurante_config").select("taxa_entrega, pedido_minimo").eq("restaurant_id", rid).maybeSingle();
+  const taxa = delivery ? Math.max(0, Number(cfg?.taxa_entrega) || 0) : 0;
+  return {
+    itens: r.itens,
+    linhas: m.itens.map(i => ({ nome: i.name, quantidade: i.qty, preco: i.price, subtotal: _r2(i.price * i.qty) })),
+    subtotal: m.total, taxa_entrega: taxa, total: _r2(m.total + taxa), pedido_minimo: Number(cfg?.pedido_minimo) || 0
+  };
+}
+
+app.get("/api/v1/n8n/:restaurant_id/cardapio", soServico, async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    if (!(await restaurantExists(rid))) return sendError(res, 404, "Restaurante não encontrado");
+    const itens = (await cardapioDoRestaurante(rid)).filter(i => i.ativo !== false);
+    const loja = await iaContextoLoja(rid);
+    return res.json({ cardapio: itens.map(i => iaLinhaItem(i, itens)).join("\n"), loja: loja.texto });
+  } catch (err) {
+    console.error("❌ n8n cardapio:", err.message);
+    return sendError(res, 500, "Erro ao buscar cardápio");
+  }
+});
+
+app.post("/api/v1/n8n/:restaurant_id/montar", soServico, async (req, res) => {
+  try {
+    const delivery = String(req.body?.service_type || "delivery").toLowerCase() === "delivery";
+    const r = await n8nMontar(req.params.restaurant_id, req.body?.itens, delivery);
+    if (r.erro) return res.json({ ok: false, erro: r.erro, opcoes: r.opcoes || [] });
+    const falta = delivery && r.pedido_minimo > 0 && r.subtotal < r.pedido_minimo ? _r2(r.pedido_minimo - r.subtotal) : 0;
+    return res.json({ ok: true, ...r, ...(falta ? { aviso: `Pedido mínimo de R$ ${r.pedido_minimo.toFixed(2).replace(".", ",")}: faltam R$ ${falta.toFixed(2).replace(".", ",")}` } : {}) });
+  } catch (err) {
+    console.error("❌ n8n montar:", err.message);
+    return sendError(res, 500, "Erro ao montar pedido");
+  }
+});
+
+app.post("/api/v1/n8n/:restaurant_id/pedido", soServico, async (req, res) => {
+  try {
+    const rid = req.params.restaurant_id;
+    const { itens, client_name, client_phone, address, payment_method, notes, ref } = req.body || {};
+    const service_type = String(req.body?.service_type || "delivery").toLowerCase() === "delivery" ? "delivery" : "local";
+    if (!client_name) return res.json({ ok: false, erro: "Falta o nome do cliente" });
+    if (service_type === "delivery" && !address) return res.json({ ok: false, erro: "Falta o endereço de entrega" });
+    const r = await n8nMontar(rid, itens, service_type === "delivery");
+    if (r.erro) return res.json({ ok: false, erro: r.erro, opcoes: r.opcoes || [] });
+    // mesma conversa/mensagem → mesma chave: o n8n repetir a chamada não cria outro pedido
+    const base = ref ? `${rid}|${ref}` : `${rid}|${normalizePhone(client_phone) || client_name}|${JSON.stringify(r.itens)}|${new Date().toISOString().slice(0, 13)}`;
+    const chave_envio = "wa_" + crypto.createHash("sha256").update(String(base)).digest("hex").slice(0, 40);
+    const resp = await fetch(`http://localhost:${PORT}/api/v1/pedidos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-service-key": SERVICE_KEY },
+      body: JSON.stringify({ restaurant_id: rid, client_name, client_phone, address: address || null, payment_method: payment_method || null,
+        notes: notes || "", service_type, itens: r.itens, chave_envio, origin: "ia_whatsapp", status: "pending" })
+    });
+    const d = await resp.json().catch(() => ({}));
+    if (!resp.ok) return res.json({ ok: false, erro: d.error || "Não consegui criar o pedido" });
+    return res.json({ ok: true, repetido: !!d.repetido, numero: d.order?.order_number, order_id: d.order?.id,
+      total: Number(d.order?.total_price) || 0, taxa_entrega: Number(d.order?.taxa_entrega) || 0, tracking_link: d.tracking_link || null });
+  } catch (err) {
+    console.error("❌ n8n pedido:", err.message);
+    return sendError(res, 500, "Erro ao criar pedido");
+  }
+});
 
 /* ========================================
    🤖 IA DO CARDÁPIO — sugere itens do cardápio real, com tamanhos,
@@ -8693,7 +8814,7 @@ async function iaMaisVendidos(rid, cardapio) {
   const ranking = {};
   (data || []).forEach(o => (o.itens || []).forEach(it => {
     const base = iaNorm(String(it.name || it.nome || "").split(/\s+—\s+/)[0]);
-    const id = porNome.get(base);
+    const id = it.item_id ?? porNome.get(base); // pedido novo já vem com o id do item
     if (id !== undefined) ranking[id] = (ranking[id] || 0) + (Number(it.qty || it.quantidade || it.quantity) || 1);
   }));
   iaVendidosCache.set(rid, { t: Date.now(), ranking });
